@@ -1,0 +1,40 @@
+{
+    "name": "shieldai-governance",
+    "version": "0.1.0",
+    "description": "ShieldAI Governance Backend — Node.js + Express + TypeScript + Prisma",
+    "main": "dist/index.js",
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc",
+        "start": "node dist/index.js",
+        "db:generate": "prisma generate",
+        "db:push": "prisma db push",
+        "db:migrate": "prisma migrate dev",
+        "db:seed": "tsx prisma/seed.ts",
+        "db:studio": "prisma studio"
+    },
+    "dependencies": {
+        "@prisma/client": "^5.22.0",
+        "bcryptjs": "^2.4.3",
+        "cors": "^2.8.5",
+        "express": "^4.21.1",
+        "express-rate-limit": "^7.4.1",
+        "helmet": "^8.0.0",
+        "jsonwebtoken": "^9.0.2",
+        "pdfkit": "^0.15.1",
+        "uuid": "^10.0.0",
+        "zod": "^3.23.8"
+    },
+    "devDependencies": {
+        "@types/bcryptjs": "^2.4.6",
+        "@types/cors": "^2.8.17",
+        "@types/express": "^5.0.0",
+        "@types/jsonwebtoken": "^9.0.7",
+        "@types/node": "^22.10.0",
+        "@types/pdfkit": "^0.13.8",
+        "@types/uuid": "^10.0.0",
+        "prisma": "^5.22.0",
+        "tsx": "^4.19.2",
+        "typescript": "^5.7.2"
+    }
+}

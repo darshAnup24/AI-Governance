@@ -1,0 +1,150 @@
+# AI Tool Domain Registry
+# Categories: LLM_CHATBOT, AI_CODING, AI_WRITING, AI_IMAGE, AI_AUDIO, AI_VIDEO, AI_SEARCH, UNKNOWN_AI
+
+categories:
+  LLM_CHATBOT:
+    - domain: chat.openai.com
+      tool_name: ChatGPT
+    - domain: chatgpt.com
+      tool_name: ChatGPT
+    - domain: api.openai.com
+      tool_name: OpenAI API
+    - domain: claude.ai
+      tool_name: Claude
+    - domain: api.anthropic.com
+      tool_name: Anthropic API
+    - domain: gemini.google.com
+      tool_name: Google Gemini
+    - domain: bard.google.com
+      tool_name: Google Bard
+    - domain: copilot.microsoft.com
+      tool_name: Microsoft Copilot
+    - domain: huggingface.co
+      tool_name: Hugging Face
+    - domain: api.cohere.ai
+      tool_name: Cohere
+    - domain: platform.openai.com
+      tool_name: OpenAI Platform
+    - domain: poe.com
+      tool_name: Poe
+    - domain: perplexity.ai
+      tool_name: Perplexity
+    - domain: you.com
+      tool_name: You.com
+    - domain: phind.com
+      tool_name: Phind
+    - domain: character.ai
+      tool_name: Character.AI
+    - domain: pi.ai
+      tool_name: Pi (Inflection)
+    - domain: deepseek.com
+      tool_name: DeepSeek
+    - domain: chat.mistral.ai
+      tool_name: Mistral Chat
+
+  AI_CODING:
+    - domain: cursor.sh
+      tool_name: Cursor
+    - domain: cursor.com
+      tool_name: Cursor
+    - domain: codeium.com
+      tool_name: Codeium
+    - domain: replit.com
+      tool_name: Replit
+    - domain: tabnine.com
+      tool_name: Tabnine
+    - domain: sourcegraph.com
+      tool_name: Sourcegraph Cody
+    - domain: cody.dev
+      tool_name: Sourcegraph Cody
+    - domain: githubnext.com
+      tool_name: GitHub Copilot Labs
+    - domain: codex.openai.com
+      tool_name: OpenAI Codex
+    - domain: aider.chat
+      tool_name: Aider
+    - domain: bolt.new
+      tool_name: Bolt
+    - domain: v0.dev
+      tool_name: Vercel v0
+    - domain: idx.google.com
+      tool_name: Project IDX
+
+  AI_WRITING:
+    - domain: jasper.ai
+      tool_name: Jasper
+    - domain: copy.ai
+      tool_name: Copy.ai
+    - domain: writesonic.com
+      tool_name: Writesonic
+    - domain: grammarly.com
+      tool_name: Grammarly AI
+    - domain: quillbot.com
+      tool_name: QuillBot
+    - domain: notion.so
+      tool_name: Notion AI
+    - domain: sudowrite.com
+      tool_name: Sudowrite
+    - domain: wordtune.com
+      tool_name: Wordtune
+    - domain: writer.com
+      tool_name: Writer
+
+  AI_IMAGE:
+    - domain: midjourney.com
+      tool_name: Midjourney
+    - domain: leonardo.ai
+      tool_name: Leonardo.ai
+    - domain: stability.ai
+      tool_name: Stability AI
+    - domain: openart.ai
+      tool_name: OpenArt
+    - domain: ideogram.ai
+      tool_name: Ideogram
+    - domain: playground.ai
+      tool_name: Playground AI
+    - domain: clipdrop.co
+      tool_name: ClipDrop
+    - domain: dall-e.com
+      tool_name: DALL-E
+    - domain: nightcafe.studio
+      tool_name: NightCafe
+
+  AI_AUDIO:
+    - domain: elevenlabs.io
+      tool_name: ElevenLabs
+    - domain: murf.ai
+      tool_name: Murf AI
+    - domain: descript.com
+      tool_name: Descript
+    - domain: suno.ai
+      tool_name: Suno AI
+    - domain: udio.com
+      tool_name: Udio
+
+  AI_VIDEO:
+    - domain: synthesia.io
+      tool_name: Synthesia
+    - domain: runway.ml
+      tool_name: Runway
+    - domain: runwayml.com
+      tool_name: Runway
+    - domain: heygen.com
+      tool_name: HeyGen
+    - domain: pika.art
+      tool_name: Pika
+    - domain: luma.ai
+      tool_name: Luma AI
+
+  AI_SEARCH:
+    - domain: perplexity.ai
+      tool_name: Perplexity
+    - domain: andi.search
+      tool_name: Andi Search
+    - domain: kagi.com
+      tool_name: Kagi
+
+# Domains authorized by the organization (override — these won't be flagged)
+authorized_domains:
+  - api.openai.com
+  - platform.openai.com
