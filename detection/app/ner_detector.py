@@ -87,16 +87,18 @@ class SpacyNERDetector:
         ]
 
     def _load_model(self) -> None:
-        """Load spaCy model. Falls back to small model if transformer unavailable."""
+        """Load spaCy model. Tries transformer, falls back to small, then blank."""
         if self._load_failed:
             return
         try:
             import spacy
             try:
-                self._nlp = spacy.load("en_core_web_sm")
+                self._nlp = spacy.load("en_core_web_trf")
             except OSError:
-                # Model not installed; use blank model with entity ruler
-                self._nlp = spacy.blank("en")
+                try:
+                    self._nlp = spacy.load("en_core_web_sm")
+                except OSError:
+                    self._nlp = spacy.blank("en")
 
             # Add entity ruler for custom patterns
             if self._nlp:

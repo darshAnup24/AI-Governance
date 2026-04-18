@@ -30,11 +30,13 @@ model Organization {
   aiModels         AIModel[]
   complianceChecks ComplianceCheck[]
   incidents        Incident[]
-  policies         Policy[]
+  policyRules      PolicyRule[]
   vendors          Vendor[]
   datasets         Dataset[]
   threatDetections ThreatDetection[]
   advisorMessages  AdvisorMessage[]
+  auditEvents      AuditEvent[]
+  shadowAIAlerts   ShadowAIAlert[]
   auditLogs        AuditLog[]
 
   @@map("organizations")
@@ -60,10 +62,11 @@ model User {
 
   organization    Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
   advisorMessages AdvisorMessage[]
+  auditEvents     AuditEvent[]
   auditLogs       AuditLog[]
 
   @@index([orgId])
-  @@map("users_gov")
+  @@map("users")
 }
 
 // ─── AI Model Registry ────────────────────────────────────
@@ -196,26 +199,25 @@ model Incident {
 
 // ─── Policies ──────────────────────────────────────────
 
-enum PolicyStatus {
-  DRAFT
-  ACTIVE
-  ARCHIVED
-}
-
-model Policy {
-  id        String       @id @default(uuid())
-  orgId     String       @map("org_id")
-  title     String
-  content   String       @default("")
-  category  String       @default("general")
-  status    PolicyStatus @default(DRAFT)
-  createdAt DateTime     @default(now()) @map("created_at")
-  updatedAt DateTime     @updatedAt @map("updated_at")
+model PolicyRule {
+  id          String   @id @default(uuid()) @map("rule_id")
+  orgId       String   @map("org_id")
+  name        String
+  description String   @default("")
+  conditions  Json     @default("[]")
+  action      String   @default("BLOCK")
+  scope       String   @default("all")
+  priority    Int      @default(100)
+  enabled     Boolean  @default(true)
+  exceptions  Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([orgId])
-  @@map("policies_gov")
+  @@map("policy_rules")
 }
 
 // ─── Vendors ──────────────────────────────────────────
@@ -329,4 +331,53 @@ model AuditLog {
   @@index([createdAt])
   @@index([entity])
   @@map("audit_logs")
+}
+
+// ─── Proxy Audit Events ────────────────────────────────────
+
+model AuditEvent {
+  id                  String    @id @default(uuid()) @map("event_id")
+  timestamp           DateTime  @default(now())
+  orgId               String    @map("org_id")
+  userId              String    @map("user_id")
+  sessionId           String    @default("") @map("session_id")
+  toolName            String    @default("") @map("tool_name")
+  llmProvider         String    @default("") @map("llm_provider")
+  promptHash          String    @default("") @map("prompt_hash")
+  detectionResults    Json      @default("{}") @map("detection_results")
+  riskScore           Int       @default(0) @map("risk_score")
+  actionTaken         String    @default("ALLOW") @map("action_taken")
+  policyRuleId        String?   @map("policy_rule_id")
+  redactedPrompt      String?   @map("redacted_prompt")
+  requestDurationMs   Float     @default(0) @map("request_duration_ms")
+  upstreamStatusCode  Int?      @map("upstream_status_code")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([userId])
+  @@index([timestamp])
+  @@index([riskScore])
+  @@index([actionTaken])
+  @@map("audit_events")
+}
+
+// ─── Shadow AI Alerts ──────────────────────────────────────
+
+model ShadowAIAlert {
+  id           String   @id @default(uuid()) @map("alert_id")
+  userId       String   @map("user_id")
+  orgId        String?  @map("org_id")
+  toolName     String   @default("") @map("tool_name")
+  domain       String   @default("")
+  category     String   @default("")
+  isAuthorized Boolean  @default(false) @map("is_authorized")
+  timestamp    DateTime @default(now())
+
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([timestamp])
+  @@map("shadow_ai_alerts")
 }

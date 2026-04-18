@@ -25,7 +25,7 @@ risksRouter.get("/", async (req: Request, res: Response) => {
 risksRouter.get("/:modelId", async (req: Request, res: Response) => {
     try {
         const assessments = await prisma.riskAssessment.findMany({
-            where: { modelId: req.params.modelId, model: { orgId: req.user!.orgId } },
+            where: { modelId: req.params.modelId as string, model: { orgId: req.user!.orgId } },
             orderBy: { createdAt: "desc" },
         });
         res.json(assessments);

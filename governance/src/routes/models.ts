@@ -43,7 +43,7 @@ modelsRouter.post("/", async (req: Request, res: Response) => {
 modelsRouter.get("/:id", async (req: Request, res: Response) => {
     try {
         const model = await prisma.aIModel.findFirst({
-            where: { id: req.params.id, orgId: req.user!.orgId },
+            where: { id: req.params.id as string, orgId: req.user!.orgId },
             include: {
                 riskAssessments: { orderBy: { createdAt: "desc" } },
                 incidents: { orderBy: { createdAt: "desc" }, take: 5 },
@@ -65,7 +65,7 @@ modelsRouter.put("/:id", async (req: Request, res: Response) => {
     try {
         const { name, provider, version, purpose, riskLevel, status } = req.body;
         const model = await prisma.aIModel.updateMany({
-            where: { id: req.params.id, orgId: req.user!.orgId },
+            where: { id: req.params.id as string, orgId: req.user!.orgId },
             data: { name, provider, version, purpose, riskLevel, status },
         });
         res.json(model);
@@ -78,7 +78,7 @@ modelsRouter.put("/:id", async (req: Request, res: Response) => {
 modelsRouter.delete("/:id", async (req: Request, res: Response) => {
     try {
         await prisma.aIModel.deleteMany({
-            where: { id: req.params.id, orgId: req.user!.orgId },
+            where: { id: req.params.id as string, orgId: req.user!.orgId },
         });
         res.json({ deleted: true });
     } catch (err: any) {
@@ -90,7 +90,7 @@ modelsRouter.delete("/:id", async (req: Request, res: Response) => {
 modelsRouter.post("/:id/scan", async (req: Request, res: Response) => {
     try {
         const model = await prisma.aIModel.findFirst({
-            where: { id: req.params.id, orgId: req.user!.orgId },
+            where: { id: req.params.id as string, orgId: req.user!.orgId },
         });
         if (!model) {
             res.status(404).json({ error: "Model not found" });

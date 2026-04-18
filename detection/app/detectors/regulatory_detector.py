@@ -73,6 +73,12 @@ class RegulatoryDetector:
          0.88, "COPPA §312.3 — Collection of children's personal information"),
     ]
 
+    # RBI Data Localization
+    RBI_PATTERNS: ClassVar[list[tuple[re.Pattern[str], float, str]]] = [
+        (re.compile(r"\b(?:store|transfer|host|process)\b.*\b(?:payment|transaction|card|banking)\s+(?:data|information|records)\b.*\b(?:outside\s+India|foreign\s+server|overseas|us-east|eu-central|abroad|external)\b", re.I | re.S),
+         0.88, "RBI — Payment data localization mandate violation"),
+    ]
+
     def detect(self, text: str) -> DetectionResult:
         """Run all regulatory pattern checks against input text."""
         start = time.perf_counter()
@@ -85,6 +91,7 @@ class RegulatoryDetector:
             ("financial", self.FINANCIAL_ADVICE),
             ("medical", self.MEDICAL_ADVICE),
             ("coppa", self.COPPA_PATTERNS),
+            ("rbi", self.RBI_PATTERNS),
         ]
 
         for group_name, patterns in pattern_groups:

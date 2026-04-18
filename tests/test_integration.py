@@ -47,6 +47,37 @@ def risk_aggregator():
 
 @pytest.fixture
 def policy_engine():
+    from proxy.app.policy_engine import _policy_cache, RequestContext
+    _policy_cache[""] = [
+        {
+            "rule_id": "default-block-api-keys",
+            "name": "Block API Key Leakage",
+            "conditions": {
+                "operator": "AND",
+                "conditions": [
+                    {"field": "risk_score", "op": "gte", "value": 90},
+                    {"field": "detection.category", "op": "contains", "value": "API_KEY"},
+                ],
+            },
+            "action": "BLOCK",
+            "priority": 10,
+            "enabled": True,
+        },
+        {
+            "rule_id": "default-warn-credentials",
+            "name": "Warn on Credential Detection",
+            "conditions": {
+                "operator": "OR",
+                "conditions": [
+                    {"field": "risk_score", "op": "gte", "value": 60},
+                    {"field": "detection.category", "op": "contains", "value": "CREDENTIALS"},
+                ],
+            },
+            "action": "WARN",
+            "priority": 30,
+            "enabled": True,
+        },
+    ]
     return PolicyEngine()
 
 

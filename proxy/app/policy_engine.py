@@ -18,53 +18,41 @@ from proxy.app.auth import get_current_user
 log = structlog.get_logger()
 router = APIRouter(prefix="/api/v1/policies", tags=["policies"])
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from proxy.app.database import get_db
+from proxy.app.db_models import PolicyRule as DBPolicyRule
+import uuid
+from datetime import datetime
 
-# ─── In-memory policy store (replaced with DB in production) ─
 
-_policy_store: list[dict[str, Any]] = [
-    {
-        "rule_id": "default-block-api-keys",
-        "name": "Block API Key Leakage",
-        "conditions": {
-            "operator": "AND",
-            "conditions": [
-                {"field": "risk_score", "op": "gte", "value": 90},
-                {"field": "detection.category", "op": "contains", "value": "API_KEY"},
-            ],
-        },
-        "action": "BLOCK",
-        "priority": 10,
-        "enabled": True,
-    },
-    {
-        "rule_id": "default-redact-pii",
-        "name": "Redact PII in Prompts",
-        "conditions": {
-            "operator": "AND",
-            "conditions": [
-                {"field": "risk_score", "op": "gte", "value": 80},
-                {"field": "detection.category", "op": "contains", "value": "PII"},
-            ],
-        },
-        "action": "REDACT",
-        "priority": 20,
-        "enabled": True,
-    },
-    {
-        "rule_id": "default-warn-credentials",
-        "name": "Warn on Credential Detection",
-        "conditions": {
-            "operator": "OR",
-            "conditions": [
-                {"field": "risk_score", "op": "gte", "value": 60},
-                {"field": "detection.category", "op": "contains", "value": "CREDENTIALS"},
-            ],
-        },
-        "action": "WARN",
-        "priority": 30,
-        "enabled": True,
-    },
-]
+# ─── In-memory policy cache ──────────────────────────────────
+# Mapping from org_id (str) to list of policy dicts
+_policy_cache: dict[str, list[dict[str, Any]]] = {}
+
+async def load_policies_for_org(org_id: str, db: AsyncSession) -> list[dict[str, Any]]:
+    """Load policy rules for an org from DB and update cache."""
+    query = select(DBPolicyRule).filter(
+        DBPolicyRule.org_id == getattr(uuid, "UUID")(org_id) if isinstance(org_id, str) else org_id,
+        DBPolicyRule.deleted_at == None
+    ).order_by(DBPolicyRule.priority)
+    
+    result = await db.execute(query)
+    records = result.scalars().all()
+    rules = []
+    for r in records:
+        rules.append({
+            "rule_id": str(r.rule_id),
+            "name": r.name,
+            "description": r.description or "",
+            "conditions": r.conditions,
+            "action": r.action,
+            "priority": r.priority,
+            "enabled": r.enabled,
+        })
+    _policy_cache[str(org_id)] = rules
+    return rules
+
 
 
 # ─── Request Context ─────────────────────────────────────
@@ -150,15 +138,21 @@ def _evaluate_conditions(conditions_block: dict[str, Any], ctx: RequestContext) 
 class PolicyEngine:
     """Evaluates incoming requests against organization policy rules."""
 
-    def evaluate(self, ctx: RequestContext) -> PolicyDecision:
+    def evaluate(self, ctx: RequestContext, rules: list[dict[str, Any]] | None = None) -> PolicyDecision:
         """
         Evaluate request against policy rules.
         Rules sorted by priority (lower = higher priority); first match wins.
         """
-        rules = sorted(
-            [r for r in _policy_store if r.get("enabled", True)],
-            key=lambda r: r.get("priority", 100),
-        )
+        if rules is None:
+            rules = sorted(
+                [r for r in _policy_cache.get(ctx.org_id, []) if r.get("enabled", True)],
+                key=lambda r: r.get("priority", 100),
+            )
+        else:
+            rules = sorted(
+                [r for r in rules if r.get("enabled", True)],
+                key=lambda r: r.get("priority", 100),
+            )
 
         for rule in rules:
             conditions = rule.get("conditions", {})
@@ -215,44 +209,60 @@ class PolicyTestRequest(BaseModel):
 
 
 @router.get("")
-async def list_policies(user: UserContext = Depends(get_current_user)) -> list[dict[str, Any]]:
+async def list_policies(
+    user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
     """List all policy rules for the organization."""
-    return [r for r in _policy_store if r.get("deleted_at") is None]
+    return await load_policies_for_org(user.org_id, db)
 
 
 @router.post("")
 async def create_policy(
     body: PolicyRuleCreate,
     user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Create a new policy rule."""
-    import uuid
-    rule = {
-        "rule_id": str(uuid.uuid4()),
-        "name": body.name,
-        "description": body.description,
-        "conditions": body.conditions,
-        "action": body.action,
-        "priority": body.priority,
-        "enabled": body.enabled,
+    rule = DBPolicyRule(
+        org_id=uuid.UUID(user.org_id) if isinstance(user.org_id, str) else user.org_id,
+        name=body.name,
+        description=body.description,
+        conditions=body.conditions,
+        action=body.action,
+        priority=body.priority,
+        enabled=body.enabled,
+    )
+    db.add(rule)
+    await db.commit()
+    await load_policies_for_org(user.org_id, db)
+    return {
+        "rule_id": str(rule.rule_id),
+        "name": rule.name,
+        "description": rule.description,
+        "conditions": rule.conditions,
+        "action": rule.action,
+        "priority": rule.priority,
+        "enabled": rule.enabled,
     }
-    _policy_store.append(rule)
-    return rule
 
 
 @router.post("/test")
 async def test_policy(
     body: PolicyTestRequest,
     user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> PolicyDecision:
     """Test policy rules against a sample context."""
+    rules = await load_policies_for_org(user.org_id, db)
     ctx = RequestContext(
         risk_score=body.risk_score,
         detection_categories=body.detection_categories,
         department=body.department,
         role=body.role,
+        org_id=user.org_id,
     )
-    return policy_engine.evaluate(ctx)
+    return policy_engine.evaluate(ctx, rules=rules)
 
 
 @router.put("/{rule_id}")
@@ -260,34 +270,68 @@ async def update_policy(
     rule_id: str,
     body: PolicyRuleUpdate,
     user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Update an existing policy rule."""
-    for rule in _policy_store:
-        if rule["rule_id"] == rule_id:
-            if body.name is not None:
-                rule["name"] = body.name
-            if body.conditions is not None:
-                rule["conditions"] = body.conditions
-            if body.action is not None:
-                rule["action"] = body.action
-            if body.priority is not None:
-                rule["priority"] = body.priority
-            if body.enabled is not None:
-                rule["enabled"] = body.enabled
-            return rule
-    raise HTTPException(status_code=404, detail="Policy rule not found")
+    query = select(DBPolicyRule).filter(
+        DBPolicyRule.rule_id == uuid.UUID(rule_id),
+        DBPolicyRule.org_id == uuid.UUID(user.org_id),
+        DBPolicyRule.deleted_at == None
+    )
+    result = await db.execute(query)
+    rule = result.scalar_one_or_none()
+    
+    if not rule:
+        raise HTTPException(status_code=404, detail="Policy rule not found")
+        
+    if body.name is not None:
+        rule.name = body.name
+    if body.description is not None:
+        rule.description = body.description
+    if body.conditions is not None:
+        rule.conditions = body.conditions
+    if body.action is not None:
+        rule.action = body.action
+    if body.priority is not None:
+        rule.priority = body.priority
+    if body.enabled is not None:
+        rule.enabled = body.enabled
+        
+    await db.commit()
+    await load_policies_for_org(user.org_id, db)
+    
+    return {
+        "rule_id": str(rule.rule_id),
+        "name": rule.name,
+        "description": rule.description,
+        "conditions": rule.conditions,
+        "action": rule.action,
+        "priority": rule.priority,
+        "enabled": rule.enabled,
+    }
 
 
 @router.delete("/{rule_id}")
 async def delete_policy(
     rule_id: str,
     user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Soft-delete a policy rule."""
-    from datetime import datetime
-    for rule in _policy_store:
-        if rule["rule_id"] == rule_id:
-            rule["deleted_at"] = datetime.utcnow().isoformat()
-            rule["enabled"] = False
-            return {"status": "deleted", "rule_id": rule_id}
-    raise HTTPException(status_code=404, detail="Policy rule not found")
+    query = select(DBPolicyRule).filter(
+        DBPolicyRule.rule_id == uuid.UUID(rule_id),
+        DBPolicyRule.org_id == uuid.UUID(user.org_id),
+        DBPolicyRule.deleted_at == None
+    )
+    result = await db.execute(query)
+    rule = result.scalar_one_or_none()
+    
+    if not rule:
+        raise HTTPException(status_code=404, detail="Policy rule not found")
+        
+    rule.deleted_at = datetime.utcnow()
+    rule.enabled = False
+    await db.commit()
+    await load_policies_for_org(user.org_id, db)
+    
+    return {"status": "deleted", "rule_id": rule_id}

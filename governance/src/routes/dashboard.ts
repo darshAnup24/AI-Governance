@@ -34,7 +34,7 @@ dashboardRouter.get("/stats", async (req: Request, res: Response) => {
                 orderBy: { createdAt: "desc" },
                 take: 30,
             }),
-            prisma.policy.count({ where: { orgId, status: "ACTIVE" } }),
+            prisma.policyRule.count({ where: { orgId, enabled: true } }),
         ]);
 
         // Average risk score

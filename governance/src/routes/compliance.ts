@@ -107,12 +107,12 @@ complianceRouter.get("/checks/:orgId", async (req: Request, res: Response) => {
 complianceRouter.post("/gap-analysis/:modelId", async (req: Request, res: Response) => {
     try {
         const checks = await prisma.complianceCheck.findMany({
-            where: { model: { id: req.params.modelId, orgId: req.user!.orgId } },
+            where: { model: { id: req.params.modelId as string, orgId: req.user!.orgId } },
             include: { model: true },
         });
 
         const model = await prisma.aIModel.findFirst({
-            where: { id: req.params.modelId, orgId: req.user!.orgId },
+            where: { id: req.params.modelId as string, orgId: req.user!.orgId },
         });
 
         const prompt = `You are an AI compliance expert. Analyze the following AI model and its compliance status:

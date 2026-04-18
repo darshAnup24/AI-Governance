@@ -42,10 +42,10 @@ vendorsRouter.put("/:id", async (req: Request, res: Response) => {
     try {
         const { name, riskLevel, services } = req.body;
         await prisma.vendor.updateMany({
-            where: { id: req.params.id, orgId: req.user!.orgId },
+            where: { id: req.params.id as string, orgId: req.user!.orgId },
             data: { name, riskLevel, services },
         });
-        const updated = await prisma.vendor.findFirst({ where: { id: req.params.id } });
+        const updated = await prisma.vendor.findFirst({ where: { id: req.params.id as string } });
         res.json(updated);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -56,7 +56,7 @@ vendorsRouter.put("/:id", async (req: Request, res: Response) => {
 vendorsRouter.post("/:id/assess", async (req: Request, res: Response) => {
     try {
         const vendor = await prisma.vendor.findFirst({
-            where: { id: req.params.id, orgId: req.user!.orgId },
+            where: { id: req.params.id as string, orgId: req.user!.orgId },
         });
         if (!vendor) {
             res.status(404).json({ error: "Vendor not found" });

@@ -116,3 +116,22 @@ class AuditEventRecord(Base):
         Index("ix_audit_events_risk_score", "risk_score"),
         Index("ix_audit_events_action_taken", "action_taken"),
     )
+
+
+class ShadowAIAlert(Base):
+    __tablename__ = "shadow_ai_alerts"
+
+    alert_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String(255), nullable=False)
+    org_id = Column(UUID(as_uuid=True), nullable=True)
+    tool_name = Column(String(255), default="")
+    domain = Column(String(255), default="")
+    category = Column(String(100), default="")
+    is_authorized = Column(Boolean, default=False)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_shadow_ai_alerts_user_id", "user_id"),
+        Index("ix_shadow_ai_alerts_timestamp", "timestamp"),
+    )
+

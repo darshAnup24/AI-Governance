@@ -16,7 +16,7 @@ export async function auditMiddleware(
                     userId: req.user?.userId || null,
                     action: req.method,
                     entity,
-                    entityId: req.params.id || null,
+                    entityId: req.params.id as string || null,
                     metadata: {
                         path: req.originalUrl,
                         ip: req.ip,

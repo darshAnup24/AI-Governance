@@ -61,6 +61,15 @@ class RegexDetector:
         # ─── PII: Phone Numbers ───────────────────────────
         RegexPattern("us_phone", re.compile(r"\b(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"), DetectionCategory.PII, 0.65),
 
+        # ─── PII: Indian Patterns (B5) ─────────────────────
+        RegexPattern("aadhaar", re.compile(r"\b[2-9]{1}\d{3}[\s-]?\d{4}[\s-]?\d{4}\b"), DetectionCategory.PII, 0.85, "validate_aadhaar"),
+        RegexPattern("pan_card", re.compile(r"\b[A-Z]{5}[0-9]{4}[A-Z]{1}\b"), DetectionCategory.PII, 0.90, "validate_pan"),
+        RegexPattern("gstin", re.compile(r"\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}\b"), DetectionCategory.REGULATORY, 0.95),
+        RegexPattern("voter_id", re.compile(r"\b[A-Z]{3}[0-9]{7}\b"), DetectionCategory.PII, 0.80),
+        RegexPattern("indian_passport", re.compile(r"\b[A-PR-WY][1-9]\d[\s-]?[0-9]{4}[1-9]\b", re.IGNORECASE), DetectionCategory.PII, 0.80),
+        RegexPattern("driving_license", re.compile(r"\b[A-Z]{2}[0-9]{2}[\s-]?[0-9]{11}\b", re.IGNORECASE), DetectionCategory.PII, 0.85),
+        RegexPattern("uan_epfo", re.compile(r"\b10\d{10}\b"), DetectionCategory.PII, 0.90),
+
         # ─── High-Entropy Strings ─────────────────────────
         RegexPattern("high_entropy", re.compile(r"\b[a-zA-Z0-9+/=_-]{24,}\b"), DetectionCategory.API_KEY, 0.50, "validate_entropy"),
     ]
@@ -169,16 +178,34 @@ class RegexDetector:
         ctx_end = min(len(text), pos + len(matched) + 80)
         context = text[ctx_start:ctx_end]
 
-        # If email appears in code context, lower confidence
         if self.CODE_CONTEXT_PATTERNS.search(context):
-            return True, 0.40  # Still detect, but low confidence
+            return True, 0.40
 
-        # Common example domains
         example_domains = ["example.com", "test.com", "localhost", "company.com"]
         if any(matched.endswith(f"@{d}") for d in example_domains):
             return True, 0.30
 
         return True, 0.75
+
+    def validate_aadhaar(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
+        """Validate Aadhaar with context heuristics."""
+        ctx_start = max(0, pos - 30)
+        context = text[ctx_start:pos + len(matched) + 30].lower()
+        if any(w in context for w in ["aadhaar", "uidai", "aadhar", "vid"]):
+            return True, 0.95
+        return True, 0.80
+
+    def validate_pan(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
+        """Validate PAN context and structure."""
+        # 4th character describes status (P=Person, C=Company, etc.)
+        status_char = matched[3].upper()
+        if status_char not in ['P', 'C', 'H', 'A', 'B', 'G', 'J', 'L', 'F', 'T']:
+            return False, 0
+        ctx_start = max(0, pos - 30)
+        context = text[ctx_start:pos + len(matched) + 30].lower()
+        if any(w in context for w in ["pan", "income tax", "pancard"]):
+            return True, 0.95
+        return True, 0.85
 
     def validate_entropy(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
         """Validate high-entropy strings using Shannon entropy."""

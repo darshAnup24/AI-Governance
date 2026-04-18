@@ -39,7 +39,7 @@ datasetsRouter.post("/", async (req: Request, res: Response) => {
 datasetsRouter.delete("/:id", async (req: Request, res: Response) => {
     try {
         await prisma.dataset.deleteMany({
-            where: { id: req.params.id, orgId: req.user!.orgId },
+            where: { id: req.params.id as string, orgId: req.user!.orgId },
         });
         res.json({ deleted: true });
     } catch (err: any) {

@@ -15,6 +15,10 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+import hashlib
+import json
+import os
+from redis.asyncio import Redis
 
 from proxy.app.logging_config import setup_logging
 from proxy.app.models import ActionType, DetectedSpan, DetectionResult, FinalRiskScore
@@ -46,6 +50,8 @@ prompt_injection_detector = PromptInjectionDetector()
 TIER3_THRESHOLD_LOW = 40
 TIER3_THRESHOLD_HIGH = 70
 
+redis_client: Redis | None = None
+
 
 # ─── Request / Response Models ───────────────────────────
 
@@ -72,9 +78,19 @@ class DetectResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    global redis_client
     setup_logging("INFO")
+    
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+    try:
+        redis_client = Redis.from_url(redis_url, decode_responses=True)
+    except Exception as e:
+        log.warning("detection.redis_init_failed", error=str(e))
+        
     log.info("detection.startup", tiers=["regex", "ner", "llama"])
     yield
+    if redis_client:
+        await redis_client.aclose()
     log.info("detection.shutdown")
 
 
@@ -101,6 +117,21 @@ async def detect(request: DetectRequest) -> DetectResponse:
       Tier 3 (Llama) runs only if score is ambiguous (40-70)
     """
     start = time.perf_counter()
+
+    # B4: Check Redis Cache
+    prompt_hash = hashlib.sha256(request.text.encode("utf-8")).hexdigest()
+    cache_key = f"detection:cache:{prompt_hash}:{request.role}"
+    
+    if redis_client:
+        try:
+            cached_res = await redis_client.get(cache_key)
+            if cached_res:
+                log.info("detection.cache_hit", hash=prompt_hash)
+                cached_dict = json.loads(cached_res)
+                cached_dict["processing_time_ms"] = round((time.perf_counter() - start) * 1000, 2)
+                return DetectResponse(**cached_dict)
+        except Exception as e:
+            log.warning("detection.cache_read_failed", error=str(e))
 
     # ─── Run ALL detectors in parallel ─────────────────────
     loop = asyncio.get_event_loop()
@@ -140,7 +171,7 @@ async def detect(request: DetectRequest) -> DetectResponse:
         duration_ms=round(duration_ms, 2),
     )
 
-    return DetectResponse(
+    response_obj = DetectResponse(
         risk_score=final_score.score,
         action=final_score.recommended_action,
         detection_results=results,
@@ -150,6 +181,18 @@ async def detect(request: DetectRequest) -> DetectResponse:
         regulatory_flags=final_score.regulatory_flags,
         remediation_priority=final_score.remediation_priority,
     )
+
+    if redis_client:
+        try:
+            await redis_client.setex(
+                cache_key,
+                60, # Cache for 60 seconds
+                response_obj.model_dump_json()
+            )
+        except Exception as e:
+            log.warning("detection.cache_write_failed", error=str(e))
+
+    return response_obj
 
 
 @app.exception_handler(Exception)

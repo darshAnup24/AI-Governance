@@ -50,7 +50,7 @@ incidentsRouter.put("/:id", async (req: Request, res: Response) => {
         if (status === "RESOLVED") data.resolvedAt = new Date();
 
         const incident = await prisma.incident.updateMany({
-            where: { id: req.params.id, orgId: req.user!.orgId },
+            where: { id: req.params.id as string, orgId: req.user!.orgId },
             data,
         });
         res.json(incident);
@@ -67,12 +67,12 @@ incidentsRouter.patch("/:id/status", async (req: Request, res: Response) => {
         if (status === "RESOLVED") data.resolvedAt = new Date();
 
         await prisma.incident.updateMany({
-            where: { id: req.params.id, orgId: req.user!.orgId },
+            where: { id: req.params.id as string, orgId: req.user!.orgId },
             data,
         });
 
         const updated = await prisma.incident.findFirst({
-            where: { id: req.params.id },
+            where: { id: req.params.id as string },
             include: { model: { select: { name: true } } },
         });
         res.json(updated);

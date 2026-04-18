@@ -15,10 +15,17 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from sqlalchemy import select, func, desc, text
+from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
+from pydantic import BaseModel
+
 from proxy.app.adapters import ProviderAdapter
 from proxy.app.audit import audit_emitter
 from proxy.app.auth import get_current_user, rate_limiter
 from proxy.app.config import Settings, get_settings
+from proxy.app.database import get_db
+from proxy.app.db_models import AuditEventRecord, ShadowAIAlert
 from proxy.app.models import (
     ActionType,
     AuditEvent,
@@ -252,6 +259,47 @@ async def chat_completions(
                 timeout=30.0,
             )
 
+            # Response Inspection (A5)
+            response_content = None
+            try:
+                if resp.status_code == 200:
+                    resp_json = resp.json()
+                    response_text = ""
+                    for choice in resp_json.get("choices", []):
+                        content = choice.get("message", {}).get("content", "")
+                        if content:
+                            response_text += content
+                    
+                    if response_text:
+                        res_det = await _call_detection(http_client, response_text, user, settings)
+                        res_action = ActionType(res_det.get("action", "ALLOW"))
+                        
+                        if res_action == ActionType.BLOCK:
+                            # Block the response
+                            return JSONResponse(
+                                status_code=403,
+                                content=ProblemDetail(
+                                    type="https://ai-governance.dev/errors/policy-violation",
+                                    title="Response Blocked by Policy",
+                                    status=403,
+                                    detail="The upstream LLM response contained sensitive information and was blocked.",
+                                ).model_dump(),
+                            )
+                        elif res_action == ActionType.REDACT:
+                            detected_spans = res_det.get("detected_spans", [])
+                            for choice in resp_json.get("choices", []):
+                                content = choice.get("message", {}).get("content", "")
+                                if content:
+                                    for span in sorted(detected_spans, key=lambda s: s.get("start", 0), reverse=True):
+                                        start = span.get("start", 0)
+                                        end = span.get("end", 0)
+                                        category = span.get("category", "UNKNOWN")
+                                        content = content[:start] + f"[REDACTED:{category}]" + content[end:]
+                                    choice["message"]["content"] = content
+                            response_content = resp_json
+            except Exception as e:
+                log.warning("response_inspection.failed", error=str(e))
+
             duration_ms = (time.perf_counter() - start_time) * 1000
 
             # Emit audit event
@@ -271,7 +319,7 @@ async def chat_completions(
             # Return upstream response with governance headers
             response = JSONResponse(
                 status_code=resp.status_code,
-                content=resp.json(),
+                content=response_content if response_content is not None else resp.json(),
             )
             response.headers["X-Risk-Score"] = str(risk_score)
             response.headers["X-Action"] = action.value
@@ -313,18 +361,31 @@ async def chat_completions(
 async def analytics_trend(
     days: int = 30,
     user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Return risk trend data for the dashboard. Stub with sample data for now."""
-    from datetime import datetime, timedelta
+    """Return risk trend data from TimescaleDB."""
+    query = text("""
+        SELECT time_bucket('1 day', timestamp) AS day,
+               COUNT(*) FILTER (WHERE action_taken = 'BLOCK') as blocked,
+               COUNT(*) FILTER (WHERE action_taken = 'REDACT') as redacted,
+               COUNT(*) FILTER (WHERE action_taken = 'WARN') as warned,
+               COUNT(*) FILTER (WHERE action_taken = 'ALLOW') as allowed
+        FROM audit_events
+        WHERE org_id = :org_id AND timestamp > NOW() - (:days || ' days')::interval
+        GROUP BY day ORDER BY day;
+    """)
+    result = await db.execute(query, {"org_id": user.org_id, "days": str(days)})
+    rows = result.fetchall()
 
     data = []
-    for i in range(days):
-        date = (datetime.utcnow() - timedelta(days=days - i - 1)).strftime("%Y-%m-%d")
+    # If using Timescale/Postgres, row.day is datetime. Ensure formatting.
+    for row in rows:
         data.append({
-            "date": date,
-            "blocked": max(0, int(15 + (i % 7) * 3 - 5)),
-            "redacted": max(0, int(45 + (i % 5) * 8 - 10)),
-            "warned": max(0, int(80 + (i % 3) * 12 - 15)),
+            "date": row.day.strftime("%Y-%m-%d") if row.day else None,
+            "blocked": row.blocked,
+            "redacted": row.redacted,
+            "warned": row.warned,
+            "allowed": row.allowed,
         })
     return {"data": data, "days": days}
 
@@ -335,11 +396,102 @@ async def list_audit_events(
     per_page: int = 50,
     action: str | None = None,
     user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """List audit events. Stub with sample data for Phase 1-2."""
+    """List audit events from PostgreSQL."""
+    query = select(AuditEventRecord).filter(AuditEventRecord.org_id == user.org_id)
+    if action:
+        query = query.filter(AuditEventRecord.action_taken == action)
+
+    # Total count
+    count_query = select(func.count()).select_from(query.subquery())
+    total = await db.scalar(count_query)
+
+    # Data
+    query = query.order_by(desc(AuditEventRecord.timestamp))
+    query = query.offset((page - 1) * per_page).limit(per_page)
+
+    result = await db.execute(query)
+    records = result.scalars().all()
+
     return {
-        "data": [],
-        "total": 0,
+        "data": [
+            {
+                "event_id": str(r.event_id),
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                "user_id": str(r.user_id),
+                "llm_provider": r.llm_provider,
+                "risk_score": r.risk_score,
+                "action_taken": r.action_taken,
+                "tool_name": r.tool_name,
+            } for r in records
+        ],
+        "total": total or 0,
+        "page": page,
+        "per_page": per_page,
+    }
+
+class ShadowAIEventPayload(BaseModel):
+    user_id: str
+    tool_name: str
+    domain: str
+    category: str
+    is_authorized: bool = False
+    timestamp: datetime | None = None
+    org_id: str | None = None
+
+@router.post("/api/v1/shadow-ai/events")
+async def ingest_shadow_ai_event(
+    event: ShadowAIEventPayload,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    alert = ShadowAIAlert(
+        user_id=event.user_id,
+        org_id=event.org_id,
+        tool_name=event.tool_name,
+        domain=event.domain,
+        category=event.category,
+        is_authorized=event.is_authorized,
+        timestamp=event.timestamp or datetime.utcnow(),
+    )
+    db.add(alert)
+    await db.commit()
+    return {"status": "ok", "alert_id": str(alert.alert_id)}
+
+@router.get("/api/v1/shadow-ai/detections")
+async def list_shadow_ai_detections(
+    page: int = 1,
+    per_page: int = 50,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(get_current_user),
+) -> dict[str, Any]:
+    query = select(ShadowAIAlert)
+    
+    # Filter by org_id if available on the alert (some alerts might not have it mapped yet)
+    # query = query.filter(ShadowAIAlert.org_id == user.org_id)
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total = await db.scalar(count_query)
+
+    query = query.order_by(desc(ShadowAIAlert.timestamp))
+    query = query.offset((page - 1) * per_page).limit(per_page)
+
+    result = await db.execute(query)
+    records = result.scalars().all()
+
+    return {
+        "data": [
+            {
+                "alert_id": str(r.alert_id),
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                "user_id": r.user_id,
+                "tool_name": r.tool_name,
+                "domain": r.domain,
+                "category": r.category,
+                "is_authorized": r.is_authorized,
+            } for r in records
+        ],
+        "total": total or 0,
         "page": page,
         "per_page": per_page,
     }
