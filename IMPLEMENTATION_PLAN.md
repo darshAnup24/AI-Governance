@@ -305,21 +305,34 @@ score  < 40 → MINIMAL RISK
 
 ---
 
-## 6. REMAINING WORK — PHASE-WISE COMPLETION PLAN
+## 6. REMAINING WORK — 4-PERSON PARALLEL DIVISION PLAN
 
-### Phase A: Backend Hardening (Week 1–2)
+> **How to use this plan:** Each person owns one division and works **independently in parallel**.
+> Within each division, tasks are ordered **🟢 Low → 🟡 Mid → 🔴 High** criticality.
+> Start from 🔴 HIGH (most critical / blocking) and work down to 🟢 LOW (polish / nice-to-have).
+> Dependencies between divisions are marked with ⚠️ so you can coordinate handoffs.
 
-#### A1. Persist Policy Rules to PostgreSQL
+---
+
+### 👤 PERSON 1 — Backend & Proxy Engineer
+**Scope:** `proxy/` service (Python · FastAPI · port 8000)
+**Focus:** API endpoints, policy persistence, audit pipeline, security hardening
+
+#### 🔴 HIGH CRITICALITY — Do First
+
+**1.1 Persist Policy Rules to PostgreSQL**
 - Move `_policy_store` from in-memory dict in `policy_engine.py` to `PolicyRule` DB table
 - Add Alembic migration for `policy_rules` table
 - Update PolicyEngine to load/cache rules from DB on startup, invalidate on write
+- ⚠️ *Person 3 needs this table in Prisma schema too — coordinate column names*
 
-#### A2. Real Audit Event Read-Back
+**1.2 Real Audit Event Read-Back**
 - Implement `/api/v1/audit-events` in `routes.py` to query PostgreSQL (not stub)
 - Add pagination, filtering by action, user_id, date range, org_id
 - Use TimescaleDB `time_bucket` for aggregated trend queries
+- ⚠️ *Person 4 depends on this API for dashboard pages*
 
-#### A3. Real Analytics Endpoint
+**1.3 Real Analytics Endpoint**
 - Implement `/api/v1/analytics/trend` using TimescaleDB:
   ```sql
   SELECT time_bucket('1 day', created_at) AS day,
@@ -329,185 +342,310 @@ score  < 40 → MINIMAL RISK
   WHERE org_id = $1 AND created_at > NOW() - INTERVAL '$2 days'
   GROUP BY day ORDER BY day;
   ```
+- ⚠️ *Person 4 depends on this for charts*
 
-#### A4. Shadow AI REST Endpoint
+#### 🟡 MID CRITICALITY — Do Second
+
+**1.4 Shadow AI REST Endpoint**
 - Add `POST /api/v1/shadow-ai/events` in proxy for receiving DNS log parsed events
 - Add `GET /api/v1/shadow-ai/detections` for dashboard consumption
 - Store events in a `shadow_ai_alerts` DB table
+- ⚠️ *Person 4 depends on this for Shadow AI dashboard page*
 
-#### A5. Response Inspection
+**1.5 Response Inspection**
 - After upstream LLM responds, run a second detection pass on the *response* text
 - Detect if LLM leaked or reconstructed sensitive data in its response
 - This is a unique capability no competitor currently offers
 
+**1.6 Multi-Tenant Org Isolation**
+- All policy/audit queries scoped by `org_id`
+- Ensure JWT `org_id` claim filters every DB query
+
+#### 🟢 LOW CRITICALITY — Do Last (Polish)
+
+**1.7 JWT → JWKS in Production**
+- Switch from `DEV_JWT_SECRET` (HS256) to enterprise OIDC/JWKS (RS256)
+- Support Okta, Azure AD, Google Workspace as identity providers
+
+**1.8 Secrets Management**
+- Replace env var secrets with HashiCorp Vault or AWS Secrets Manager
+- Rotate DB credentials without downtime
+
+**1.9 Network Hardening**
+- All inter-service communication over mTLS
+- Docker network: only proxy can reach external internet; detection + governance are internal-only
+
+**1.10 Data Encryption at Rest**
+- Encrypt `prompt_hash` column (store only hash, never raw prompt)
+- Encrypt PII in `detected_spans` JSONB column
+
 ---
 
-### Phase B: Detection Engine Enhancement (Week 3–4)
+### 👤 PERSON 2 — ML & Detection Engineer
+**Scope:** `detection/` service (Python · FastAPI · spaCy · Ollama · port 8001)
+**Focus:** Detection pipeline, ML models, caching, pattern libraries
 
-#### B1. spaCy Model Upgrade
-- Download `en_core_web_trf` (transformer-based) as production model
-- Keep `en_core_web_sm` for fallback / low-memory deployments
-- Add Indian language NER via spaCy-Indic
+#### 🔴 HIGH CRITICALITY — Do First
 
-#### B2. BERT-based Classifier (Alternative to Llama for Tier 3)
-- Fine-tune `distilbert-base-uncased` on synthetic enterprise leakage dataset
-- Faster inference than Llama (< 20ms vs 100–500ms)
-- Use ONNX runtime for production serving
-- Architecture: `prompt → tokenize → BERT → [SENSITIVE/SAFE + confidence]`
-
-#### B3. Prompt Injection Enhancement
-- Add semantic similarity check against known jailbreak corpus
-- Add detection of multi-turn injection (across message history, not just last message)
-
-#### B4. Redis Detection Cache
+**2.1 Redis Detection Cache**
 - Hash prompt with SHA-256
 - Cache detection results for 60 seconds (for repeated identical prompts)
 - Skip full pipeline on cache hit — saves ~80–100ms per repeated prompt
+- *No dependencies — can start immediately*
 
-#### B5. Indian Regulatory Patterns
+**2.2 Llama Classifier Structured Output**
+- Enforce structured JSON output with Pydantic validation
+- Handle timeout/error gracefully with fallback to Tier 1+2 score
+- *No dependencies — can start immediately*
+
+**2.3 Prompt Injection Enhancement**
+- Add semantic similarity check against known jailbreak corpus
+- Add detection of multi-turn injection (across message history, not just last message)
+- *No dependencies — can start immediately*
+
+#### 🟡 MID CRITICALITY — Do Second
+
+**2.4 spaCy Model Upgrade**
+- Download `en_core_web_trf` (transformer-based) as production model
+- Keep `en_core_web_sm` for fallback / low-memory deployments
+- Add Indian language NER via spaCy-Indic
+- Update Docker image to include transformer model
+
+**2.5 Indian Regulatory Patterns**
 - GSTIN: `^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$`
 - UAN (EPFO): 12-digit
 - Voter ID, Passport, Driving License patterns
 - RBI data localization clauses
 
+**2.6 Integration Test Suite** (`tests/test_integration.py`)
+- Use `testcontainers` to spin up real PostgreSQL + Redis in CI
+- Test the full pipeline: request → detection → policy → action
+- Latency assertions: P95 round-trip < 200ms (detection goal < 100ms)
+- End-to-end test scenarios:
+  ```
+  Test 1: Plain prompt → ALLOW (score < 30)
+  Test 2: Prompt with API key → BLOCK (score ≥ 90)
+  Test 3: Prompt with email → REDACT (score ~80)
+  Test 4: Prompt injection attempt → BLOCK (score ≥ 90)
+  Test 5: Shadow AI DNS log → alert created
+  Test 6: Admin role → same prompt scores 50% lower
+  Test 7: Compliance report generation → PDF valid
+  ```
+
+#### 🟢 LOW CRITICALITY — Do Last (Polish)
+
+**2.7 BERT-based Classifier (Alternative Tier 3)**
+- Fine-tune `distilbert-base-uncased` on synthetic enterprise leakage dataset
+- Faster inference than Llama (<20ms vs 100–500ms)
+- Use ONNX runtime for production serving
+- Architecture: `prompt → tokenize → BERT → [SENSITIVE/SAFE + confidence]`
+
+**2.8 Fine-Tune spaCy on Enterprise Data**
+- Train custom spaCy model on enterprise PII datasets
+- Improve accuracy for domain-specific entities (internal project names, internal IDs)
+
+**2.9 Load Testing** (`tests/load_test.py`)
+- `Locust` load test with realistic prompt corpus
+- Target: 500 concurrent users, P99 < 500ms
+- Stress test: 2000 RPS burst, verify Redis rate limiter kicks in correctly
+
 ---
 
-### Phase C: Governance Service Completion (Week 5–6)
+### 👤 PERSON 3 — Governance & API Engineer
+**Scope:** `governance/` service (Node.js · TypeScript · Prisma · port 4000)
+**Focus:** Prisma schema, CRUD APIs, compliance reports, WebSocket
 
-#### C1. Prisma Schema Finalization
-```prisma
-model Organization {
-  id          String   @id @default(uuid())
-  name        String
-  domain      String   @unique
-  ...
-  users       User[]
-  policies    PolicyRule[]
-  auditEvents AuditEvent[]
-}
+#### 🔴 HIGH CRITICALITY — Do First
 
-model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  role         String   // admin | analyst | user
-  department   String
-  orgId        String
-  org          Organization @relation(fields: [orgId], references: [id])
-}
+**3.1 Prisma Schema Finalization**
+- Finalize and migrate all models:
+  ```prisma
+  model Organization {
+    id          String   @id @default(uuid())
+    name        String
+    domain      String   @unique
+    users       User[]
+    policies    PolicyRule[]
+    auditEvents AuditEvent[]
+  }
 
-model PolicyRule {
-  id          String   @id @default(uuid())
-  orgId       String
-  name        String
-  conditions  Json
-  action      String
-  priority    Int      @default(100)
-  enabled     Boolean  @default(true)
-}
+  model User {
+    id           String   @id @default(uuid())
+    email        String   @unique
+    role         String   // admin | analyst | user
+    department   String
+    orgId        String
+    org          Organization @relation(fields: [orgId], references: [id])
+  }
 
-model ShadowAIAlert {
-  id          String   @id @default(uuid())
-  userId      String
-  toolName    String
-  domain      String
-  category    String
-  authorized  Boolean
-  detectedAt  DateTime @default(now())
-}
-```
+  model PolicyRule {
+    id          String   @id @default(uuid())
+    orgId       String
+    name        String
+    conditions  Json
+    action      String
+    priority    Int      @default(100)
+    enabled     Boolean  @default(true)
+  }
 
-#### C2. Governance Advisor
+  model ShadowAIAlert {
+    id          String   @id @default(uuid())
+    userId      String
+    toolName    String
+    domain      String
+    category    String
+    authorized  Boolean
+    detectedAt  DateTime @default(now())
+  }
+  ```
+- ⚠️ *Coordinate column names with Person 1 (Python ORM models)*
+
+**3.2 Policy CRUD Endpoints**
+- `GET    /api/policies`         — list all policies for org
+- `POST   /api/policies`         — create new policy rule
+- `PUT    /api/policies/:id`     — update policy rule
+- `DELETE /api/policies/:id`     — delete policy rule
+- `POST   /api/policies/:id/test` — test policy against sample context
+- Add org-level isolation (all queries filtered by `orgId` from JWT)
+- ⚠️ *Person 4 depends on this for Policy Builder UI*
+
+**3.3 User Management Endpoints**
+- `GET    /api/users`            — list org users
+- `POST   /api/users/invite`     — invite user by email
+- `PUT    /api/users/:id/role`   — change role (admin/analyst/user)
+- `PUT    /api/users/:id/department` — assign department
+- ⚠️ *Person 4 depends on this for user management pages*
+
+#### 🟡 MID CRITICALITY — Do Second
+
+**3.4 WebSocket Live Feed**
+- `ws://governance:4000/ws/events` — push real-time audit events to dashboard
+- Subscribe by org_id, filter by severity
+- ⚠️ *Person 4 depends on this for live threat feed*
+
+**3.5 Compliance Report Generation**
+- PDF: `pdfkit` or `Playwright` server-side PDF generation
+- CSV: standard `json-2-csv`
+- Templates: GDPR Article 30 Record of Processing, HIPAA Audit Report, EU AI Act Annex
+- Endpoints:
+  - `POST /api/reports/generate` — trigger report generation
+  - `GET  /api/reports/:id/download` — download PDF/CSV
+- ⚠️ *Person 4 depends on this for compliance reports page*
+
+**3.6 Seed Script for Demo Data**
+- Create seed script with realistic demo data:
+  - 2 organizations, 10 users per org, 50 policy rules
+  - 500 audit events across 30 days
+  - 20 Shadow AI alerts
+- Command: `make gov-seed`
+
+#### 🟢 LOW CRITICALITY — Do Last (Polish)
+
+**3.7 Governance Advisor (LLM-Powered)**
 - LLM-powered governance recommendations via Ollama
 - Endpoint: `POST /api/governance/advisor`
 - Input: org context, recent violations, industry vertical
 - Output: ranked remediation recommendations with regulation citations
 
-#### C3. WebSocket Live Feed
-- `ws://governance:4000/ws/events` — push real-time audit events to dashboard
-- Subscribe by org_id, filter by severity
+**3.8 Audit Event Aggregation API**
+- `GET /api/audit/summary` — aggregated stats for dashboard cards
+- `GET /api/audit/by-user` — per-user risk scores (for heatmap)
+- `GET /api/audit/by-category` — detection category breakdown (for pie chart)
 
-#### C4. Compliance Report Generation
-- PDF: `pdfkit` or `Playwright` server-side PDF generation
-- CSV: standard `json-2-csv`
-- Templates: GDPR Article 30 Record of Processing, HIPAA Audit Report, EU AI Act Annex
+**3.9 API Rate Limiting & Middleware Polish**
+- Add request validation middleware for all endpoints
+- Add structured error responses (RFC 7807 Problem Details)
+- Add API versioning (`/api/v1/...`)
 
 ---
 
-### Phase D: Dashboard Completion (Week 7–9)
+### 👤 PERSON 4 — Frontend & Dashboard Engineer
+**Scope:** `dashboard/` (React 18 · Vite · TypeScript · Tailwind · port 3000)
+**Focus:** UI pages, charts, real data integration, UX polish
 
-#### D1. Real Data Integration
-- Replace all `mockData` with API calls using `useQuery` (React Query / TanStack Query)
+#### 🔴 HIGH CRITICALITY — Do First
+
+**4.1 Real Data Integration (Replace All Mocks)**
+- Replace all `mockData` with API calls using `useQuery` (TanStack Query)
 - Add proper error boundaries and loading skeletons
 - Add retry logic for failed API calls
+- Connect to endpoints:
+  - ⚠️ Audit events → Person 1's `/api/v1/audit-events`
+  - ⚠️ Analytics → Person 1's `/api/v1/analytics/trend`
+  - ⚠️ Policies → Person 3's `/api/policies`
+  - ⚠️ Users → Person 3's `/api/users`
+- *Can start with mock API service while waiting for backend APIs*
 
-#### D2. Charts & Visualizations
+**4.2 Charts & Core Visualizations**
 - **Risk Trend (30d):** `Recharts` LineChart — BLOCK / REDACT / WARN / ALLOW per day
 - **Detection Category Breakdown:** PieChart by category (PII, API_KEY, PROMPT_INJECTION, etc.)
-- **User Risk Heatmap:** 2D heat grid (users × days of week) using `react-heatmap-grid`
-- **Shadow AI World Map:** `react-leaflet` + GeoIP → unauthorized AI URL ping locations
 - **Live Threat Feed:** virtualized list with 1s auto-refresh using WebSocket
+  - ⚠️ *Depends on Person 3's WebSocket feed*
+- *Can build chart components with mock data first, swap to real data later*
 
-#### D3. Policy Builder UI
+**4.3 Dark Mode, Loading States, Error Boundaries**
+- Implement dark/light mode toggle with system preference detection
+- Add skeleton loaders for all data-fetching pages
+- Add React Error Boundaries with fallback UI for every route
+
+#### 🟡 MID CRITICALITY — Do Second
+
+**4.4 Policy Builder UI**
 - Visual rule builder: `IF [field] [operator] [value] AND/OR ... THEN [action]`
 - Test button: run policy against sample context, see which rule triggers
 - Drag-and-drop priority reordering
+- ⚠️ *Depends on Person 3's policy CRUD endpoints*
 
-#### D4. Compliance Reports
+**4.5 Compliance Reports Page**
 - Generate reports on demand (GDPR / HIPAA / EU AI Act / RBI)
 - PDF preview in browser, then download
 - Show compliance score percentage per regulation
+- ⚠️ *Depends on Person 3's report generation endpoints*
 
-#### D5. Progressive Web App (PWA)
+**4.6 User Behavior Heatmap**
+- 2D heat grid (users × days of week) using `react-heatmap-grid`
+- Shows risk concentration per employee per time period
+- ⚠️ *Depends on Person 3's `/api/audit/by-user` endpoint*
+
+#### 🟢 LOW CRITICALITY — Do Last (Polish)
+
+**4.7 Shadow AI World Map**
+- `react-leaflet` + GeoIP → unauthorized AI URL ping locations
+- Interactive map with domain tooltips
+- ⚠️ *Depends on Person 1's Shadow AI endpoints*
+
+**4.8 Progressive Web App (PWA)**
 - Service worker for offline dashboard viewing
 - Push notifications for critical BLOCK events on mobile
 - This gives a unique "enterprise app" feel no competitor offers
 
+**4.9 Responsive Mobile Layout**
+- Ensure all dashboard pages work on tablet/mobile viewports
+- Collapsible sidebar navigation
+- Touch-friendly chart interactions
+
 ---
 
-### Phase E: Integration Testing & Load Testing (Week 10–11)
+### 📋 CROSS-DIVISION DEPENDENCY MAP
 
-#### E1. Integration Test Suite (`tests/test_integration.py`)
-- Use `testcontainers` to spin up real PostgreSQL + Redis in CI
-- Test the full pipeline: request → detection → policy → action
-- Latency assertions: P95 round-trip < 200ms (detection goal < 100ms)
-
-#### E2. Load Testing (`tests/load_test.py`)
-- `Locust` load test with realistic prompt corpus
-- Target: 500 concurrent users, P99 < 500ms
-- Stress test: 2000 RPS burst, verify Redis rate limiter kicks in correctly
-
-#### E3. End-to-End Test Scenarios
 ```
-Test 1: Plain prompt → ALLOW (score < 30)
-Test 2: Prompt with API key → BLOCK (score ≥ 90)
-Test 3: Prompt with email → REDACT (score ~80)
-Test 4: Prompt injection attempt → BLOCK (score ≥ 90)
-Test 5: Shadow AI DNS log → alert created
-Test 6: Admin role → same prompt scores 50% lower
-Test 7: Compliance report generation → PDF valid
+  PERSON 1 (Backend)          PERSON 2 (Detection)       PERSON 3 (Governance)       PERSON 4 (Frontend)
+  ══════════════════          ════════════════════       ═════════════════════       ═══════════════════
+  1.1 Policy DB ─────────────────────────────────────► 3.1 Prisma Schema
+                                                        3.2 Policy CRUD ──────────► 4.4 Policy Builder
+  1.2 Audit Read-Back ───────────────────────────────────────────────────────────► 4.1 Real Data
+  1.3 Analytics ─────────────────────────────────────────────────────────────────► 4.2 Charts
+  1.4 Shadow AI API ─────────────────────────────────────────────────────────────► 4.7 Shadow AI Map
+                              2.1 Redis Cache (independent)
+                              2.3 Prompt Inj (independent)
+                                                        3.3 User Mgmt ───────────► 4.1 Real Data
+                                                        3.4 WebSocket ───────────► 4.2 Live Feed
+                                                        3.5 Reports API ─────────► 4.5 Reports Page
 ```
 
----
-
-### Phase F: Security Hardening (Week 11–12)
-
-#### F1. JWT → JWKS in Production
-- Switch from `DEV_JWT_SECRET` (HS256) to enterprise OIDC/JWKS (RS256)
-- Support Okta, Azure AD, Google Workspace as identity providers
-
-#### F2. Secrets Management
-- Replace env var secrets with HashiCorp Vault or AWS Secrets Manager
-- Rotate DB credentials without downtime
-
-#### F3. Network Hardening
-- All inter-service communication over mTLS
-- Docker network: only proxy can reach external internet; detection + governance are internal-only
-
-#### F4. Data Encryption at Rest
-- Encrypt `prompt_hash` column (store only hash, never raw prompt)
-- Encrypt PII in `detected_spans` JSONB column
-
----
+> **Key:** Person 2 (Detection) is the **most independent** — can start all HIGH tasks immediately.
+> Person 4 (Frontend) has the **most dependencies** — should build with mock data first, then swap APIs.
+> Persons 1 & 3 should **sync on column names** (Python ORM ↔ Prisma) before starting.
 
 ## 7. HOW TO RUN THE PROJECT
 
@@ -800,20 +938,25 @@ AI-Governance/
 
 ---
 
-## 12. DEVELOPMENT TIMELINE (REMAINING)
+## 12. PARALLEL SPRINT TIMELINE (ALL 4 PEOPLE WORKING SIMULTANEOUSLY)
 
-| Week | Task | Owner |
-|---|---|---|
-| **Week 1** | Phase A: Backend hardening (DB audit read-back, real analytics) | Backend |
-| **Week 2** | Phase B1–B4: Detection engine enhancement (spaCy upgrade, Redis cache) | ML/Backend |
-| **Week 3** | Phase C1–C3: Governance service finalization (Prisma, WebSocket) | Backend |
-| **Week 4** | Phase D1–D2: Dashboard real data + charts | Frontend |
-| **Week 5** | Phase D3–D5: Policy builder, compliance reports, Shadow AI map | Frontend |
-| **Week 6** | Phase B2: BERT/DistilBERT classifier (optional Tier 3 alternative) | ML |
-| **Week 7** | Phase E: Integration + load testing | QA |
-| **Week 8** | Phase F: Security hardening (mTLS, Vault, encryption) | Security |
-| **Week 9** | Demo preparation, documentation, final integration | All |
-| **Week 10** | Buffer / polish / competition submission | All |
+| Week | 👤 Person 1 (Backend) | 👤 Person 2 (Detection) | 👤 Person 3 (Governance) | 👤 Person 4 (Frontend) |
+|---|---|---|---|---|
+| **Week 1** | 🔴 1.1 Policy DB persistence | 🔴 2.1 Redis detection cache | 🔴 3.1 Prisma schema finalization | 🔴 4.3 Dark mode + error boundaries |
+| **Week 2** | 🔴 1.2 Audit event read-back | 🔴 2.2 Llama structured output | 🔴 3.2 Policy CRUD endpoints | 🔴 4.1 Real data integration (mock-first) |
+| **Week 3** | 🔴 1.3 Real analytics endpoint | 🔴 2.3 Prompt injection enhancement | 🔴 3.3 User management endpoints | 🔴 4.2 Charts & visualizations |
+| **Week 4** | 🟡 1.4 Shadow AI REST endpoint | 🟡 2.4 spaCy model upgrade | 🟡 3.4 WebSocket live feed | 🟡 4.4 Policy builder UI |
+| **Week 5** | 🟡 1.5 Response inspection | 🟡 2.5 Indian regulatory patterns | 🟡 3.5 Compliance report generation | 🟡 4.5 Compliance reports page |
+| **Week 6** | 🟡 1.6 Multi-tenant isolation | 🟡 2.6 Integration test suite | 🟡 3.6 Seed script for demo data | 🟡 4.6 User behavior heatmap |
+| **Week 7** | 🟢 1.7 JWT → JWKS production | 🟢 2.7 BERT classifier (optional) | 🟢 3.7 Governance advisor (LLM) | 🟢 4.7 Shadow AI world map |
+| **Week 8** | 🟢 1.8–1.9 Secrets + network hardening | 🟢 2.8 Fine-tune spaCy | 🟢 3.8–3.9 Audit aggregation + middleware | 🟢 4.8 PWA + mobile layout |
+| **Week 9** | 🟢 1.10 Data encryption at rest | 🟢 2.9 Load testing (Locust) | 🟢 Final API polish | 🟢 4.9 Responsive mobile |
+| **Week 10** | 🏁 Demo prep + documentation | 🏁 Demo prep + documentation | 🏁 Demo prep + documentation | 🏁 Demo prep + documentation |
+
+> **🔴 = Critical (Weeks 1–3)** · **🟡 = Important (Weeks 4–6)** · **🟢 = Polish (Weeks 7–9)** · **🏁 = Final (Week 10)**
+>
+> All 4 people work **every week in parallel**. No one is ever idle or blocked.
+> Person 4 uses mock APIs in Weeks 1–2 while Persons 1 & 3 build the real endpoints.
 
 ---
 
