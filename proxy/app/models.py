@@ -40,6 +40,7 @@ class DetectionCategory(str, Enum):
     SECURITY_VULN = "SECURITY_VULN"
     REGULATORY = "REGULATORY"
     PROMPT_INJECTION = "PROMPT_INJECTION"
+    SAFE = "SAFE"  # ML classifier: no risk detected
 
 
 # ─── Detection Models ────────────────────────────────────

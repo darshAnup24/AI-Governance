@@ -1,0 +1,17 @@
+{
+  "model_type": "spacy_textcat_multilabel_bow",
+  "categories": [
+    "SAFE",
+    "PII",
+    "CREDENTIALS",
+    "PROMPT_INJECTION",
+    "HALLUCINATION",
+    "BIAS",
+    "REGULATORY"
+  ],
+  "train_size": 221,
+  "n_iter": 30,
+  "best_epoch": 30,
+  "best_dev_f1_approx": 0.8113,
+  "version": "1.0"
+}

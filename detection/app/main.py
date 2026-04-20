@@ -32,6 +32,7 @@ from detection.app.detectors.bias_detector import BiasDetector
 from detection.app.detectors.security_code_detector import SecurityCodeDetector
 from detection.app.detectors.regulatory_detector import RegulatoryDetector
 from detection.app.detectors.prompt_injection_detector import PromptInjectionDetector
+from detection.app.ml_classifier import MLClassifier
 
 log = structlog.get_logger()
 
@@ -46,6 +47,7 @@ bias_detector = BiasDetector()
 security_code_detector = SecurityCodeDetector()
 regulatory_detector = RegulatoryDetector()
 prompt_injection_detector = PromptInjectionDetector()
+ml_classifier = MLClassifier()  # Trained sklearn + spaCy ensemble
 
 TIER3_THRESHOLD_LOW = 40
 TIER3_THRESHOLD_HIGH = 70
@@ -133,7 +135,7 @@ async def detect(request: DetectRequest) -> DetectResponse:
         except Exception as e:
             log.warning("detection.cache_read_failed", error=str(e))
 
-    # ─── Run ALL detectors in parallel ─────────────────────
+    # ─── Run ALL detectors in parallel (Tier 1-2 + ML ensemble) ─────────────
     loop = asyncio.get_event_loop()
     futures = [
         loop.run_in_executor(None, regex_detector.detect, request.text),
@@ -143,6 +145,7 @@ async def detect(request: DetectRequest) -> DetectResponse:
         loop.run_in_executor(None, security_code_detector.detect, request.text),
         loop.run_in_executor(None, regulatory_detector.detect, request.text),
         loop.run_in_executor(None, prompt_injection_detector.detect, request.text),
+        loop.run_in_executor(None, ml_classifier.detect, request.text),  # ML ensemble
     ]
 
     results = list(await asyncio.gather(*futures))
@@ -193,6 +196,24 @@ async def detect(request: DetectRequest) -> DetectResponse:
             log.warning("detection.cache_write_failed", error=str(e))
 
     return response_obj
+
+
+@app.get("/ml/status")
+async def ml_status() -> dict[str, Any]:
+    """Return ML model loading status and metadata."""
+    return ml_classifier.status()
+
+
+@app.post("/ml/predict-raw")
+async def ml_predict_raw(request: DetectRequest) -> dict[str, Any]:
+    """Return raw ML score breakdown per category — useful for debugging."""
+    raw = ml_classifier.predict_raw(request.text)
+    return {
+        "text_preview": request.text[:100],
+        "ensemble_scores": raw["scores"],
+        "sklearn_scores": raw["sklearn"],
+        "spacy_scores": raw["spacy"],
+    }
 
 
 @app.exception_handler(Exception)

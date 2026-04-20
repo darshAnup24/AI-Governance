@@ -52,3 +52,4 @@ coverage/
 *.log
 *.pid
 *.seed
+detection/ml/data/raw/massive_dataset.jsonl

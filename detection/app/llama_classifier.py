@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 import structlog
+from pydantic import BaseModel, Field, ValidationError
 
 from proxy.app.models import DetectionResult, DetectedSpan, DetectionCategory
 
@@ -42,6 +43,13 @@ USER_PROMPT_TEMPLATE = """Classify the following text:
 ---
 
 Respond with ONLY the JSON classification object."""
+
+
+class LlamaClassificationResult(BaseModel):
+    classification: str = Field(description="Must be one of SAFE, INTERNAL, SENSITIVE, RESTRICTED", pattern="^(SAFE|INTERNAL|SENSITIVE|RESTRICTED|UNKNOWN)$")
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    reason: str = Field(default="")
+
 
 
 class LlamaClassifier:
@@ -119,6 +127,7 @@ class LlamaClassifier:
                         "system": SYSTEM_PROMPT,
                         "prompt": USER_PROMPT_TEMPLATE.format(text=text[:2000]),
                         "stream": False,
+                        "format": "json",
                         "options": {
                             "temperature": 0,
                             "num_predict": 100,
@@ -153,32 +162,33 @@ class LlamaClassifier:
         )
 
     def _parse_response(self, response_text: str) -> dict[str, Any]:
-        """Parse Llama's JSON response, handling malformed output."""
+        """Parse Llama's JSON response, enforcing structure with Pydantic."""
         try:
             # Try direct JSON parse
-            result = json.loads(response_text)
-            if "classification" in result:
-                return result
-        except json.JSONDecodeError:
-            pass
+            result_dict = json.loads(response_text)
+            # Validate with Pydantic
+            validated = LlamaClassificationResult(**result_dict)
+            return validated.model_dump()
+        except (json.JSONDecodeError, ValidationError) as e:
+            log.warning("llama.parse_error", error=str(e), response=response_text)
 
-        # Try to extract JSON from response text
+        # Try to extract JSON from response text if it's wrapped in markdown or extra text
         try:
             import re
             json_match = re.search(r"\{[^}]+\}", response_text)
             if json_match:
-                result = json.loads(json_match.group())
-                if "classification" in result:
-                    return result
-        except (json.JSONDecodeError, AttributeError):
+                result_dict = json.loads(json_match.group())
+                validated = LlamaClassificationResult(**result_dict)
+                return validated.model_dump()
+        except (json.JSONDecodeError, AttributeError, ValidationError):
             pass
 
         # Fallback: try to detect classification keyword
         for label in ["RESTRICTED", "SENSITIVE", "INTERNAL", "SAFE"]:
             if label in response_text.upper():
-                return {"classification": label, "confidence": 0.5, "reason": "Extracted from response text"}
+                return {"classification": label, "confidence": 0.5, "reason": "Extracted from response text via heuristics"}
 
-        return {"classification": "UNKNOWN", "confidence": 0.0, "reason": "Could not parse response"}
+        return {"classification": "UNKNOWN", "confidence": 0.0, "reason": "Could not parse response into structured output"}
 
     def _build_result(self, classification: dict[str, Any], duration_ms: float, from_cache: bool) -> DetectionResult:
         """Convert classification result to DetectionResult."""
