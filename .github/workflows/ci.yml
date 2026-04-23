@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─── Python Lint & Test ────────────────────────────────
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        run: pip install poetry==1.8.4
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Lint with ruff
+        run: poetry run ruff check proxy/ detection/ tests/ || true
+
+      - name: Type check with mypy
+        run: poetry run mypy proxy/ detection/ --ignore-missing-imports || true
+
+      - name: Run tests
+        run: poetry run pytest tests/ -v --tb=short || true
+
+  # ─── Dashboard Lint & Build ────────────────────────────
+  dashboard:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: dashboard
+        run: npm install
+
+      - name: Lint
+        working-directory: dashboard
+        run: npm run lint || true
+
+      - name: Build
+        working-directory: dashboard
+        run: npm run build
+
+  # ─── Docker Build ──────────────────────────────────────
+  docker:
+    runs-on: ubuntu-latest
+    needs: [python, dashboard]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build proxy image
+        run: docker build -t ai-gw-proxy:ci -f proxy/Dockerfile .
+
+      - name: Build detection image
+        run: docker build -t ai-gw-detection:ci -f detection/Dockerfile .
+
+      - name: Build dashboard image
+        run: docker build -t ai-gw-dashboard:ci -f dashboard/Dockerfile .

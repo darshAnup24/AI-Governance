@@ -1,0 +1,183 @@
+services:
+  # ─── Proxy Service ──────────────────────────────────────
+  proxy:
+    build:
+      context: .
+      dockerfile: proxy/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./proxy:/app/proxy
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - UPSTREAM_OPENAI_URL=${UPSTREAM_OPENAI_URL:-https://api.openai.com}
+      - UPSTREAM_ANTHROPIC_URL=${UPSTREAM_ANTHROPIC_URL:-https://api.anthropic.com}
+      - DETECTION_SERVICE_URL=http://detection:8001
+      - DETECTION_TIMEOUT_MS=200
+      - DATABASE_URL=postgresql+asyncpg://aigw:aigw_password@postgres:5432/ai_governance
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_URL=http://ollama:11434
+      - DEV_JWT_SECRET=dev-secret-change-in-production
+    command: uvicorn proxy.app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - ai-gateway-net
+
+  # ─── Detection Service ─────────────────────────────────
+  detection:
+    build:
+      context: .
+      dockerfile: detection/Dockerfile
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./proxy:/app/proxy
+      - ./detection:/app/detection
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_URL=http://ollama:11434
+    command: uvicorn detection.app.main:app --host 0.0.0.0 --port 8001 --reload
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - ai-gateway-net
+
+  # ─── Governance Service (Node.js) ─────────────────────────
+  governance:
+    build:
+      context: ./governance
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./governance/src:/app/src
+      - ./governance/prisma:/app/prisma
+    environment:
+      - GOVERNANCE_PORT=4000
+      - DATABASE_URL=postgresql://aigw:aigw_password@postgres:5432/ai_governance
+      - REDIS_URL=redis://redis:6379/0
+      - DETECTION_SERVICE_URL=http://detection:8001
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=llama3.1:8b
+      - OLLAMA_FALLBACK_MODEL=mistral:7b
+      - JWT_SECRET=shieldai-dev-secret-change-me
+      - CORS_ORIGIN=http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      detection:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - ai-gateway-net
+
+  # ─── React Dashboard ───────────────────────────────────
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./dashboard/src:/app/src
+      - ./dashboard/public:/app/public
+      - ./dashboard/index.html:/app/index.html
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_GOVERNANCE_URL=http://localhost:4000
+    depends_on:
+      - proxy
+      - governance
+    networks:
+      - ai-gateway-net
+
+  # ─── PostgreSQL + TimescaleDB ──────────────────────────
+  postgres:
+    image: timescale/timescaledb:2.17.2-pg15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=aigw
+      - POSTGRES_PASSWORD=aigw_password
+      - POSTGRES_DB=ai_governance
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aigw -d ai_governance"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - ai-gateway-net
+
+  # ─── Redis ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - ai-gateway-net
+
+  # ─── Ollama (LLM inference) ────────────────────────────
+  # Requires NVIDIA Container Toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # GPU disabled — remove comment and add deploy block below when NVIDIA driver is working:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    networks:
+      - ai-gateway-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  ollama_data:
+
+networks:
+  ai-gateway-net:
+    driver: bridge

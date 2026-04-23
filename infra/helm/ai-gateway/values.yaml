@@ -1,0 +1,137 @@
+# ─── AI Governance Firewall — Helm Values ─────────────────
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# ─── Proxy Service ─────────────────────────────────────────
+proxy:
+  replicaCount: 2
+  image:
+    repository: ai-gw-proxy
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  service:
+    type: LoadBalancer
+    port: 8000
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+  env:
+    ENVIRONMENT: production
+    LOG_LEVEL: INFO
+    DETECTION_SERVICE_URL: http://ai-gw-detection:8001
+    DETECTION_TIMEOUT_MS: "200"
+    REDIS_URL: redis://ai-gw-redis-master:6379/0
+
+# ─── Detection Service ────────────────────────────────────
+detection:
+  replicaCount: 2
+  image:
+    repository: ai-gw-detection
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  service:
+    type: ClusterIP
+    port: 8001
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+# ─── Dashboard ─────────────────────────────────────────────
+dashboard:
+  replicaCount: 1
+  image:
+    repository: ai-gw-dashboard
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  service:
+    type: ClusterIP
+    port: 3000
+  ingress:
+    enabled: true
+    hostname: governance.company.internal
+    tls: true
+
+# ─── Audit Consumer ───────────────────────────────────────
+auditConsumer:
+  replicaCount: 1
+  image:
+    repository: ai-gw-proxy
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  command: ["python", "-m", "proxy.app.audit_consumer"]
+
+# ─── External Dependencies ────────────────────────────────
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: changeme
+    username: aigw
+    password: changeme
+    database: ai_governance
+  primary:
+    persistence:
+      size: 50Gi
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+redis:
+  enabled: true
+  auth:
+    enabled: false
+  master:
+    persistence:
+      size: 5Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# ─── Ollama ────────────────────────────────────────────────
+ollama:
+  enabled: true
+  image:
+    repository: ollama/ollama
+    tag: latest
+  resources:
+    limits:
+      nvidia.com/gpu: 1
+      cpu: 4000m
+      memory: 8Gi
+  persistence:
+    size: 20Gi
