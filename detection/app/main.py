@@ -32,6 +32,10 @@ from detection.app.detectors.bias_detector import BiasDetector
 from detection.app.detectors.security_code_detector import SecurityCodeDetector
 from detection.app.detectors.regulatory_detector import RegulatoryDetector
 from detection.app.detectors.prompt_injection_detector import PromptInjectionDetector
+<<<<<<< HEAD
+=======
+from detection.app.ml_classifier import MLClassifier
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
 log = structlog.get_logger()
 
@@ -46,6 +50,10 @@ bias_detector = BiasDetector()
 security_code_detector = SecurityCodeDetector()
 regulatory_detector = RegulatoryDetector()
 prompt_injection_detector = PromptInjectionDetector()
+<<<<<<< HEAD
+=======
+ml_classifier = MLClassifier()  # Trained sklearn + spaCy ensemble
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
 TIER3_THRESHOLD_LOW = 40
 TIER3_THRESHOLD_HIGH = 70
@@ -133,7 +141,11 @@ async def detect(request: DetectRequest) -> DetectResponse:
         except Exception as e:
             log.warning("detection.cache_read_failed", error=str(e))
 
+<<<<<<< HEAD
     # ─── Run ALL detectors in parallel ─────────────────────
+=======
+    # ─── Run ALL detectors in parallel (Tier 1-2 + ML ensemble) ─────────────
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
     loop = asyncio.get_event_loop()
     futures = [
         loop.run_in_executor(None, regex_detector.detect, request.text),
@@ -143,6 +155,10 @@ async def detect(request: DetectRequest) -> DetectResponse:
         loop.run_in_executor(None, security_code_detector.detect, request.text),
         loop.run_in_executor(None, regulatory_detector.detect, request.text),
         loop.run_in_executor(None, prompt_injection_detector.detect, request.text),
+<<<<<<< HEAD
+=======
+        loop.run_in_executor(None, ml_classifier.detect, request.text),  # ML ensemble
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
     ]
 
     results = list(await asyncio.gather(*futures))
@@ -195,6 +211,27 @@ async def detect(request: DetectRequest) -> DetectResponse:
     return response_obj
 
 
+<<<<<<< HEAD
+=======
+@app.get("/ml/status")
+async def ml_status() -> dict[str, Any]:
+    """Return ML model loading status and metadata."""
+    return ml_classifier.status()
+
+
+@app.post("/ml/predict-raw")
+async def ml_predict_raw(request: DetectRequest) -> dict[str, Any]:
+    """Return raw ML score breakdown per category — useful for debugging."""
+    raw = ml_classifier.predict_raw(request.text)
+    return {
+        "text_preview": request.text[:100],
+        "ensemble_scores": raw["scores"],
+        "sklearn_scores": raw["sklearn"],
+        "spacy_scores": raw["spacy"],
+    }
+
+
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     log.error("detection.unhandled_exception", error=str(exc), exc_info=exc)

@@ -1,0 +1,17 @@
+{
+  "model_type": "sklearn_tfidf_lr",
+  "categories": [
+    "SAFE",
+    "PII",
+    "CREDENTIALS",
+    "PROMPT_INJECTION",
+    "HALLUCINATION",
+    "BIAS",
+    "REGULATORY"
+  ],
+  "train_size": 221,
+  "dev_micro_f1": 0.8571,
+  "dev_macro_f1": 0.8214,
+  "training_time_s": 2.14,
+  "version": "1.0"
+}

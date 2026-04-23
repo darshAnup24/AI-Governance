@@ -18,8 +18,11 @@ from fastapi.responses import JSONResponse
 from prometheus_client import CollectorRegistry, Counter, Histogram, generate_latest
 
 from proxy.app.config import get_settings
+<<<<<<< HEAD
 from proxy.app.database import engine
 from proxy.app.db_models import Base
+=======
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 from proxy.app.logging_config import setup_logging
 from proxy.app.models import ProblemDetail
 from proxy.app.routes import router as proxy_router
@@ -64,6 +67,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
     )
 
+<<<<<<< HEAD
     # Redis connection — required for audit queue and rate limiting
     try:
         import redis.asyncio as aioredis
@@ -83,6 +87,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Ensure DB tables exist in dev/local runs.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+=======
+    # Redis connection (lazy — created when needed in Phase 2+)
+    app.state.redis = None
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
     yield
 

@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+<<<<<<< HEAD
 import os
+=======
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 import signal
 import sys
 import uuid
@@ -42,6 +45,7 @@ class AuditConsumer:
         self._running = True
         self._processed_count = 0
         self._error_count = 0
+<<<<<<< HEAD
         self._engine: Any = None
 
     async def _get_engine(self) -> Any:
@@ -60,6 +64,8 @@ class AuditConsumer:
                 pool_pre_ping=True,
             )
         return self._engine
+=======
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
     async def start(self) -> None:
         """Main consumer loop."""
@@ -72,7 +78,11 @@ class AuditConsumer:
             log.error("audit_consumer.redis_not_installed")
             return
 
+<<<<<<< HEAD
         redis_url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+=======
+        redis_url = "redis://redis:6379/0"
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
         redis = aioredis.from_url(redis_url, decode_responses=True)
 
         # Create consumer group if it doesn't exist
@@ -123,8 +133,11 @@ class AuditConsumer:
                 self._error_count += 1
                 await asyncio.sleep(1)
 
+<<<<<<< HEAD
         if self._engine:
             await self._engine.dispose()
+=======
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
         await redis.aclose()
         log.info(
             "audit_consumer.stopped",
@@ -133,6 +146,7 @@ class AuditConsumer:
         )
 
     async def _write_batch(self, events: list[dict[str, Any]]) -> bool:
+<<<<<<< HEAD
         """Write a batch of audit events to TimescaleDB. Returns True on success."""
         for attempt in range(MAX_RETRIES):
             try:
@@ -213,6 +227,20 @@ class AuditConsumer:
                     count=len(records),
                     attempt=attempt + 1,
                 )
+=======
+        """Write a batch of events to TimescaleDB. Returns True on success."""
+        for attempt in range(MAX_RETRIES):
+            try:
+                # In production, use SQLAlchemy bulk insert or COPY protocol
+                # For now, log the events (actual DB write would go here)
+                for event in events:
+                    log.debug(
+                        "audit_consumer.event_written",
+                        event_id=event.get("event_id", "unknown"),
+                        action=event.get("action_taken", "ALLOW"),
+                        risk_score=event.get("risk_score", 0),
+                    )
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
                 return True
 
             except Exception as e:

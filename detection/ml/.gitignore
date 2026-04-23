@@ -1,0 +1,29 @@
+# ShieldAI ML — gitignore
+# ========================
+# Models are large binary files — track location, not content.
+# Use Docker volumes or artifact storage (e.g. MLflow, DVC) for model management.
+
+# Trained model binaries
+models/spacy_textcat/
+models/spacy_textcat_best/
+models/sklearn_classifier.pkl
+
+# Model metadata IS tracked (versioning reference)
+!models/sklearn_meta.json
+!models/spacy_meta.json
+
+# Ignore all data since it's large and will be shared via a link
+data/*
+!data/README.md
+
+# Evaluation artifacts — regenerable, but track JSON for CI
+data/evaluation/*.png
+!evaluation/report.md
+!evaluation/report.json
+!evaluation/sklearn_metrics.json
+!evaluation/spacy_metrics.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo

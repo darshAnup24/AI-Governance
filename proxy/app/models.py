@@ -40,6 +40,10 @@ class DetectionCategory(str, Enum):
     SECURITY_VULN = "SECURITY_VULN"
     REGULATORY = "REGULATORY"
     PROMPT_INJECTION = "PROMPT_INJECTION"
+<<<<<<< HEAD
+=======
+    SAFE = "SAFE"  # ML classifier: no risk detected
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
 
 # ─── Detection Models ────────────────────────────────────
@@ -122,9 +126,13 @@ class AuditEvent(BaseModel):
     tool_name: str = ""
     llm_provider: str = ""
     prompt_hash: str = ""
+<<<<<<< HEAD
     encrypted_prompt_hash: str | None = None
     detection_results: dict[str, Any] = {}
     encrypted_detected_spans: str | None = None
+=======
+    detection_results: dict[str, Any] = {}
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
     risk_score: int = 0
     action_taken: ActionType = ActionType.ALLOW
     policy_rule_id: str | None = None

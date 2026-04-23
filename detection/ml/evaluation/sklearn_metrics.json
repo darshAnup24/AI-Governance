@@ -1,0 +1,78 @@
+{
+  "SAFE": {
+    "precision": 1.0,
+    "recall": 0.6667,
+    "f1": 0.8,
+    "support": 6,
+    "tp": 4,
+    "fp": 0,
+    "fn": 2,
+    "tn": 48
+  },
+  "PII": {
+    "precision": 1.0,
+    "recall": 0.25,
+    "f1": 0.4,
+    "support": 12,
+    "tp": 3,
+    "fp": 0,
+    "fn": 9,
+    "tn": 42
+  },
+  "CREDENTIALS": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "support": 9,
+    "tp": 9,
+    "fp": 0,
+    "fn": 0,
+    "tn": 45
+  },
+  "PROMPT_INJECTION": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "support": 10,
+    "tp": 10,
+    "fp": 0,
+    "fn": 0,
+    "tn": 44
+  },
+  "HALLUCINATION": {
+    "precision": 1.0,
+    "recall": 0.5714,
+    "f1": 0.7273,
+    "support": 7,
+    "tp": 4,
+    "fp": 0,
+    "fn": 3,
+    "tn": 47
+  },
+  "BIAS": {
+    "precision": 1.0,
+    "recall": 0.6667,
+    "f1": 0.8,
+    "support": 6,
+    "tp": 4,
+    "fp": 0,
+    "fn": 2,
+    "tn": 48
+  },
+  "REGULATORY": {
+    "precision": 0.8333,
+    "recall": 0.7143,
+    "f1": 0.7692,
+    "support": 14,
+    "tp": 10,
+    "fp": 2,
+    "fn": 4,
+    "tn": 38
+  },
+  "_aggregate": {
+    "micro_f1": 0.8,
+    "macro_f1": 0.7852,
+    "weighted_f1": 0.7697,
+    "threshold": 0.5
+  }
+}

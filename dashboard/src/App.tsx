@@ -1,6 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
+<<<<<<< HEAD
+=======
+import { ErrorBoundary } from './components/ErrorBoundary'
+import InstallPWA from './components/InstallPWA'
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 import AppLayout from './layouts/AppLayout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
@@ -10,7 +15,11 @@ import ShadowAIPage from './pages/ShadowAIPage'
 import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
 
+<<<<<<< HEAD
 // ─── ShieldAI Governance Pages ───────────────────────────
+=======
+// ─── ShieldAI Governance Pages ────────────────────────────────────────────────
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 import Login from './pages/Login'
 import GovDashboard from './pages/governance/Dashboard'
 import Models from './pages/governance/Models'
@@ -21,11 +30,23 @@ import GovIncidents from './pages/governance/Incidents'
 import GovPolicies from './pages/governance/Policies'
 import Vendors from './pages/governance/Vendors'
 import GovReports from './pages/governance/Reports'
+<<<<<<< HEAD
+=======
+import UserHeatmap from './pages/governance/UserHeatmap'
+
+function Wrap({ children }: { children: React.ReactNode }) {
+    return <ErrorBoundary>{children}</ErrorBoundary>
+}
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
 export default function App() {
     return (
         <BrowserRouter>
             <AuthProvider>
+<<<<<<< HEAD
+=======
+                <InstallPWA />
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/shield-login" element={<Login />} />
@@ -37,6 +58,7 @@ export default function App() {
                         }
                     >
                         {/* Existing proxy monitoring routes */}
+<<<<<<< HEAD
                         <Route path="/dashboard" element={<DashboardPage />} />
                         <Route path="/incidents" element={<IncidentsPage />} />
                         <Route path="/policies" element={<PoliciesPage />} />
@@ -54,6 +76,26 @@ export default function App() {
                         <Route path="/governance/policies" element={<GovPolicies />} />
                         <Route path="/governance/vendors" element={<Vendors />} />
                         <Route path="/governance/reports" element={<GovReports />} />
+=======
+                        <Route path="/dashboard" element={<Wrap><DashboardPage /></Wrap>} />
+                        <Route path="/incidents" element={<Wrap><IncidentsPage /></Wrap>} />
+                        <Route path="/policies" element={<Wrap><PoliciesPage /></Wrap>} />
+                        <Route path="/shadow-ai" element={<Wrap><ShadowAIPage /></Wrap>} />
+                        <Route path="/reports" element={<Wrap><ReportsPage /></Wrap>} />
+                        <Route path="/settings" element={<Wrap><SettingsPage /></Wrap>} />
+
+                        {/* ShieldAI Governance routes */}
+                        <Route path="/governance" element={<Wrap><GovDashboard /></Wrap>} />
+                        <Route path="/governance/models" element={<Wrap><Models /></Wrap>} />
+                        <Route path="/governance/threats" element={<Wrap><ThreatDetection /></Wrap>} />
+                        <Route path="/governance/compliance" element={<Wrap><Compliance /></Wrap>} />
+                        <Route path="/governance/advisor" element={<Wrap><Advisor /></Wrap>} />
+                        <Route path="/governance/incidents" element={<Wrap><GovIncidents /></Wrap>} />
+                        <Route path="/governance/policies" element={<Wrap><GovPolicies /></Wrap>} />
+                        <Route path="/governance/vendors" element={<Wrap><Vendors /></Wrap>} />
+                        <Route path="/governance/reports" element={<Wrap><GovReports /></Wrap>} />
+                        <Route path="/governance/heatmap" element={<Wrap><UserHeatmap /></Wrap>} />
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
                     </Route>
                     <Route path="*" element={<Navigate to="/governance" replace />} />
                 </Routes>

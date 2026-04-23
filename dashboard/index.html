@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<<<<<<< HEAD
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -9,6 +10,49 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+=======
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- SEO -->
+    <title>ShieldAI — AI Governance Dashboard</title>
+    <meta name="description" content="Enterprise AI Governance platform — real-time prompt monitoring, EU AI Act compliance tracking, threat detection, and policy management." />
+    <meta name="keywords" content="AI governance, LLM compliance, EU AI Act, GDPR, prompt injection, threat detection" />
+    <meta name="author" content="ShieldAI" />
+    <meta name="robots" content="noindex, nofollow" />
+
+    <!-- PWA / Theme -->
+    <meta name="theme-color" content="#6366f1" />
+    <meta name="application-name" content="ShieldAI" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ShieldAI" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="ShieldAI — AI Governance Dashboard" />
+    <meta property="og:description" content="Enterprise AI governance and compliance monitoring platform." />
+    <meta property="og:type" content="website" />
+
+    <!-- Favicon (inline SVG shield) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'><path d='M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z'/></svg>" />
+
+    <!-- Google Fonts — Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Inline service worker registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
   </head>
   <body class="bg-slate-950 text-slate-100 font-sans">
     <div id="root"></div>

@@ -9,6 +9,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Enable pg_trgm for text search
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
+<<<<<<< HEAD
 
 -- Core tables for proxy service
 CREATE TABLE IF NOT EXISTS organizations (
@@ -93,3 +94,5 @@ CREATE TABLE IF NOT EXISTS shadow_ai_alerts (
 
 CREATE INDEX IF NOT EXISTS ix_shadow_ai_alerts_user_id ON shadow_ai_alerts(user_id);
 CREATE INDEX IF NOT EXISTS ix_shadow_ai_alerts_timestamp ON shadow_ai_alerts("timestamp");
+=======
+>>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
