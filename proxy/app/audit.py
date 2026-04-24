@@ -40,13 +40,7 @@ class AuditEmitter:
                 "tool_name": event.tool_name,
                 "llm_provider": event.llm_provider,
                 "prompt_hash": event.prompt_hash,
-<<<<<<< HEAD
-                "encrypted_prompt_hash": event.encrypted_prompt_hash or "",
                 "detection_results": json.dumps(event.detection_results),
-                "encrypted_detected_spans": event.encrypted_detected_spans or "",
-=======
-                "detection_results": json.dumps(event.detection_results),
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
                 "risk_score": str(event.risk_score),
                 "action_taken": event.action_taken.value,
                 "policy_rule_id": event.policy_rule_id or "",

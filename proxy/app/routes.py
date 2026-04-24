@@ -8,10 +8,6 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-<<<<<<< HEAD
-import uuid
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 from typing import Any, AsyncGenerator
 
 import httpx
@@ -41,37 +37,11 @@ from proxy.app.models import (
     ProblemDetail,
     UserContext,
 )
-<<<<<<< HEAD
-from proxy.app.security import DataEncryptor, read_secret
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
 log = structlog.get_logger()
 router = APIRouter()
 
 
-<<<<<<< HEAD
-def _build_detection_request_headers(settings: Settings) -> dict[str, str]:
-    token = read_secret(settings.internal_service_token, settings.internal_service_token_file)
-    return {"X-Internal-Service-Token": token}
-
-
-def _get_detection_tls_config(settings: Settings) -> dict[str, Any]:
-    if not settings.mtls_enabled:
-        return {}
-    cert_pair: tuple[str, str] | None = None
-    if settings.mtls_client_cert_path and settings.mtls_client_key_path:
-        cert_pair = (settings.mtls_client_cert_path, settings.mtls_client_key_path)
-    return {"verify": settings.mtls_ca_bundle_path or True, "cert": cert_pair}
-
-
-def _build_encryptor(settings: Settings) -> DataEncryptor:
-    key = read_secret(settings.data_encryption_key, settings.data_encryption_key_file)
-    return DataEncryptor(key)
-
-
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 async def _call_detection(
     http_client: httpx.AsyncClient,
     prompt_text: str,
@@ -89,13 +59,7 @@ async def _call_detection(
                 "role": user.role,
                 "org_id": user.org_id,
             },
-<<<<<<< HEAD
-            headers=_build_detection_request_headers(settings),
             timeout=settings.detection_timeout_ms / 1000,
-            **_get_detection_tls_config(settings),
-=======
-            timeout=settings.detection_timeout_ms / 1000,
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
         )
         resp.raise_for_status()
         return resp.json()
@@ -188,11 +152,6 @@ async def chat_completions(
     # Extract prompt text for detection
     prompt_text = ProviderAdapter.extract_prompt_text(body.messages)
     prompt_hash = hashlib.sha256(prompt_text.encode()).hexdigest()
-<<<<<<< HEAD
-    encryptor = _build_encryptor(settings)
-    encrypted_prompt_hash = encryptor.encrypt(prompt_hash)
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
     # Call detection service
     detection_result = await _call_detection(http_client, prompt_text, user, settings)
@@ -216,15 +175,7 @@ async def chat_completions(
             user_id=user.user_id,
             llm_provider=provider.value,
             prompt_hash=prompt_hash,
-<<<<<<< HEAD
-            encrypted_prompt_hash=encrypted_prompt_hash,
             detection_results=detection_result,
-            encrypted_detected_spans=encryptor.encrypt(
-                json.dumps(detection_result.get("detected_spans", []))
-            ),
-=======
-            detection_results=detection_result,
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
             risk_score=risk_score,
             action_taken=ActionType.BLOCK,
             request_duration_ms=(time.perf_counter() - start_time) * 1000,
@@ -282,15 +233,7 @@ async def chat_completions(
                         user_id=user.user_id,
                         llm_provider=provider.value,
                         prompt_hash=prompt_hash,
-<<<<<<< HEAD
-                        encrypted_prompt_hash=encrypted_prompt_hash,
                         detection_results=detection_result,
-                        encrypted_detected_spans=encryptor.encrypt(
-                            json.dumps(detection_result.get("detected_spans", []))
-                        ),
-=======
-                        detection_results=detection_result,
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
                         risk_score=risk_score,
                         action_taken=action,
                         request_duration_ms=(time.perf_counter() - start_time) * 1000,
@@ -347,19 +290,11 @@ async def chat_completions(
                             for choice in resp_json.get("choices", []):
                                 content = choice.get("message", {}).get("content", "")
                                 if content:
-<<<<<<< HEAD
-                                    for span in sorted(detected_spans, key=lambda s: len(s.get("matched_text", "")), reverse=True):
-                                        matched_text = span.get("matched_text", "")
-                                        category = span.get("category", "UNKNOWN")
-                                        if matched_text:
-                                            content = content.replace(matched_text, f"[REDACTED:{category}]")
-=======
                                     for span in sorted(detected_spans, key=lambda s: s.get("start", 0), reverse=True):
                                         start = span.get("start", 0)
                                         end = span.get("end", 0)
                                         category = span.get("category", "UNKNOWN")
                                         content = content[:start] + f"[REDACTED:{category}]" + content[end:]
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
                                     choice["message"]["content"] = content
                             response_content = resp_json
             except Exception as e:
@@ -373,15 +308,7 @@ async def chat_completions(
                 user_id=user.user_id,
                 llm_provider=provider.value,
                 prompt_hash=prompt_hash,
-<<<<<<< HEAD
-                encrypted_prompt_hash=encrypted_prompt_hash,
                 detection_results=detection_result,
-                encrypted_detected_spans=encryptor.encrypt(
-                    json.dumps(detection_result.get("detected_spans", []))
-                ),
-=======
-                detection_results=detection_result,
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
                 risk_score=risk_score,
                 action_taken=action,
                 request_duration_ms=duration_ms,
@@ -437,11 +364,6 @@ async def analytics_trend(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Return risk trend data from TimescaleDB."""
-<<<<<<< HEAD
-    days = max(1, min(days, 365))
-    org_uuid = uuid.UUID(str(user.org_id))
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
     query = text("""
         SELECT time_bucket('1 day', timestamp) AS day,
                COUNT(*) FILTER (WHERE action_taken = 'BLOCK') as blocked,
@@ -452,11 +374,7 @@ async def analytics_trend(
         WHERE org_id = :org_id AND timestamp > NOW() - (:days || ' days')::interval
         GROUP BY day ORDER BY day;
     """)
-<<<<<<< HEAD
-    result = await db.execute(query, {"org_id": org_uuid, "days": str(days)})
-=======
     result = await db.execute(query, {"org_id": user.org_id, "days": str(days)})
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
     rows = result.fetchall()
 
     data = []
@@ -477,49 +395,6 @@ async def list_audit_events(
     page: int = 1,
     per_page: int = 50,
     action: str | None = None,
-<<<<<<< HEAD
-    user_id: str | None = None,
-    date_from: str | None = None,
-    date_to: str | None = None,
-    org_id: str | None = None,
-    user: UserContext = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """List audit events from PostgreSQL with pagination and filtering."""
-    import uuid as _uuid
-    try:
-        org_uuid = _uuid.UUID(str(user.org_id))
-    except (ValueError, AttributeError):
-        org_uuid = _uuid.UUID("00000000-0000-0000-0000-000000000000")
-
-    if org_id and str(org_id) != str(user.org_id):
-        raise HTTPException(status_code=403, detail="Cross-org query is forbidden")
-    query = select(AuditEventRecord).filter(AuditEventRecord.org_id == org_uuid)
-
-    if action:
-        query = query.filter(AuditEventRecord.action_taken == action.upper())
-
-    if user_id:
-        try:
-            uid = _uuid.UUID(str(user_id))
-            query = query.filter(AuditEventRecord.user_id == uid)
-        except (ValueError, AttributeError):
-            pass
-
-    if date_from:
-        try:
-            dt_from = datetime.fromisoformat(date_from)
-            query = query.filter(AuditEventRecord.timestamp >= dt_from)
-        except ValueError:
-            pass
-
-    if date_to:
-        try:
-            dt_to = datetime.fromisoformat(date_to)
-            query = query.filter(AuditEventRecord.timestamp <= dt_to)
-        except ValueError:
-            pass
-=======
     user: UserContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -527,7 +402,6 @@ async def list_audit_events(
     query = select(AuditEventRecord).filter(AuditEventRecord.org_id == user.org_id)
     if action:
         query = query.filter(AuditEventRecord.action_taken == action)
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
     # Total count
     count_query = select(func.count()).select_from(query.subquery())
@@ -545,21 +419,11 @@ async def list_audit_events(
             {
                 "event_id": str(r.event_id),
                 "timestamp": r.timestamp.isoformat() if r.timestamp else None,
-<<<<<<< HEAD
-                "org_id": str(r.org_id),
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
                 "user_id": str(r.user_id),
                 "llm_provider": r.llm_provider,
                 "risk_score": r.risk_score,
                 "action_taken": r.action_taken,
                 "tool_name": r.tool_name,
-<<<<<<< HEAD
-                "prompt_hash": r.prompt_hash,
-                "request_duration_ms": r.request_duration_ms,
-                "upstream_status_code": r.upstream_status_code,
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
             } for r in records
         ],
         "total": total or 0,
@@ -574,32 +438,16 @@ class ShadowAIEventPayload(BaseModel):
     category: str
     is_authorized: bool = False
     timestamp: datetime | None = None
-<<<<<<< HEAD
-=======
     org_id: str | None = None
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
 @router.post("/api/v1/shadow-ai/events")
 async def ingest_shadow_ai_event(
     event: ShadowAIEventPayload,
-<<<<<<< HEAD
-    user: UserContext = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    try:
-        org_uuid = uuid.UUID(str(user.org_id))
-    except (ValueError, AttributeError):
-        raise HTTPException(status_code=400, detail="Invalid org_id in token")
-    alert = ShadowAIAlert(
-        user_id=event.user_id or user.user_id,
-        org_id=org_uuid,
-=======
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     alert = ShadowAIAlert(
         user_id=event.user_id,
         org_id=event.org_id,
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
         tool_name=event.tool_name,
         domain=event.domain,
         category=event.category,
@@ -617,22 +465,10 @@ async def list_shadow_ai_detections(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user),
 ) -> dict[str, Any]:
-<<<<<<< HEAD
-    import uuid as _uuid
-    query = select(ShadowAIAlert)
-
-    # Filter by org_id for multi-tenant isolation
-    try:
-        org_uuid = _uuid.UUID(str(user.org_id))
-        query = query.filter(ShadowAIAlert.org_id == org_uuid)
-    except (ValueError, AttributeError):
-        pass
-=======
     query = select(ShadowAIAlert)
     
     # Filter by org_id if available on the alert (some alerts might not have it mapped yet)
     # query = query.filter(ShadowAIAlert.org_id == user.org_id)
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
     count_query = select(func.count()).select_from(query.subquery())
     total = await db.scalar(count_query)
@@ -649,10 +485,6 @@ async def list_shadow_ai_detections(
                 "alert_id": str(r.alert_id),
                 "timestamp": r.timestamp.isoformat() if r.timestamp else None,
                 "user_id": r.user_id,
-<<<<<<< HEAD
-                "org_id": str(r.org_id) if r.org_id else None,
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
                 "tool_name": r.tool_name,
                 "domain": r.domain,
                 "category": r.category,

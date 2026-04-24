@@ -10,14 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-<<<<<<< HEAD
-    "axios": "^1.7.9",
-    "lucide-react": "^0.468.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0",
-    "recharts": "^2.14.1"
-=======
     "@tanstack/react-query": "^5.99.0",
     "axios": "^1.7.9",
     "date-fns": "^4.1.0",
@@ -28,7 +20,6 @@
     "react-router-dom": "^6.28.0",
     "recharts": "^2.14.1",
     "vite-plugin-pwa": "^1.2.0"
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",

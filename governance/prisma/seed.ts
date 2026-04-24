@@ -125,22 +125,22 @@ async function main() {
     }
     console.log(`✅ Compliance checks: ${complianceData.length} frameworks`);
 
-    // ─── Policies ──────────────────────────────────────────────
+    // ─── Policy Rules ──────────────────────────────────────────────
     const policies = [
-        { title: "AI Usage Policy", content: "This policy governs the acceptable use of AI systems within the organization. All employees must receive approval before deploying any AI model.", category: "governance", status: "ACTIVE" as const },
-        { title: "Data Governance Policy", content: "All data used for AI training and inference must be classified. PII must be anonymized before use in any AI system.", category: "data", status: "ACTIVE" as const },
-        { title: "Model Risk Management Policy", content: "Every AI model must undergo a risk assessment before deployment. Models classified as HIGH or UNACCEPTABLE require CISO approval.", category: "risk", status: "ACTIVE" as const },
-        { title: "Incident Response Plan", content: "AI-related security incidents must be reported within 24 hours. The incident response team must investigate within 48 hours.", category: "security", status: "ACTIVE" as const },
-        { title: "Third-party AI Vendor Policy", content: "All third-party AI vendors must complete a security questionnaire and undergo risk assessment before onboarding.", category: "vendor", status: "ACTIVE" as const },
-        { title: "Model Deployment Checklist", content: "Pre-deployment checklist: bias testing, security scan, compliance review, performance benchmarking, rollback plan.", category: "engineering", status: "ACTIVE" as const },
-        { title: "EU AI Act Compliance Guide", content: "Guide to ensuring compliance with the EU Artificial Intelligence Act, including risk classification and documentation requirements.", category: "compliance", status: "ACTIVE" as const },
-        { title: "Ethical AI Guidelines", content: "Principles for responsible AI: fairness, transparency, accountability, privacy, safety, and human oversight.", category: "ethics", status: "DRAFT" as const },
+        { name: "AI Usage Policy", description: "This policy governs the acceptable use of AI systems within the organization. All employees must receive approval before deploying any AI model.", scope: "governance", action: "BLOCK", priority: 10 },
+        { name: "Data Governance Policy", description: "All data used for AI training and inference must be classified. PII must be anonymized before use in any AI system.", scope: "data", action: "REDACT", priority: 20 },
+        { name: "Model Risk Management Policy", description: "Every AI model must undergo a risk assessment before deployment. Models classified as HIGH or UNACCEPTABLE require CISO approval.", scope: "risk", action: "BLOCK", priority: 30 },
+        { name: "Incident Response Plan", description: "AI-related security incidents must be reported within 24 hours. The incident response team must investigate within 48 hours.", scope: "security", action: "ALERT", priority: 40 },
+        { name: "Third-party AI Vendor Policy", description: "All third-party AI vendors must complete a security questionnaire and undergo risk assessment before onboarding.", scope: "vendor", action: "BLOCK", priority: 50 },
+        { name: "Model Deployment Checklist", description: "Pre-deployment checklist: bias testing, security scan, compliance review, performance benchmarking, rollback plan.", scope: "engineering", action: "ALERT", priority: 60 },
+        { name: "EU AI Act Compliance Guide", description: "Guide to ensuring compliance with the EU Artificial Intelligence Act, including risk classification and documentation requirements.", scope: "compliance", action: "ALERT", priority: 70 },
+        { name: "Ethical AI Guidelines", description: "Principles for responsible AI: fairness, transparency, accountability, privacy, safety, and human oversight.", scope: "ethics", action: "ALERT", priority: 80 },
     ];
 
     for (const p of policies) {
-        await prisma.policy.create({ data: { ...p, orgId: org.id } });
+        await prisma.policyRule.create({ data: { ...p, orgId: org.id, conditions: [], enabled: true } });
     }
-    console.log(`✅ Policies: ${policies.length}`);
+    console.log(`✅ Policy rules: ${policies.length}`);
 
     // ─── Threat Detections ────────────────────────────────────
     const threats = [

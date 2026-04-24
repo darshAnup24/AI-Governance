@@ -23,8 +23,8 @@ An enterprise-grade API proxy that sits between corporate employees and LLM APIs
                      └─────────────────────────────┘
 ```
 
-## Tech Stack
 
+## Tech Stack
 | Layer | Technology |
 |-------|-----------|
 | **API Proxy** | FastAPI + Python 3.11 + HTTPX |
@@ -46,8 +46,8 @@ An enterprise-grade API proxy that sits between corporate employees and LLM APIs
 - **Git**
 - (Optional) NVIDIA GPU + drivers for Ollama Llama inference
 
-### Quick Start (Development)
 
+### Quick Start (Development)
 ```bash
 # 1. Clone the repository
 git clone https://github.com/your-org/AI-Governance.git
@@ -126,7 +126,7 @@ helm install ai-gw ./ai-gateway -f ai-gateway/values.yaml -n ai-governance --cre
 ### 1. Access the Dashboard
 
 1. Open `http://localhost:3000` in your browser
-2. Log in with any email/password (dev mode accepts all credentials)
+2. Log in with any email/ford (dev mode accepts all credentials)
 3. You'll see the **Executive Dashboard** with real-time metrics
 
 ### 2. Dashboard Pages

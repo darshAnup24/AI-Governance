@@ -16,10 +16,6 @@ from fastapi import Depends, HTTPException, Request
 
 from proxy.app.config import Settings, get_settings
 from proxy.app.models import UserContext
-<<<<<<< HEAD
-from proxy.app.security import read_secret
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
 log = structlog.get_logger()
 
@@ -66,23 +62,13 @@ class JWTAuth:
         else:
             email = "dev@company.com"
 
-<<<<<<< HEAD
-        org_hint = hashlib.sha256(
-            read_secret(settings.dev_jwt_secret, settings.dev_jwt_secret_file).encode("utf-8")
-        ).hexdigest()[:12]
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
         return UserContext(
             user_id="dev-user-001",
             email=email,
             department="engineering",
-            role="admin",
-            permissions=["read", "write", "admin"],
-<<<<<<< HEAD
-            org_id=f"00000000-0000-0000-0000-{org_hint}",
-=======
+            role="user",
+            permissions=["read", "write"],
             org_id="org-001",
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
         )
 
     async def __call__(
@@ -114,26 +100,14 @@ class JWTAuth:
                         key,
                         algorithms=[settings.jwt_algorithm],
                         audience=settings.jwt_audience,
-<<<<<<< HEAD
-                        issuer=settings.jwt_issuer,
                     )
-                    org_id = payload.get("org_id", "")
-                    if not org_id:
-                        raise HTTPException(status_code=401, detail="Token missing org_id")
-=======
-                    )
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
                     return UserContext(
                         user_id=payload.get("sub", ""),
                         email=payload.get("email", ""),
                         department=payload.get("department", ""),
                         role=payload.get("role", "user"),
                         permissions=payload.get("permissions", []),
-<<<<<<< HEAD
-                        org_id=org_id,
-=======
                         org_id=payload.get("org_id", ""),
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
                     )
                 except JWTError:
                     continue

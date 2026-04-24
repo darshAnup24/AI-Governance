@@ -1,9 +1,6 @@
-<<<<<<< HEAD
-=======
 /* ── Google Font — must be first ───────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -11,10 +8,6 @@
 @layer base {
   * {
     @apply border-slate-800;
-<<<<<<< HEAD
-  }
-
-=======
     box-sizing: border-box;
   }
 
@@ -23,29 +16,11 @@
   }
 
   /* ── Dark mode (default) ── */
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
   body {
     @apply bg-slate-950 text-slate-100 antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
-<<<<<<< HEAD
-  ::-webkit-scrollbar {
-    @apply w-2;
-  }
-
-  ::-webkit-scrollbar-track {
-    @apply bg-slate-900;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    @apply bg-slate-700 rounded-full;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-slate-600;
-  }
-=======
   /* ── Light mode override ── */
   html.light body {
     @apply bg-slate-100 text-slate-900;
@@ -79,16 +54,11 @@
 
   html.light ::-webkit-scrollbar-track { @apply bg-slate-100; }
   html.light ::-webkit-scrollbar-thumb { @apply bg-slate-300; }
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 }
 
 @layer components {
   .card {
-<<<<<<< HEAD
-    @apply bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-xl p-6;
-=======
     @apply bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-xl p-5;
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
   }
 
   .card-hover {
@@ -96,11 +66,7 @@
   }
 
   .btn-primary {
-<<<<<<< HEAD
-    @apply bg-brand-600 hover:bg-brand-500 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 active:scale-95;
-=======
     @apply bg-brand-600 hover:bg-brand-500 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
   }
 
   .btn-secondary {
@@ -115,30 +81,6 @@
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
 
-<<<<<<< HEAD
-  .badge-red {
-    @apply badge bg-red-500/15 text-red-400 border border-red-500/25;
-  }
-
-  .badge-orange {
-    @apply badge bg-orange-500/15 text-orange-400 border border-orange-500/25;
-  }
-
-  .badge-yellow {
-    @apply badge bg-yellow-500/15 text-yellow-400 border border-yellow-500/25;
-  }
-
-  .badge-green {
-    @apply badge bg-emerald-500/15 text-emerald-400 border border-emerald-500/25;
-  }
-
-  .badge-blue {
-    @apply badge bg-blue-500/15 text-blue-400 border border-blue-500/25;
-  }
-
-  .input {
-    @apply bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all duration-200;
-=======
   .badge-red   { @apply badge bg-red-500/15 text-red-400 border border-red-500/25; }
   .badge-orange { @apply badge bg-orange-500/15 text-orange-400 border border-orange-500/25; }
   .badge-yellow { @apply badge bg-yellow-500/15 text-yellow-400 border border-yellow-500/25; }
@@ -149,7 +91,6 @@
     @apply bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 
            placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 
            focus:border-brand-500 transition-all duration-200 text-sm;
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
   }
 
   .skeleton {
@@ -160,8 +101,6 @@
     @apply bg-gradient-to-r from-brand-400 to-cyan-400 bg-clip-text text-transparent;
   }
 }
-<<<<<<< HEAD
-=======
 
 @layer utilities {
   /* Fade-in animation */
@@ -248,4 +187,3 @@
   .card { @apply border border-slate-300 shadow-none; }
 }
 
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2

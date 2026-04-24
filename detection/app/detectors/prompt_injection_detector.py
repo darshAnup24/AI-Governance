@@ -100,7 +100,7 @@ class PromptInjectionDetector:
                     spans.append(DetectedSpan(
                         start=match.start(),
                         end=match.end(),
-                        category=DetectionCategory.CONFIDENTIAL,
+                        category=DetectionCategory.PROMPT_INJECTION,
                         confidence=confidence,
                         matched_text=match.group()[:80],
                         detector=f"prompt_injection_{group_name}",
@@ -114,7 +114,7 @@ class PromptInjectionDetector:
                 spans.append(DetectedSpan(
                     start=0,
                     end=min(len(text), 100),
-                    category=DetectionCategory.CONFIDENTIAL,
+                    category=DetectionCategory.PROMPT_INJECTION,
                     confidence=min(0.98, score + 0.5), # Boost confidence
                     matched_text=text[:80],
                     detector="prompt_injection_semantic",

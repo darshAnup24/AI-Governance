@@ -32,25 +32,11 @@ _policy_cache: dict[str, list[dict[str, Any]]] = {}
 
 async def load_policies_for_org(org_id: str, db: AsyncSession) -> list[dict[str, Any]]:
     """Load policy rules for an org from DB and update cache."""
-<<<<<<< HEAD
-    try:
-        org_uuid = uuid.UUID(str(org_id))
-    except (ValueError, AttributeError):
-        org_uuid = uuid.UUID("00000000-0000-0000-0000-000000000000")
-
-    query = select(DBPolicyRule).filter(
-        DBPolicyRule.org_id == org_uuid,
-        DBPolicyRule.deleted_at.is_(None)
-    ).order_by(DBPolicyRule.priority)
-
-
-=======
     query = select(DBPolicyRule).filter(
         DBPolicyRule.org_id == getattr(uuid, "UUID")(org_id) if isinstance(org_id, str) else org_id,
         DBPolicyRule.deleted_at == None
     ).order_by(DBPolicyRule.priority)
     
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
     result = await db.execute(query)
     records = result.scalars().all()
     rules = []
@@ -290,11 +276,7 @@ async def update_policy(
     query = select(DBPolicyRule).filter(
         DBPolicyRule.rule_id == uuid.UUID(rule_id),
         DBPolicyRule.org_id == uuid.UUID(user.org_id),
-<<<<<<< HEAD
-        DBPolicyRule.deleted_at.is_(None)
-=======
         DBPolicyRule.deleted_at == None
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
     )
     result = await db.execute(query)
     rule = result.scalar_one_or_none()
@@ -339,11 +321,7 @@ async def delete_policy(
     query = select(DBPolicyRule).filter(
         DBPolicyRule.rule_id == uuid.UUID(rule_id),
         DBPolicyRule.org_id == uuid.UUID(user.org_id),
-<<<<<<< HEAD
-        DBPolicyRule.deleted_at.is_(None)
-=======
         DBPolicyRule.deleted_at == None
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
     )
     result = await db.execute(query)
     rule = result.scalar_one_or_none()

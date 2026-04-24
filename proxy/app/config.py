@@ -27,23 +27,13 @@ class Settings(BaseSettings):
     upstream_anthropic_url: str = "https://api.anthropic.com"
     upstream_azure_openai_url: str = "https://your-resource.openai.azure.com"
     detection_service_url: str = "http://detection:8001"
-    detection_timeout_ms: int = 200
-<<<<<<< HEAD
-    internal_service_token: str = "dev-internal-token"
-    internal_service_token_file: str | None = None
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
+    detection_timeout_ms: int = 5000
 
     # ─── Auth ─────────────────────────────────────────────
     jwks_url: str = "https://your-idp.com/.well-known/jwks.json"
     jwt_algorithm: str = "RS256"
     jwt_audience: str = "ai-governance-firewall"
     dev_jwt_secret: str = "dev-secret-change-in-production"
-<<<<<<< HEAD
-    dev_jwt_secret_file: str | None = None
-    jwt_issuer: str | None = None
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
     # ─── Database ─────────────────────────────────────────
     database_url: str = "postgresql+asyncpg://aigw:aigw_password@postgres:5432/ai_governance"
@@ -63,17 +53,6 @@ class Settings(BaseSettings):
     rate_limit_dept_rpm: int = 1000
     rate_limit_dept_tpm: int = 1_000_000
 
-<<<<<<< HEAD
-    # ─── Security hardening ────────────────────────────────
-    data_encryption_key: str = "dev-data-key-change-in-production"
-    data_encryption_key_file: str | None = None
-    mtls_enabled: bool = False
-    mtls_client_cert_path: str | None = None
-    mtls_client_key_path: str | None = None
-    mtls_ca_bundle_path: str | None = None
-
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
     @property
     def is_dev(self) -> bool:
         return self.environment == "development"

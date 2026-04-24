@@ -12,10 +12,7 @@ from typing import Any
 
 import httpx
 import structlog
-<<<<<<< HEAD
-=======
 from pydantic import BaseModel, Field, ValidationError
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
 from proxy.app.models import DetectionResult, DetectedSpan, DetectionCategory
 
@@ -48,8 +45,6 @@ USER_PROMPT_TEMPLATE = """Classify the following text:
 Respond with ONLY the JSON classification object."""
 
 
-<<<<<<< HEAD
-=======
 class LlamaClassificationResult(BaseModel):
     classification: str = Field(description="Must be one of SAFE, INTERNAL, SENSITIVE, RESTRICTED", pattern="^(SAFE|INTERNAL|SENSITIVE|RESTRICTED|UNKNOWN)$")
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
@@ -57,7 +52,6 @@ class LlamaClassificationResult(BaseModel):
 
 
 
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 class LlamaClassifier:
     """
     Tier 3 classifier using local Llama via Ollama.
@@ -133,10 +127,7 @@ class LlamaClassifier:
                         "system": SYSTEM_PROMPT,
                         "prompt": USER_PROMPT_TEMPLATE.format(text=text[:2000]),
                         "stream": False,
-<<<<<<< HEAD
-=======
                         "format": "json",
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
                         "options": {
                             "temperature": 0,
                             "num_predict": 100,
@@ -171,18 +162,6 @@ class LlamaClassifier:
         )
 
     def _parse_response(self, response_text: str) -> dict[str, Any]:
-<<<<<<< HEAD
-        """Parse Llama's JSON response, handling malformed output."""
-        try:
-            # Try direct JSON parse
-            result = json.loads(response_text)
-            if "classification" in result:
-                return result
-        except json.JSONDecodeError:
-            pass
-
-        # Try to extract JSON from response text
-=======
         """Parse Llama's JSON response, enforcing structure with Pydantic."""
         try:
             # Try direct JSON parse
@@ -194,36 +173,22 @@ class LlamaClassifier:
             log.warning("llama.parse_error", error=str(e), response=response_text)
 
         # Try to extract JSON from response text if it's wrapped in markdown or extra text
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
         try:
             import re
             json_match = re.search(r"\{[^}]+\}", response_text)
             if json_match:
-<<<<<<< HEAD
-                result = json.loads(json_match.group())
-                if "classification" in result:
-                    return result
-        except (json.JSONDecodeError, AttributeError):
-=======
                 result_dict = json.loads(json_match.group())
                 validated = LlamaClassificationResult(**result_dict)
                 return validated.model_dump()
         except (json.JSONDecodeError, AttributeError, ValidationError):
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
             pass
 
         # Fallback: try to detect classification keyword
         for label in ["RESTRICTED", "SENSITIVE", "INTERNAL", "SAFE"]:
             if label in response_text.upper():
-<<<<<<< HEAD
-                return {"classification": label, "confidence": 0.5, "reason": "Extracted from response text"}
-
-        return {"classification": "UNKNOWN", "confidence": 0.0, "reason": "Could not parse response"}
-=======
                 return {"classification": label, "confidence": 0.5, "reason": "Extracted from response text via heuristics"}
 
         return {"classification": "UNKNOWN", "confidence": 0.0, "reason": "Could not parse response into structured output"}
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
     def _build_result(self, classification: dict[str, Any], duration_ms: float, from_cache: bool) -> DetectionResult:
         """Convert classification result to DetectionResult."""

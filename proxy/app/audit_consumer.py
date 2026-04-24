@@ -7,10 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-<<<<<<< HEAD
-import os
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 import signal
 import sys
 import uuid
@@ -45,27 +41,6 @@ class AuditConsumer:
         self._running = True
         self._processed_count = 0
         self._error_count = 0
-<<<<<<< HEAD
-        self._engine: Any = None
-
-    async def _get_engine(self) -> Any:
-        """Lazily initialize async SQLAlchemy engine."""
-        if self._engine is None:
-            from sqlalchemy.ext.asyncio import create_async_engine
-
-            db_url = os.environ.get(
-                "DATABASE_URL",
-                "postgresql+asyncpg://aigw:aigw_password@postgres:5432/ai_governance",
-            )
-            self._engine = create_async_engine(
-                db_url,
-                pool_size=5,
-                max_overflow=2,
-                pool_pre_ping=True,
-            )
-        return self._engine
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
 
     async def start(self) -> None:
         """Main consumer loop."""
@@ -78,11 +53,7 @@ class AuditConsumer:
             log.error("audit_consumer.redis_not_installed")
             return
 
-<<<<<<< HEAD
-        redis_url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
-=======
         redis_url = "redis://redis:6379/0"
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
         redis = aioredis.from_url(redis_url, decode_responses=True)
 
         # Create consumer group if it doesn't exist
@@ -133,11 +104,6 @@ class AuditConsumer:
                 self._error_count += 1
                 await asyncio.sleep(1)
 
-<<<<<<< HEAD
-        if self._engine:
-            await self._engine.dispose()
-=======
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
         await redis.aclose()
         log.info(
             "audit_consumer.stopped",
@@ -146,88 +112,6 @@ class AuditConsumer:
         )
 
     async def _write_batch(self, events: list[dict[str, Any]]) -> bool:
-<<<<<<< HEAD
-        """Write a batch of audit events to TimescaleDB. Returns True on success."""
-        for attempt in range(MAX_RETRIES):
-            try:
-                from sqlalchemy.ext.asyncio import AsyncSession
-                from sqlalchemy.orm import sessionmaker
-                from proxy.app.db_models import AuditEventRecord
-
-                engine = await self._get_engine()
-                async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-                records = []
-                for event in events:
-                    try:
-                        org_id_raw = event.get("org_id", "")
-                        user_id_raw = event.get("user_id", "")
-
-                        # Safely parse UUIDs — fallback to a nil UUID if invalid
-                        try:
-                            org_id = uuid.UUID(str(org_id_raw))
-                        except (ValueError, AttributeError):
-                            org_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
-
-                        try:
-                            user_id = uuid.UUID(str(user_id_raw))
-                        except (ValueError, AttributeError):
-                            user_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
-
-                        # Parse detection_results JSON string if needed
-                        detection_results = event.get("detection_results", "{}")
-                        if isinstance(detection_results, str):
-                            try:
-                                detection_results = json.loads(detection_results)
-                            except json.JSONDecodeError:
-                                detection_results = {}
-
-                        # Parse timestamp
-                        ts_raw = event.get("timestamp")
-                        if ts_raw:
-                            try:
-                                timestamp = datetime.fromisoformat(str(ts_raw))
-                            except ValueError:
-                                timestamp = datetime.utcnow()
-                        else:
-                            timestamp = datetime.utcnow()
-
-                        record = AuditEventRecord(
-                            org_id=org_id,
-                            user_id=user_id,
-                            session_id=str(event.get("session_id", "")),
-                            tool_name=str(event.get("tool_name", "")),
-                            llm_provider=str(event.get("llm_provider", "")),
-                            prompt_hash=str(event.get("prompt_hash", "")),
-                            encrypted_prompt_hash=str(event.get("encrypted_prompt_hash", "")) or None,
-                            detection_results=detection_results,
-                            encrypted_detected_spans=str(event.get("encrypted_detected_spans", "")) or None,
-                            risk_score=int(event.get("risk_score", 0)),
-                            action_taken=str(event.get("action_taken", "ALLOW")),
-                            redacted_prompt=event.get("redacted_prompt"),
-                            request_duration_ms=float(event.get("request_duration_ms", 0)),
-                            upstream_status_code=event.get("upstream_status_code"),
-                            timestamp=timestamp,
-                        )
-                        records.append(record)
-                    except Exception as parse_err:
-                        log.warning(
-                            "audit_consumer.event_parse_error",
-                            error=str(parse_err),
-                            event=event,
-                        )
-
-                if records:
-                    async with async_session() as session:
-                        session.add_all(records)
-                        await session.commit()
-
-                log.debug(
-                    "audit_consumer.batch_written",
-                    count=len(records),
-                    attempt=attempt + 1,
-                )
-=======
         """Write a batch of events to TimescaleDB. Returns True on success."""
         for attempt in range(MAX_RETRIES):
             try:
@@ -240,7 +124,6 @@ class AuditConsumer:
                         action=event.get("action_taken", "ALLOW"),
                         risk_score=event.get("risk_score", 0),
                     )
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
                 return True
 
             except Exception as e:

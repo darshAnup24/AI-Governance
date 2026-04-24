@@ -101,13 +101,7 @@ class AuditEventRecord(Base):
     tool_name = Column(String(100), default="")
     llm_provider = Column(String(50), default="")
     prompt_hash = Column(String(64), default="")
-<<<<<<< HEAD
-    encrypted_prompt_hash = Column(Text, nullable=True)
     detection_results = Column(JSON, default={})
-    encrypted_detected_spans = Column(Text, nullable=True)
-=======
-    detection_results = Column(JSON, default={})
->>>>>>> 0e1d75011b86daf0acf81fcc8abce865b10a3fb2
     risk_score = Column(Integer, default=0)
     action_taken = Column(String(20), default="ALLOW")
     policy_rule_id = Column(UUID(as_uuid=True), nullable=True)
