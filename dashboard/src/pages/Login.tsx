@@ -20,6 +20,8 @@ export default function Login() {
             const r = await govApi.post(endpoint, body)
             localStorage.setItem('shieldai_token', r.data.accessToken)
             localStorage.setItem('shieldai_user', JSON.stringify(r.data.user))
+            localStorage.setItem('aigw_token', r.data.accessToken)
+            localStorage.setItem('aigw_user', JSON.stringify(r.data.user))
             window.location.href = '/governance'
         } catch (err: any) {
             setError(err.response?.data?.error || 'Connection failed — ensure governance service is running')

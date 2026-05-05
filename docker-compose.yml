@@ -14,12 +14,12 @@ services:
       - UPSTREAM_OPENAI_URL=${UPSTREAM_OPENAI_URL:-https://api.openai.com}
       - UPSTREAM_ANTHROPIC_URL=${UPSTREAM_ANTHROPIC_URL:-https://api.anthropic.com}
       - DETECTION_SERVICE_URL=http://detection:8001
-      - DETECTION_TIMEOUT_MS=200
+      - DETECTION_TIMEOUT_MS=2000
       - DATABASE_URL=postgresql+asyncpg://aigw:aigw_password@postgres:5432/ai_governance
       - REDIS_URL=redis://redis:6379/0
       - OLLAMA_URL=http://ollama:11434
       - DEV_JWT_SECRET=dev-secret-change-in-production
-    command: uvicorn proxy.app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: /entrypoint.sh
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,18 +103,23 @@ services:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
+        - VITE_GOVERNANCE_URL=${VITE_GOVERNANCE_URL:-http://localhost:4000}
     ports:
       - "3000:3000"
-    volumes:
-      - ./dashboard/src:/app/src
-      - ./dashboard/public:/app/public
-      - ./dashboard/index.html:/app/index.html
     environment:
-      - VITE_API_URL=http://localhost:8000
-      - VITE_GOVERNANCE_URL=http://localhost:4000
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
+      - VITE_GOVERNANCE_URL=${VITE_GOVERNANCE_URL:-http://localhost:4000}
     depends_on:
       - proxy
       - governance
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     networks:
       - ai-gateway-net
 

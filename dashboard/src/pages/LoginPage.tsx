@@ -99,7 +99,7 @@ export default function LoginPage() {
                     </button>
 
                     <p className="text-center text-xs text-slate-600">
-                        Dev mode: any email/password works
+                        Use your registered account credentials
                     </p>
                 </form>
             </div>

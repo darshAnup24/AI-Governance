@@ -13,7 +13,7 @@ export default defineConfig({
         runtimeCaching: [
           // Cache governance API calls for 5 minutes (stale-while-revalidate)
           {
-            urlPattern: /^http:\/\/localhost:4000\/api\//,
+            urlPattern: /\/api\/.*governance|localhost:4000\/api\//,
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'gov-api-cache',
@@ -22,7 +22,7 @@ export default defineConfig({
           },
           // Cache proxy API calls
           {
-            urlPattern: /^http:\/\/localhost:8000\/api\//,
+            urlPattern: /localhost:8000\/api\//,
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'proxy-api-cache',

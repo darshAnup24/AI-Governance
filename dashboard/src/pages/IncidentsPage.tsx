@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, Search, Filter, X, ChevronLeft, ChevronRight, FileText, Flag, Download } from 'lucide-react'
+import { Search, X, ChevronLeft, ChevronRight, Flag, Download } from 'lucide-react'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts'
 
 interface Incident {

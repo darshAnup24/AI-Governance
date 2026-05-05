@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import type { ReactNode } from 'react'
+import govApi from '../lib/govApi'
 
 interface User {
     user_id: string
@@ -19,6 +20,28 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const TOKEN_KEYS = ['aigw_token', 'shieldai_token'] as const
+const USER_KEYS = ['aigw_user', 'shieldai_user'] as const
+
+function getStoredValue(keys: readonly string[]): string | null {
+    for (const key of keys) {
+        const value = localStorage.getItem(key)
+        if (value) return value
+    }
+    return null
+}
+
+function setSession(token: string, user: User) {
+    localStorage.setItem('aigw_token', token)
+    localStorage.setItem('shieldai_token', token)
+    localStorage.setItem('aigw_user', JSON.stringify(user))
+    localStorage.setItem('shieldai_user', JSON.stringify(user))
+}
+
+function clearSession() {
+    for (const key of TOKEN_KEYS) localStorage.removeItem(key)
+    for (const key of USER_KEYS) localStorage.removeItem(key)
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null)
@@ -27,8 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         // Restore session from localStorage
-        const savedToken = localStorage.getItem('aigw_token')
-        const savedUser = localStorage.getItem('aigw_user')
+        const savedToken = getStoredValue(TOKEN_KEYS)
+        const savedUser = getStoredValue(USER_KEYS)
         if (savedToken && savedUser) {
             setToken(savedToken)
             setUser(JSON.parse(savedUser))
@@ -36,27 +59,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false)
     }, [])
 
-    const login = useCallback(async (email: string, _password: string) => {
-        // Dev mode: create a mock JWT and user for local development
-        // In production, this calls the corporate IdP
-        const mockUser: User = {
-            user_id: 'dev-user-001',
-            email,
-            role: 'admin',
-            department: 'engineering',
-            org_id: 'org-001',
-        }
-        const mockToken = 'dev-token-' + btoa(email)
+    const login = useCallback(async (email: string, password: string) => {
+        const response = await govApi.post('/api/auth/login', { email, password })
+        const data = response.data
 
-        localStorage.setItem('aigw_token', mockToken)
-        localStorage.setItem('aigw_user', JSON.stringify(mockUser))
-        setToken(mockToken)
-        setUser(mockUser)
+        const authUser: User = {
+            user_id: data.user?.id ?? '',
+            email: data.user?.email ?? email,
+            role: String(data.user?.role ?? 'user').toLowerCase(),
+            department: data.user?.org?.name ?? '',
+            org_id: data.user?.org?.id ?? '',
+        }
+
+        setSession(data.accessToken, authUser)
+        setToken(data.accessToken)
+        setUser(authUser)
     }, [])
 
     const logout = useCallback(() => {
-        localStorage.removeItem('aigw_token')
-        localStorage.removeItem('aigw_user')
+        clearSession()
         setToken(null)
         setUser(null)
     }, [])

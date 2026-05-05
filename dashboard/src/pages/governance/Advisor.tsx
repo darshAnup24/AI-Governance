@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send, Bot, User, Sparkles, AlertTriangle, Shield, HelpCircle } from 'lucide-react'
-import govApi from '../../lib/govApi'
 
 interface Message {
     role: 'USER' | 'ASSISTANT'

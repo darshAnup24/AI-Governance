@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Shield, Plus, Trash2, Edit, ToggleLeft, ToggleRight, Play, X } from 'lucide-react'
+import { Plus, Trash2, Edit, ToggleLeft, ToggleRight, Play } from 'lucide-react'
 
 interface PolicyRule {
     rule_id: string

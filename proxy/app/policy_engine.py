@@ -32,11 +32,23 @@ _policy_cache: dict[str, list[dict[str, Any]]] = {}
 
 async def load_policies_for_org(org_id: str, db: AsyncSession) -> list[dict[str, Any]]:
     """Load policy rules for an org from DB and update cache."""
-    query = select(DBPolicyRule).filter(
-        DBPolicyRule.org_id == getattr(uuid, "UUID")(org_id) if isinstance(org_id, str) else org_id,
-        DBPolicyRule.deleted_at == None
-    ).order_by(DBPolicyRule.priority)
-    
+    # Safely convert org_id to UUID if it is a valid UUID string;
+    # otherwise fall back to a plain string comparison so that dev-mode
+    # org_ids like "org-001" don't crash with ValueError.
+    try:
+        org_id_val = uuid.UUID(org_id) if isinstance(org_id, str) else org_id
+        query = select(DBPolicyRule).filter(
+            DBPolicyRule.org_id == org_id_val,
+            DBPolicyRule.deleted_at == None,  # noqa: E711
+        ).order_by(DBPolicyRule.priority)
+    except (ValueError, AttributeError):
+        # Non-UUID org_id (e.g. "org-001" in dev mode) — cast to text comparison
+        from sqlalchemy import cast, String
+        query = select(DBPolicyRule).filter(
+            cast(DBPolicyRule.org_id, String) == str(org_id),
+            DBPolicyRule.deleted_at == None,  # noqa: E711
+        ).order_by(DBPolicyRule.priority)
+
     result = await db.execute(query)
     records = result.scalars().all()
     rules = []
@@ -52,6 +64,7 @@ async def load_policies_for_org(org_id: str, db: AsyncSession) -> list[dict[str,
         })
     _policy_cache[str(org_id)] = rules
     return rules
+
 
 
 
@@ -224,8 +237,13 @@ async def create_policy(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Create a new policy rule."""
+    try:
+        org_id_val = uuid.UUID(user.org_id) if isinstance(user.org_id, str) else user.org_id
+    except (ValueError, AttributeError):
+        org_id_val = user.org_id  # type: ignore[assignment]
+
     rule = DBPolicyRule(
-        org_id=uuid.UUID(user.org_id) if isinstance(user.org_id, str) else user.org_id,
+        org_id=org_id_val,
         name=body.name,
         description=body.description,
         conditions=body.conditions,

@@ -74,12 +74,6 @@ function CustomTooltip({ active, payload, label }: any) {
 
 function WorldMapViz({ alerts }: { alerts: typeof GEO_ALERTS }) {
   // We render a stylized abstract map using SVG + alert dots
-  const dots = [
-    { cx: 480, cy: 155, label: 'IN' }, // India
-    { cx: 420, cy: 110, label: 'EU' },
-    { cx: 200, cy: 120, label: 'US' },
-    { cx: 610, cy: 175, label: 'AS' },
-  ]
   return (
     <div className="relative w-full overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800">
       <div className="absolute inset-0 overflow-hidden">

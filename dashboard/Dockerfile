@@ -1,15 +1,25 @@
-FROM node:20-alpine as build
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
+
 COPY . .
 
-# Dev stage: just run the dev server
-FROM node:20-alpine as dev
+# Accept build-time env vars so Vite bakes the correct API URLs into the bundle
+ARG VITE_API_URL=http://localhost:8000
+ARG VITE_GOVERNANCE_URL=http://localhost:4000
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_GOVERNANCE_URL=$VITE_GOVERNANCE_URL
+
+# Build the production bundle
+RUN npm run build
+
+# Serve with a lightweight static server (no file-watchers, no EMFILE issues)
+FROM node:20-alpine AS runner
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm install
-COPY . .
+RUN npm install -g serve
+COPY --from=builder /app/dist ./dist
+
 EXPOSE 3000
-CMD ["npm", "run", "dev"]
+CMD ["serve", "-s", "dist", "-l", "3000"]

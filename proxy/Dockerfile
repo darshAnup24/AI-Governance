@@ -20,7 +20,12 @@ RUN poetry config virtualenvs.create false && \
 
 # Copy source
 COPY proxy/ ./proxy/
+COPY detection/ ./detection/
+
+# Copy and enable entrypoint
+COPY proxy/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 8000
 
-CMD ["uvicorn", "proxy.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/entrypoint.sh"]
