@@ -125,7 +125,20 @@ export default function ThreatDetection() {
     setScanning(false)
   }
 
-  const filteredEvents = (events ?? []).filter(
+  const eventList = Array.isArray(events) ? events : (events?.data ?? [])
+  const breakdownList = Array.isArray(breakdown) ? breakdown : (breakdown?.data ?? [])
+
+  const normalizedEvents = eventList.map((e: any) => ({
+    ...e,
+    action: e.action ?? e.action_taken ?? 'ALLOW',
+    riskScore: e.riskScore ?? e.risk_score ?? 0,
+    createdAt: e.createdAt ?? e.timestamp ?? new Date().toISOString(),
+    userName: e.userName ?? e.user_id ?? 'unknown-user',
+    detectedCategories: e.detectedCategories ?? e.detection_results?.detected_spans?.map((s: any) => s.category) ?? [],
+    promptPreview: e.promptPreview ?? e.prompt_preview ?? e.prompt ?? '',
+  }))
+
+  const filteredEvents = normalizedEvents.filter(
     (e: any) => filterAction === 'ALL' || e.action === filterAction
   )
 
@@ -206,7 +219,7 @@ export default function ThreatDetection() {
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie
-                data={breakdown ?? []}
+                data={breakdownList}
                 cx="50%"
                 cy="50%"
                 innerRadius={45}
@@ -214,7 +227,7 @@ export default function ThreatDetection() {
                 paddingAngle={3}
                 dataKey="value"
               >
-                {(breakdown ?? []).map((d: any, i: number) => (
+                {breakdownList.map((d: any, i: number) => (
                   <Cell key={i} fill={d.color} />
                 ))}
               </Pie>
@@ -224,7 +237,7 @@ export default function ThreatDetection() {
             </PieChart>
           </ResponsiveContainer>
           <div className="space-y-1.5">
-            {(breakdown ?? []).map((d: any) => (
+            {breakdownList.map((d: any) => (
               <div key={d.name} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full" style={{ background: d.color }} />
@@ -267,13 +280,13 @@ export default function ThreatDetection() {
       </div>
 
       {/* High risk alert banner */}
-      {(events ?? []).some((e: any) => e.action === 'BLOCK') && (
+      {normalizedEvents.some((e: any) => e.action === 'BLOCK') && (
         <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
           <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
           <div>
             <p className="text-sm font-semibold text-red-400">Active Block Events Detected</p>
             <p className="text-xs text-slate-400 mt-0.5">
-              {(events ?? []).filter((e: any) => e.action === 'BLOCK').length} requests were blocked in this session.
+              {normalizedEvents.filter((e: any) => e.action === 'BLOCK').length} requests were blocked in this session.
               Review the feed above for details.
             </p>
           </div>

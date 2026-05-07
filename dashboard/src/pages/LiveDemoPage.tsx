@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Shield, Zap, AlertTriangle, CheckCircle2, Loader2, Radio, Send, ChevronRight } from 'lucide-react'
 import api from '../lib/api'
+import { useQueryClient } from '../lib/hooks'
 
 // ─── Preset prompts for judges ────────────────────────────────────────────────
 const PRESETS = [
@@ -173,6 +174,7 @@ interface InspectResult {
 }
 
 export default function LiveDemoPage() {
+  const queryClient = useQueryClient()
   const [prompt, setPrompt] = useState(PRESETS[0].text)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<InspectResult | null>(null)
@@ -188,6 +190,13 @@ export default function LiveDemoPage() {
     try {
       const resp = await api.post('/api/v1/inspect', { text: prompt })
       setResult(resp.data)
+      // Force dashboard sections to refresh immediately after each demo scan.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['auditEvents'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboardStats'] }),
+        queryClient.invalidateQueries({ queryKey: ['incidents'] }),
+        queryClient.invalidateQueries({ queryKey: ['shadowAIAlerts'] }),
+      ])
     } catch (e: any) {
       setError(e?.response?.data?.detail || 'Detection service unavailable — ensure containers are running.')
     } finally {

@@ -19,7 +19,9 @@ export function useAuditEvents(params?: { action?: string; limit?: number }) {
     queryFn: () =>
       api.get('/api/v1/audit-events', { params }).then(r => r.data),
     retry: 2,
-    staleTime: 30_000,
+    staleTime: 2_000,
+    refetchInterval: 2_500,
+    refetchIntervalInBackground: true,
   })
 }
 
@@ -49,8 +51,9 @@ export function useShadowAIAlerts() {
     queryFn: () =>
       api.get('/api/v1/shadow-ai/detections').then(r => r.data),
     retry: 2,
-    staleTime: 30_000,
-    refetchInterval: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
   })
 }
 
@@ -60,8 +63,9 @@ export function useDashboardStats() {
     queryFn: () =>
       govApi.get('/api/dashboard/stats').then(r => r.data),
     retry: 2,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
   })
 }
 
@@ -127,6 +131,9 @@ export function useIncidents() {
     queryKey: ['incidents'],
     queryFn: () => govApi.get('/api/incidents').then(r => r.data),
     retry: 2,
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
   })
 }
 
