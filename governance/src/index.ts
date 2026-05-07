@@ -16,6 +16,7 @@ import { threatsRouter } from "./routes/threats";
 import { advisorRouter } from "./routes/advisor";
 import { reportsRouter } from "./routes/reports";
 import { auditRouter } from "./routes/audit";
+import { usersRouter } from "./routes/users";
 import { authMiddleware } from "./middleware/auth";
 import { auditMiddleware } from "./middleware/auditLogger";
 
@@ -58,6 +59,7 @@ app.use("/api/threats", authMiddleware, auditMiddleware, threatsRouter);
 app.use("/api/advisor", authMiddleware, advisorRouter);
 app.use("/api/reports", authMiddleware, auditMiddleware, reportsRouter);
 app.use("/api/audit-logs", authMiddleware, auditRouter);
+app.use("/api/users", authMiddleware, usersRouter);
 
 // ─── Error Handler ───────────────────────────────────────
 app.use(

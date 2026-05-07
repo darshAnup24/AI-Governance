@@ -40,6 +40,7 @@ const govNavItems = [
 const proxyNavItems = [
     { to: '/dashboard', label: 'Proxy Monitor', icon: LayoutDashboard },
     { to: '/shadow-ai', label: 'Shadow AI', icon: Wifi },
+    { to: '/live-demo', label: 'Live Demo', icon: Zap, badge: 'DEMO' },
 ]
 
 export default function AppLayout() {
@@ -110,7 +111,7 @@ export default function AppLayout() {
                     <p className="px-3 mt-5 mb-2 text-[10px] uppercase tracking-widest text-slate-600 font-semibold">
                         Proxy
                     </p>
-                    {proxyNavItems.map(({ to, label, icon: Icon }) => (
+                    {proxyNavItems.map(({ to, label, icon: Icon, badge }: any) => (
                         <NavLink
                             key={to}
                             to={to}
@@ -123,7 +124,13 @@ export default function AppLayout() {
                             }
                         >
                             <Icon className="w-4 h-4 flex-shrink-0" />
-                            <span>{label}</span>
+                            <span className="flex-1">{label}</span>
+                            {badge && (
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                                    {badge}
+                                </span>
+                            )}
                         </NavLink>
                     ))}
                 </nav>

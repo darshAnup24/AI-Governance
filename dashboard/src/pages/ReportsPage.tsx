@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { FileText, Download } from 'lucide-react'
+import { FileText, Download, Loader2 } from 'lucide-react'
+import { useGenerateReport } from '../lib/hooks'
+import { InlineError } from '../components/ErrorBoundary'
 
 const reportTypes = [
     { id: 'compliance', name: 'Compliance Summary', desc: 'Overview of policy enforcement and compliance metrics' },
@@ -11,12 +13,31 @@ const reportTypes = [
 export default function ReportsPage() {
     const [dateRange, setDateRange] = useState('30d')
     const [selectedReport, setSelectedReport] = useState('compliance')
-    const [generating, setGenerating] = useState(false)
+    const [format, setFormat] = useState('pdf')
+    const generateMutation = useGenerateReport()
 
-    const handleGenerate = () => {
-        setGenerating(true)
-        setTimeout(() => setGenerating(false), 2000)
+    const handleGenerate = async () => {
+        try {
+            const blob = await generateMutation.mutateAsync({
+                format,
+                framework: selectedReport.toUpperCase(),
+                dateRange,
+            })
+            // Download the blob
+            const url = window.URL.createObjectURL(new Blob([blob]))
+            const link = document.createElement('a')
+            link.href = url
+            link.setAttribute('download', `shieldai-report-${selectedReport}-${Date.now()}.${format}`)
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            window.URL.revokeObjectURL(url)
+        } catch {
+            // Error handled by mutation state
+        }
     }
+
+    const generating = generateMutation.isPending
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -26,6 +47,10 @@ export default function ReportsPage() {
                     <p className="text-slate-500 mt-1">Generate compliance and audit reports</p>
                 </div>
             </div>
+
+            {generateMutation.isError && (
+                <InlineError message="Report generation failed. Ensure the governance service is running." onRetry={() => generateMutation.reset()} />
+            )}
 
             {/* Config */}
             <div className="card flex flex-wrap gap-4 items-end">
@@ -40,15 +65,15 @@ export default function ReportsPage() {
                 </div>
                 <div>
                     <label className="block text-xs text-slate-400 mb-1">Format</label>
-                    <select className="input">
-                        <option>PDF</option>
-                        <option>CSV</option>
-                        <option>JSON</option>
+                    <select className="input" value={format} onChange={e => setFormat(e.target.value)}>
+                        <option value="pdf">PDF</option>
+                        <option value="csv">CSV</option>
+                        <option value="json">JSON</option>
                     </select>
                 </div>
                 <button onClick={handleGenerate} disabled={generating} className="btn-primary flex items-center gap-2">
                     {generating ? (
-                        <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Generating...</>
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
                     ) : (
                         <><Download className="w-4 h-4" /> Generate Report</>
                     )}
@@ -82,10 +107,10 @@ export default function ReportsPage() {
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         {[
-                            { label: 'Total Events', value: '12,847' },
-                            { label: 'Blocked', value: '234' },
-                            { label: 'Redacted', value: '1,567' },
-                            { label: 'Compliance Rate', value: '98.2%' },
+                            { label: 'Total Events', value: 'Live data' },
+                            { label: 'Blocked', value: 'Live data' },
+                            { label: 'Redacted', value: 'Live data' },
+                            { label: 'Compliance Rate', value: 'Live data' },
                         ].map(s => (
                             <div key={s.label} className="bg-slate-800/50 rounded-lg p-4 text-center">
                                 <p className="text-xs text-slate-500">{s.label}</p>
@@ -94,7 +119,7 @@ export default function ReportsPage() {
                         ))}
                     </div>
                     <p className="text-sm text-slate-500 text-center py-4">
-                        Full report will be generated in the selected format with detailed breakdowns.
+                        Click "Generate Report" to download a full report with live data from the backend.
                     </p>
                 </div>
             </div>

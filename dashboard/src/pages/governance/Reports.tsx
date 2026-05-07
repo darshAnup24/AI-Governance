@@ -7,6 +7,9 @@ import {
   RadialBarChart, RadialBar, ResponsiveContainer,
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
+import { useComplianceChecks, useComplianceFrameworks } from '../../lib/hooks'
+import { SkeletonCard } from '../../components/Skeletons'
+import { InlineError } from '../../components/ErrorBoundary'
 import govApi from '../../lib/govApi'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -22,65 +25,7 @@ interface Framework {
   color: string
 }
 
-// ── Mock Data ──────────────────────────────────────────────────────────────────
-
-const FRAMEWORKS: Framework[] = [
-  {
-    id: 'GDPR', name: 'General Data Protection Regulation', shortName: 'GDPR',
-    score: 81, status: 'COMPLIANT', lastAudit: '2026-04-01', color: '#22c55e',
-    articles: [
-      { id: 'Art.5', name: 'Data minimisation', status: 'pass' },
-      { id: 'Art.13', name: 'Transparency', status: 'pass' },
-      { id: 'Art.17', name: 'Right to erasure', status: 'partial' },
-      { id: 'Art.25', name: 'Privacy by design', status: 'pass' },
-      { id: 'Art.30', name: 'Records of processing', status: 'pass' },
-      { id: 'Art.32', name: 'Security of processing', status: 'pass' },
-      { id: 'Art.33', name: 'Breach notification', status: 'partial' },
-      { id: 'Art.35', name: 'DPIA for high-risk', status: 'fail' },
-    ],
-  },
-  {
-    id: 'HIPAA', name: 'Health Insurance Portability and Accountability Act', shortName: 'HIPAA',
-    score: 73, status: 'PARTIAL', lastAudit: '2026-03-15', color: '#eab308',
-    articles: [
-      { id: '§164.308', name: 'Administrative safeguards', status: 'pass' },
-      { id: '§164.310', name: 'Physical safeguards', status: 'pass' },
-      { id: '§164.312', name: 'Technical safeguards', status: 'partial' },
-      { id: '§164.314', name: 'Org requirements', status: 'partial' },
-      { id: '§164.316', name: 'Policies & procedures', status: 'fail' },
-    ],
-  },
-  {
-    id: 'EU_AI_ACT', name: 'EU AI Act', shortName: 'EU AI Act',
-    score: 68, status: 'PARTIAL', lastAudit: '2026-04-10', color: '#3b82f6',
-    articles: [
-      { id: 'Art.9', name: 'Risk management system', status: 'pass' },
-      { id: 'Art.10', name: 'Data governance', status: 'partial' },
-      { id: 'Art.11', name: 'Technical documentation', status: 'partial' },
-      { id: 'Art.12', name: 'Record-keeping', status: 'pass' },
-      { id: 'Art.13', name: 'Transparency & user info', status: 'pass' },
-      { id: 'Art.14', name: 'Human oversight', status: 'fail' },
-      { id: 'Art.15', name: 'Accuracy/robustness', status: 'partial' },
-    ],
-  },
-  {
-    id: 'RBI', name: 'Reserve Bank of India — Data Localisation', shortName: 'RBI',
-    score: 54, status: 'NON_COMPLIANT', lastAudit: '2026-02-20', color: '#ef4444',
-    articles: [
-      { id: 'Circular-1', name: 'Payment data localisation', status: 'fail' },
-      { id: 'Circular-2', name: 'Audit trail requirements', status: 'partial' },
-      { id: 'Circular-3', name: 'Reporting to RBI', status: 'fail' },
-    ],
-  },
-]
-
-const COMPLIANCE_TREND = Array.from({ length: 12 }, (_, i) => ({
-  month: new Date(2025, i + 4, 1).toLocaleString('default', { month: 'short' }),
-  GDPR: Math.min(100, 60 + i * 2 + Math.floor(Math.random() * 5)),
-  HIPAA: Math.min(100, 55 + i * 1.5 + Math.floor(Math.random() * 6)),
-  EU_AI_ACT: Math.min(100, 45 + i * 2.5 + Math.floor(Math.random() * 7)),
-  RBI: Math.min(100, 30 + i * 2 + Math.floor(Math.random() * 4)),
-}))
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 const STATUS_ICON = {
   COMPLIANT: <CheckCircle2 className="w-5 h-5 text-emerald-400" />,
@@ -97,6 +42,65 @@ const ARTICLE_ICON = {
   partial: <AlertCircle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />,
   fail: <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />,
 }
+
+const FRAMEWORK_META: Record<string, { shortName: string; color: string; articles: { id: string; name: string; status: 'pass' | 'fail' | 'partial' }[] }> = {
+  EU_AI_ACT: {
+    shortName: 'EU AI Act',
+    color: '#3b82f6',
+    articles: [
+      { id: 'Art.9', name: 'Risk management system', status: 'pass' },
+      { id: 'Art.10', name: 'Data governance', status: 'partial' },
+      { id: 'Art.11', name: 'Technical documentation', status: 'partial' },
+      { id: 'Art.12', name: 'Record-keeping', status: 'pass' },
+      { id: 'Art.13', name: 'Transparency & user info', status: 'pass' },
+      { id: 'Art.14', name: 'Human oversight', status: 'fail' },
+      { id: 'Art.15', name: 'Accuracy/robustness', status: 'partial' },
+    ],
+  },
+  ISO_42001: {
+    shortName: 'ISO 42001',
+    color: '#22c55e',
+    articles: [
+      { id: '4.1', name: 'AI management system policy', status: 'pass' },
+      { id: '4.2', name: 'Risk & opportunity identification', status: 'pass' },
+      { id: '4.3', name: 'Competence requirements', status: 'partial' },
+      { id: '4.4', name: 'Documented AI lifecycle', status: 'pass' },
+      { id: '4.5', name: 'Third-party AI management', status: 'partial' },
+      { id: '4.6', name: 'Continuous monitoring', status: 'fail' },
+    ],
+  },
+  NIST_AI_RMF: {
+    shortName: 'NIST AI RMF',
+    color: '#eab308',
+    articles: [
+      { id: 'GOV-1', name: 'Governance structures', status: 'pass' },
+      { id: 'MAP-1', name: 'Risk mapping', status: 'partial' },
+      { id: 'MAP-2', name: 'Stakeholder engagement', status: 'pass' },
+      { id: 'MEA-1', name: 'Measurement plan', status: 'partial' },
+      { id: 'MAN-1', name: 'Bias & fairness testing', status: 'fail' },
+      { id: 'MAN-2', name: 'Transparency in decisions', status: 'pass' },
+    ],
+  },
+  ISO_27001: {
+    shortName: 'ISO 27001',
+    color: '#ef4444',
+    articles: [
+      { id: 'A.5', name: 'Information security policies', status: 'pass' },
+      { id: 'A.6', name: 'Organization of security', status: 'partial' },
+      { id: 'A.7', name: 'Human resource security', status: 'fail' },
+      { id: 'A.8', name: 'Asset management', status: 'partial' },
+      { id: 'A.9', name: 'Access controls', status: 'pass' },
+    ],
+  },
+}
+
+const COMPLIANCE_TREND = Array.from({ length: 12 }, (_, i) => ({
+  month: new Date(2025, i + 4, 1).toLocaleString('default', { month: 'short' }),
+  GDPR: Math.min(100, 60 + i * 2 + Math.floor(Math.random() * 5)),
+  HIPAA: Math.min(100, 55 + i * 1.5 + Math.floor(Math.random() * 6)),
+  EU_AI_ACT: Math.min(100, 45 + i * 2.5 + Math.floor(Math.random() * 7)),
+  RBI: Math.min(100, 30 + i * 2 + Math.floor(Math.random() * 4)),
+}))
 
 // ── Score Gauge ────────────────────────────────────────────────────────────────
 
@@ -237,27 +241,59 @@ function ReportPreview({ fw, onClose }: { fw: Framework; onClose: () => void }) 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function ComplianceReports() {
+  const fwQ = useComplianceFrameworks()
+  const checksQ = useComplianceChecks()
   const [selected, setSelected] = useState<Framework | null>(null)
   const [generating, setGenerating] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
+  const checks = checksQ.data || []
+
+  // Build framework data from API checks + static meta
+  const frameworks: Framework[] = (fwQ.data || []).map((fw: any) => {
+    const check = checks.find((c: any) => c.framework === fw.id)
+    const meta = FRAMEWORK_META[fw.id] || { shortName: fw.name, color: '#6366f1', articles: [] }
+    return {
+      id: fw.id,
+      name: fw.name,
+      shortName: meta.shortName,
+      score: check?.score ?? 0,
+      status: (check?.status === 'COMPLIANT' ? 'COMPLIANT' : check?.status === 'PARTIALLY_COMPLIANT' ? 'PARTIAL' : check?.status === 'NON_COMPLIANT' ? 'NON_COMPLIANT' : 'PARTIAL') as any,
+      lastAudit: check?.updatedAt ? new Date(check.updatedAt).toISOString().split('T')[0] : 'Never',
+      articles: meta.articles,
+      color: meta.color,
+    }
+  })
+
   const handleGenerate = async (fwId: string) => {
     setGenerating(fwId)
     try {
-      await govApi.post('/api/reports/generate', { format: 'pdf', framework: fwId }, { responseType: 'blob' })
+      const r = await govApi.post('/api/reports/generate', { format: 'pdf', framework: fwId }, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([r.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `shieldai-report-${fwId}-${Date.now()}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
     } catch {
-      // Governance offline — show preview instead
-      const fw = FRAMEWORKS.find(f => f.id === fwId)
+      const fw = frameworks.find(f => f.id === fwId)
       if (fw) setSelected(fw)
     }
     setGenerating(null)
   }
 
-  const overallScore = Math.round(FRAMEWORKS.reduce((a, f) => a + f.score, 0) / FRAMEWORKS.length)
+  const overallScore = frameworks.length > 0
+    ? Math.round(frameworks.reduce((a, f) => a + f.score, 0) / frameworks.length)
+    : 0
 
   const TREND_COLORS: Record<string, string> = {
     GDPR: '#22c55e', HIPAA: '#eab308', EU_AI_ACT: '#3b82f6', RBI: '#ef4444',
   }
+
+  const isLoading = fwQ.isPending || checksQ.isPending
+  const isError = fwQ.isError || checksQ.isError
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -267,10 +303,12 @@ export default function ComplianceReports() {
           <h1 className="text-2xl font-bold text-slate-100">Compliance Reports</h1>
           <p className="text-slate-500 text-sm mt-0.5">GDPR · HIPAA · EU AI Act · RBI — on-demand report generation</p>
         </div>
-        <button className="btn-secondary flex items-center gap-2 text-sm">
+        <button onClick={() => { fwQ.refetch(); checksQ.refetch() }} className="btn-secondary flex items-center gap-2 text-sm">
           <RefreshCw className="w-3.5 h-3.5" /> Refresh Scores
         </button>
       </div>
+
+      {isError && <InlineError message="Failed to load compliance data." onRetry={() => { fwQ.refetch(); checksQ.refetch() }} />}
 
       {/* Overall score banner */}
       <div className="card border border-brand-500/20 bg-gradient-to-r from-brand-500/5 to-cyan-500/5">
@@ -282,14 +320,14 @@ export default function ComplianceReports() {
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Overall Compliance Score</p>
             <p className="text-3xl font-bold text-brand-400 sm:hidden">{overallScore}%</p>
             <p className="text-sm text-slate-400 mt-1">
-              Average across {FRAMEWORKS.length} active regulatory frameworks.
+              Average across {frameworks.length} active regulatory frameworks.
               {overallScore >= 80 ? ' Organisation is broadly compliant.' : overallScore >= 60 ? ' Some gaps require attention.' : ' Significant compliance gaps detected.'}
             </p>
             <div className="flex gap-4 mt-3">
               {[
-                { label: 'Compliant', count: FRAMEWORKS.filter(f => f.status === 'COMPLIANT').length, cls: 'text-emerald-400' },
-                { label: 'Partial', count: FRAMEWORKS.filter(f => f.status === 'PARTIAL').length, cls: 'text-yellow-400' },
-                { label: 'Non-Compliant', count: FRAMEWORKS.filter(f => f.status === 'NON_COMPLIANT').length, cls: 'text-red-400' },
+                { label: 'Compliant', count: frameworks.filter(f => f.status === 'COMPLIANT').length, cls: 'text-emerald-400' },
+                { label: 'Partial', count: frameworks.filter(f => f.status === 'PARTIAL').length, cls: 'text-yellow-400' },
+                { label: 'Non-Compliant', count: frameworks.filter(f => f.status === 'NON_COMPLIANT').length, cls: 'text-red-400' },
               ].map(s => (
                 <div key={s.label} className="text-center">
                   <p className={`text-xl font-bold ${s.cls}`}>{s.count}</p>
@@ -302,75 +340,81 @@ export default function ComplianceReports() {
       </div>
 
       {/* Framework cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {FRAMEWORKS.map(fw => (
-          <div key={fw.id} className="card border border-slate-800 hover:border-slate-700 transition-colors">
-            {/* Card header */}
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  {STATUS_ICON[fw.status]}
-                  <h2 className="text-sm font-semibold text-slate-200">{fw.shortName}</h2>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5 truncate">{fw.name}</p>
-              </div>
-              <ScoreGauge score={fw.score} color={fw.color} size={80} />
-            </div>
-
-            {/* Progress bar */}
-            <div className="w-full bg-slate-800 rounded-full h-1.5 mb-3">
-              <div
-                className="h-1.5 rounded-full transition-all duration-700"
-                style={{ width: `${fw.score}%`, background: fw.color }}
-              />
-            </div>
-
-            {/* Quick article list (collapsed) */}
-            <button
-              onClick={() => setExpandedId(expandedId === fw.id ? null : fw.id)}
-              className="w-full text-left text-xs text-slate-500 hover:text-slate-400 flex items-center gap-1 mb-3 transition-colors"
-            >
-              <BarChart3 className="w-3 h-3" />
-              {fw.articles.length} articles
-              <span className="text-emerald-500">, {fw.articles.filter(a => a.status === 'pass').length} passed</span>
-              <span className="text-red-500">, {fw.articles.filter(a => a.status === 'fail').length} failed</span>
-              <ChevronRight className={`w-3 h-3 ml-auto transition-transform ${expandedId === fw.id ? 'rotate-90' : ''}`} />
-            </button>
-
-            {expandedId === fw.id && (
-              <div className="space-y-1 mb-3 border-t border-slate-800 pt-3">
-                {fw.articles.map(a => (
-                  <div key={a.id} className="flex items-center gap-2 text-xs">
-                    {ARTICLE_ICON[a.status]}
-                    <span className="text-slate-500 font-mono w-16 flex-shrink-0">{a.id}</span>
-                    <span className="text-slate-400 flex-1 truncate">{a.name}</span>
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1,2,3,4].map(i => <SkeletonCard key={i} />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {frameworks.map(fw => (
+            <div key={fw.id} className="card border border-slate-800 hover:border-slate-700 transition-colors">
+              {/* Card header */}
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    {STATUS_ICON[fw.status]}
+                    <h2 className="text-sm font-semibold text-slate-200">{fw.shortName}</h2>
                   </div>
-                ))}
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">{fw.name}</p>
+                </div>
+                <ScoreGauge score={fw.score} color={fw.color} size={80} />
               </div>
-            )}
 
-            {/* Actions */}
-            <div className="flex gap-2 border-t border-slate-800 pt-3">
+              {/* Progress bar */}
+              <div className="w-full bg-slate-800 rounded-full h-1.5 mb-3">
+                <div
+                  className="h-1.5 rounded-full transition-all duration-700"
+                  style={{ width: `${fw.score}%`, background: fw.color }}
+                />
+              </div>
+
+              {/* Quick article list (collapsed) */}
               <button
-                onClick={() => setSelected(fw)}
-                className="btn-secondary text-xs py-1.5 flex-1 flex items-center justify-center gap-1.5"
+                onClick={() => setExpandedId(expandedId === fw.id ? null : fw.id)}
+                className="w-full text-left text-xs text-slate-500 hover:text-slate-400 flex items-center gap-1 mb-3 transition-colors"
               >
-                <FileText className="w-3.5 h-3.5" /> Preview
+                <BarChart3 className="w-3 h-3" />
+                {fw.articles.length} articles
+                <span className="text-emerald-500">, {fw.articles.filter(a => a.status === 'pass').length} passed</span>
+                <span className="text-red-500">, {fw.articles.filter(a => a.status === 'fail').length} failed</span>
+                <ChevronRight className={`w-3 h-3 ml-auto transition-transform ${expandedId === fw.id ? 'rotate-90' : ''}`} />
               </button>
-              <button
-                onClick={() => handleGenerate(fw.id)}
-                disabled={generating === fw.id}
-                className="btn-primary text-xs py-1.5 flex-1 flex items-center justify-center gap-1.5 disabled:opacity-60"
-              >
-                {generating === fw.id
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <Download className="w-3.5 h-3.5" />}
-                {generating === fw.id ? 'Generating…' : 'Download PDF'}
-              </button>
+
+              {expandedId === fw.id && (
+                <div className="space-y-1 mb-3 border-t border-slate-800 pt-3">
+                  {fw.articles.map(a => (
+                    <div key={a.id} className="flex items-center gap-2 text-xs">
+                      {ARTICLE_ICON[a.status]}
+                      <span className="text-slate-500 font-mono w-16 flex-shrink-0">{a.id}</span>
+                      <span className="text-slate-400 flex-1 truncate">{a.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2 border-t border-slate-800 pt-3">
+                <button
+                  onClick={() => setSelected(fw)}
+                  className="btn-secondary text-xs py-1.5 flex-1 flex items-center justify-center gap-1.5"
+                >
+                  <FileText className="w-3.5 h-3.5" /> Preview
+                </button>
+                <button
+                  onClick={() => handleGenerate(fw.id)}
+                  disabled={generating === fw.id}
+                  className="btn-primary text-xs py-1.5 flex-1 flex items-center justify-center gap-1.5 disabled:opacity-60"
+                >
+                  {generating === fw.id
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Download className="w-3.5 h-3.5" />}
+                  {generating === fw.id ? 'Generating…' : 'Download PDF'}
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Compliance trend chart */}
       <div className="card">

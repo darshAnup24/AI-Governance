@@ -11,6 +11,7 @@ import PoliciesPage from './pages/PoliciesPage'
 import ShadowAIPage from './pages/ShadowAIPage'
 import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
+import LiveDemoPage from './pages/LiveDemoPage'
 
 // ─── ShieldAI Governance Pages ────────────────────────────────────────────────
 import Login from './pages/Login'
@@ -49,6 +50,7 @@ export default function App() {
                         <Route path="/incidents" element={<Wrap><IncidentsPage /></Wrap>} />
                         <Route path="/policies" element={<Wrap><PoliciesPage /></Wrap>} />
                         <Route path="/shadow-ai" element={<Wrap><ShadowAIPage /></Wrap>} />
+                        <Route path="/live-demo" element={<Wrap><LiveDemoPage /></Wrap>} />
                         <Route path="/reports" element={<Wrap><ReportsPage /></Wrap>} />
                         <Route path="/settings" element={<Wrap><SettingsPage /></Wrap>} />
 

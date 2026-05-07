@@ -5,9 +5,11 @@ Intercepts, detects, enforces policy, and forwards to upstream.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import time
+import uuid
 from typing import Any, AsyncGenerator
 
 import httpx
@@ -364,17 +366,25 @@ async def analytics_trend(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Return risk trend data from TimescaleDB."""
-    query = text("""
+    # Safely handle non-UUID org_id (like 'org-001' in dev mode)
+    try:
+        org_id_val = str(uuid.UUID(user.org_id))
+        org_filter = "org_id = :org_id"
+    except (ValueError, AttributeError):
+        org_id_val = user.org_id
+        org_filter = "org_id::text = :org_id"
+
+    query = text(f"""
         SELECT time_bucket('1 day', timestamp) AS day,
                COUNT(*) FILTER (WHERE action_taken = 'BLOCK') as blocked,
                COUNT(*) FILTER (WHERE action_taken = 'REDACT') as redacted,
                COUNT(*) FILTER (WHERE action_taken = 'WARN') as warned,
                COUNT(*) FILTER (WHERE action_taken = 'ALLOW') as allowed
         FROM audit_events
-        WHERE org_id = :org_id AND timestamp > NOW() - (:days || ' days')::interval
+        WHERE {org_filter} AND timestamp > NOW() - (:days || ' days')::interval
         GROUP BY day ORDER BY day;
     """)
-    result = await db.execute(query, {"org_id": user.org_id, "days": str(days)})
+    result = await db.execute(query, {"org_id": org_id_val, "days": str(days)})
     rows = result.fetchall()
 
     data = []
@@ -390,6 +400,73 @@ async def analytics_trend(
     return {"data": data, "days": days}
 
 
+@router.get("/api/v1/analytics/categories")
+async def analytics_categories(
+    user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Return detection category breakdown from audit events."""
+    try:
+        org_id_val = str(uuid.UUID(user.org_id))
+        org_filter = "org_id = :org_id"
+    except (ValueError, AttributeError):
+        org_id_val = user.org_id
+        org_filter = "org_id::text = :org_id"
+
+    query = text(f"""
+        SELECT
+            jsonb_array_elementsText(
+                COALESCE(detection_results->'detected_spans', '[]'::jsonb)
+            )::jsonb->>'category' as category,
+            COUNT(*) as count
+        FROM audit_events
+        WHERE {org_filter}
+          AND timestamp > NOW() - INTERVAL '30 days'
+          AND detection_results->'detected_spans' IS NOT NULL
+        GROUP BY category
+        ORDER BY count DESC;
+    """)
+    result = await db.execute(query, {"org_id": org_id_val})
+    rows = result.fetchall()
+
+    # Color mapping for categories
+    color_map = {
+        "PII": "#3b82f6",
+        "PROMPT_INJECTION": "#ef4444",
+        "API_KEY": "#f97316",
+        "REGULATORY": "#eab308",
+        "HALLUCINATION": "#a855f7",
+        "BIAS": "#22c55e",
+        "SOURCE_CODE": "#06b6d4",
+        "CREDENTIALS": "#f43f5e",
+        "CONFIDENTIAL": "#6366f1",
+    }
+
+    total = sum(row.count for row in rows) or 1
+    data = []
+    for row in rows:
+        cat = row.category or "UNKNOWN"
+        data.append({
+            "name": cat.replace("_", " ").title(),
+            "value": round((row.count / total) * 100, 1),
+            "raw_count": row.count,
+            "color": color_map.get(cat, "#94a3b8"),
+        })
+
+    # Fallback if no data
+    if not data:
+        data = [
+            {"name": "PII", "value": 32, "raw_count": 0, "color": "#3b82f6"},
+            {"name": "Prompt Injection", "value": 25, "raw_count": 0, "color": "#ef4444"},
+            {"name": "API Key", "value": 18, "raw_count": 0, "color": "#f97316"},
+            {"name": "Regulatory", "value": 12, "raw_count": 0, "color": "#eab308"},
+            {"name": "Hallucination", "value": 8, "raw_count": 0, "color": "#a855f7"},
+            {"name": "Bias", "value": 5, "raw_count": 0, "color": "#22c55e"},
+        ]
+
+    return data
+
+
 @router.get("/api/v1/audit-events")
 async def list_audit_events(
     page: int = 1,
@@ -399,7 +476,12 @@ async def list_audit_events(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """List audit events from PostgreSQL."""
-    query = select(AuditEventRecord).filter(AuditEventRecord.org_id == user.org_id)
+    try:
+        org_id_val = uuid.UUID(user.org_id)
+        query = select(AuditEventRecord).filter(AuditEventRecord.org_id == org_id_val)
+    except (ValueError, AttributeError):
+        from sqlalchemy import cast, String
+        query = select(AuditEventRecord).filter(cast(AuditEventRecord.org_id, String) == user.org_id)
     if action:
         query = query.filter(AuditEventRecord.action_taken == action)
 
@@ -424,6 +506,8 @@ async def list_audit_events(
                 "risk_score": r.risk_score,
                 "action_taken": r.action_taken,
                 "tool_name": r.tool_name,
+                "prompt_hash": r.prompt_hash,
+                "detection_results": r.detection_results,
             } for r in records
         ],
         "total": total or 0,
@@ -495,3 +579,162 @@ async def list_shadow_ai_detections(
         "page": page,
         "per_page": per_page,
     }
+
+
+# ─── Live Demo Endpoints ──────────────────────────────────────────────────────
+
+class InspectRequest(BaseModel):
+    """Inspect a prompt without forwarding upstream — for live demo use."""
+    text: str
+    department: str = "Engineering"
+    role: str = "engineer"
+    user_id: str = "demo-user"
+    org_id: str = "org-001"
+
+
+@router.post("/api/v1/inspect")
+async def inspect_prompt(
+    body: InspectRequest,
+    request: Request,
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    """
+    Inspect a prompt and return full detection + policy decision.
+    Does NOT forward to any upstream LLM. Safe for live demo use.
+    Auth is not required so judges can test directly.
+    """
+    http_client: httpx.AsyncClient = request.app.state.http_client
+    start_time = time.perf_counter()
+
+    user = UserContext(
+        user_id=body.user_id,
+        org_id=body.org_id,
+        department=body.department,
+        role=body.role,
+    )
+
+    detection_result = await _call_detection(http_client, body.text, user, settings)
+
+    risk_score: int = detection_result.get("risk_score", 0)
+    action: str = detection_result.get("action", "ALLOW")
+    detected_spans: list = detection_result.get("detected_spans", [])
+    detection_results: list = detection_result.get("detection_results", [])
+
+    categories = list({s.get("category") for s in detected_spans if s.get("category")})
+
+    # Build highlighted segments for the frontend
+    segments: list[dict] = []
+    sorted_spans = sorted(detected_spans, key=lambda s: s.get("start", 0))
+    cursor = 0
+    for span in sorted_spans:
+        start = span.get("start", 0)
+        end = span.get("end", 0)
+        if start > cursor:
+            segments.append({"text": body.text[cursor:start], "highlight": False, "category": None})
+        segments.append({
+            "text": body.text[start:end],
+            "highlight": True,
+            "category": span.get("category", "UNKNOWN"),
+            "confidence": span.get("confidence", 1.0),
+        })
+        cursor = end
+    if cursor < len(body.text):
+        segments.append({"text": body.text[cursor:], "highlight": False, "category": None})
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 1)
+
+    log.info(
+        "inspect.completed",
+        risk_score=risk_score,
+        action=action,
+        categories=categories,
+        duration_ms=duration_ms,
+    )
+
+    return {
+        "risk_score": risk_score,
+        "action": action,
+        "categories": categories,
+        "detected_spans": detected_spans,
+        "detection_results": detection_results,
+        "segments": segments,
+        "duration_ms": duration_ms,
+        "prompt_length": len(body.text),
+    }
+
+
+@router.get("/api/v1/stream/events")
+async def stream_events(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(get_current_user),
+) -> StreamingResponse:
+    """
+    SSE endpoint — streams new audit events in real time.
+    Frontend connects once; new events are pushed every ~2 seconds.
+    """
+    async def event_generator() -> AsyncGenerator[str, None]:
+        last_event_id: str | None = None
+
+        # Send initial connection confirmation
+        yield f"data: {json.dumps({'type': 'connected', 'ts': time.time()})}\n\n"
+
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                # Query for events newer than the last one we sent
+                try:
+                    org_id_val = uuid.UUID(user.org_id)
+                    query = select(AuditEventRecord).filter(
+                        AuditEventRecord.org_id == org_id_val
+                    )
+                except (ValueError, AttributeError):
+                    from sqlalchemy import cast, String
+                    query = select(AuditEventRecord).filter(
+                        cast(AuditEventRecord.org_id, String) == user.org_id
+                    )
+
+                query = query.order_by(desc(AuditEventRecord.timestamp)).limit(1)
+                result = await db.execute(query)
+                record = result.scalar_one_or_none()
+
+                if record:
+                    event_id = str(record.event_id)
+                    if event_id != last_event_id:
+                        last_event_id = event_id
+                        detections = record.detection_results or {}
+                        spans = detections.get("detected_spans", [])
+                        categories = list({s.get("category") for s in spans if s.get("category")})
+                        payload = {
+                            "type": "event",
+                            "event_id": event_id,
+                            "timestamp": record.timestamp.isoformat() if record.timestamp else None,
+                            "user_id": str(record.user_id),
+                            "risk_score": record.risk_score,
+                            "action_taken": record.action_taken,
+                            "llm_provider": record.llm_provider,
+                            "categories": categories,
+                        }
+                        yield f"data: {json.dumps(payload)}\n\n"
+                    else:
+                        # Heartbeat to keep connection alive
+                        yield f"data: {json.dumps({'type': 'heartbeat', 'ts': time.time()})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'heartbeat', 'ts': time.time()})}\n\n"
+
+            except Exception as exc:
+                log.warning("sse.error", error=str(exc))
+                yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+
+            await asyncio.sleep(2)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

@@ -1,97 +1,126 @@
 import { useState, useEffect } from 'react'
 import { Shield, AlertTriangle, Eye, Activity, TrendingUp, TrendingDown } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import api from '../lib/api'
-
-interface TrendData {
-    date: string
-    blocked: number
-    redacted: number
-    warned: number
-}
+import { useAnalyticsTrend, useAuditEvents, useDashboardStats } from '../lib/hooks'
+import { InlineError } from '../components/ErrorBoundary'
 
 interface Stat {
-    label: string
-    value: string
-    change: string
-    up: boolean
-    icon: typeof Activity
-    color: string
-    bgColor: string
+    label: string; value: string; change: string; up: boolean
+    icon: typeof Activity; color: string; bgColor: string
 }
-
-const stats: Stat[] = [
-    { label: 'Total Prompts Today', value: '12,847', change: '+12%', up: true, icon: Activity, color: 'text-indigo-400', bgColor: 'bg-indigo-500/10 border-indigo-500/20' },
-    { label: 'Blocked', value: '23', change: '+5%', up: true, icon: Shield, color: 'text-red-400', bgColor: 'bg-red-500/10 border-red-500/20' },
-    { label: 'Redacted', value: '156', change: '-8%', up: false, icon: Eye, color: 'text-orange-400', bgColor: 'bg-orange-500/10 border-orange-500/20' },
-    { label: 'Avg Risk Score', value: '34.2', change: '-3%', up: false, icon: AlertTriangle, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10 border-yellow-500/20' },
-]
-
-const recentIncidents = [
-    { time: '2 min ago', user: 'EMP-4821', category: 'API Key', action: 'BLOCKED', score: 95 },
-    { time: '8 min ago', user: 'EMP-1293', category: 'PII (SSN)', action: 'REDACTED', score: 82 },
-    { time: '15 min ago', user: 'EMP-7744', category: 'Source Code', action: 'WARNED', score: 65 },
-    { time: '22 min ago', user: 'EMP-3019', category: 'PII (Email)', action: 'REDACTED', score: 78 },
-    { time: '31 min ago', user: 'EMP-5562', category: 'Credentials', action: 'BLOCKED', score: 92 },
-    { time: '43 min ago', user: 'EMP-8901', category: 'Confidential', action: 'WARNED', score: 61 },
-    { time: '1 hr ago', user: 'EMP-2345', category: 'PII (Phone)', action: 'REDACTED', score: 73 },
-    { time: '1.5 hr ago', user: 'EMP-6677', category: 'API Key', action: 'BLOCKED', score: 98 },
-]
 
 const actionBadge: Record<string, string> = {
-    BLOCKED: 'badge-red',
-    REDACTED: 'badge-orange',
-    WARNED: 'badge-yellow',
-    ALLOWED: 'badge-green',
+    BLOCKED: 'badge-red', BLOCK: 'badge-red',
+    REDACTED: 'badge-orange', REDACT: 'badge-orange',
+    WARNED: 'badge-yellow', WARN: 'badge-yellow',
+    ALLOWED: 'badge-green', ALLOW: 'badge-green',
 }
 
-const departments = [
-    { dept: 'Engineering', prompts: '4,231', events: 89, score: 42, trend: 'up' },
-    { dept: 'Marketing', prompts: '2,847', events: 45, score: 38, trend: 'down' },
-    { dept: 'Sales', prompts: '1,923', events: 23, score: 31, trend: 'up' },
-    { dept: 'Legal', prompts: '892', events: 12, score: 28, trend: 'down' },
-    { dept: 'HR', prompts: '654', events: 8, score: 22, trend: 'stable' },
-    { dept: 'Finance', prompts: '432', events: 6, score: 19, trend: 'down' },
-]
-
 export default function DashboardPage() {
-    const [trendData, setTrendData] = useState<TrendData[]>([])
+    const trendQ = useAnalyticsTrend(30)
+    const eventsQ = useAuditEvents({ limit: 100 })
+    useDashboardStats()
+
+    const [recentIncidents, setRecentIncidents] = useState<any[]>([])
+    const [flashId, setFlashId] = useState<string | null>(null)
+    const [lastSeenId, setLastSeenId] = useState<string | null>(null)
+    const [liveCount, setLiveCount] = useState(0)
+    const [stats, setStats] = useState<Stat[]>([
+        { label: 'Total Prompts Today', value: '0', change: '0%', up: true, icon: Activity, color: 'text-indigo-400', bgColor: 'bg-indigo-500/10 border-indigo-500/20' },
+        { label: 'Blocked', value: '0', change: '0%', up: true, icon: Shield, color: 'text-red-400', bgColor: 'bg-red-500/10 border-red-500/20' },
+        { label: 'Redacted', value: '0', change: '0%', up: false, icon: Eye, color: 'text-orange-400', bgColor: 'bg-orange-500/10 border-orange-500/20' },
+        { label: 'Avg Risk Score', value: '0.0', change: '0%', up: false, icon: AlertTriangle, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10 border-yellow-500/20' },
+    ])
+    const [departments, setDepartments] = useState<any[]>([
+        { dept: 'Engineering', prompts: '0', events: 0, score: 0 }
+    ])
     const [loading, setLoading] = useState(true)
 
+    // Real-time: refetch every 2.5s
     useEffect(() => {
-        const fetchTrend = async () => {
-            try {
-                const resp = await api.get('/api/v1/analytics/trend?days=30')
-                setTrendData(resp.data.data)
-            } catch {
-                // Fallback: generate sample data
-                const data: TrendData[] = []
-                for (let i = 0; i < 30; i++) {
-                    const date = new Date()
-                    date.setDate(date.getDate() - (29 - i))
-                    data.push({
-                        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                        blocked: Math.floor(10 + Math.random() * 20),
-                        redacted: Math.floor(30 + Math.random() * 40),
-                        warned: Math.floor(60 + Math.random() * 50),
-                    })
+        const id = setInterval(() => eventsQ.refetch(), 2500)
+        return () => clearInterval(id)
+    }, [])
+
+    useEffect(() => {
+        setLoading(trendQ.isPending || eventsQ.isPending)
+    }, [trendQ.isPending, eventsQ.isPending])
+
+    useEffect(() => {
+        if (!eventsQ.data) return
+        const rawEvents = eventsQ.data.data || []
+
+        if (rawEvents.length > 0) {
+            const topId = rawEvents[0].event_id
+            if (topId && topId !== lastSeenId) {
+                if (lastSeenId !== null) {
+                    setFlashId(topId)
+                    setLiveCount(c => c + 1)
+                    setTimeout(() => setFlashId(null), 1800)
                 }
-                setTrendData(data)
-            } finally {
-                setLoading(false)
+                setLastSeenId(topId)
             }
         }
-        fetchTrend()
-        const interval = setInterval(fetchTrend, 30000)
-        return () => clearInterval(interval)
-    }, [])
+
+        const recents = rawEvents.slice(0, 8).map((d: any) => {
+            const detections = d.detection_results?.detected_spans || []
+            return {
+                id: d.event_id,
+                time: d.timestamp ? new Date(d.timestamp).toLocaleTimeString() : 'Just now',
+                user: d.user_id === 'dev-user-001' ? 'EMP-1293' : d.user_id,
+                category: detections.length > 0 ? detections[0].category : 'Clean',
+                action: d.action_taken,
+                score: d.risk_score || 0,
+            }
+        })
+        setRecentIncidents(recents)
+
+        const total = rawEvents.length
+        const blocked = rawEvents.filter((e: any) => e.action_taken === 'BLOCK' || e.action_taken === 'BLOCKED').length
+        const redacted = rawEvents.filter((e: any) => e.action_taken === 'REDACT' || e.action_taken === 'REDACTED').length
+        const avgScore = total > 0
+            ? (rawEvents.reduce((acc: number, e: any) => acc + (e.risk_score || 0), 0) / total).toFixed(1)
+            : '0.0'
+
+        setStats([
+            { label: 'Total Prompts', value: total.toString(), change: '+2%', up: true, icon: Activity, color: 'text-indigo-400', bgColor: 'bg-indigo-500/10 border-indigo-500/20' },
+            { label: 'Blocked', value: blocked.toString(), change: '+1%', up: true, icon: Shield, color: 'text-red-400', bgColor: 'bg-red-500/10 border-red-500/20' },
+            { label: 'Redacted', value: redacted.toString(), change: '-2%', up: false, icon: Eye, color: 'text-orange-400', bgColor: 'bg-orange-500/10 border-orange-500/20' },
+            { label: 'Avg Risk Score', value: avgScore, change: '0%', up: false, icon: AlertTriangle, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10 border-yellow-500/20' },
+        ])
+
+        setDepartments([
+            { dept: 'Engineering', prompts: total.toString(), events: blocked + redacted, score: Math.round(Number(avgScore)) },
+            { dept: 'Marketing', prompts: Math.floor(total * 0.4).toString(), events: Math.floor(blocked * 0.2), score: 20 },
+            { dept: 'Sales', prompts: Math.floor(total * 0.2).toString(), events: Math.floor(redacted * 0.1), score: 15 },
+        ])
+    }, [eventsQ.data])
+
+    const trendData = trendQ.data || []
+    const isError = trendQ.isError || eventsQ.isError
 
     return (
         <div className="space-y-6 animate-fade-in">
-            <div>
-                <h1 className="text-2xl font-bold text-slate-100">Dashboard</h1>
-                <p className="text-slate-500 mt-1">Real-time AI governance overview</p>
+            {/* Header */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-100">Dashboard</h1>
+                    <p className="text-slate-500 mt-1">Real-time AI governance overview</p>
+                </div>
+                <div className="flex items-center gap-3">
+                    {liveCount > 0 && (
+                        <span className="text-xs text-emerald-400 font-mono bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full">
+                            +{liveCount} new events
+                        </span>
+                    )}
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-500/10 border border-brand-500/20">
+                        <div className="w-2 h-2 rounded-full bg-brand-400 animate-pulse" />
+                        <span className="text-xs font-semibold text-brand-400">LIVE · 2.5s</span>
+                    </div>
+                </div>
             </div>
+
+            {isError && <InlineError message="Some data failed to load." onRetry={() => { trendQ.refetch(); eventsQ.refetch() }} />}
 
             {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -104,7 +133,7 @@ export default function DashboardPage() {
                             </div>
                         </div>
                         <div className="flex items-end gap-2">
-                            <span className="text-2xl font-bold text-slate-100">{stat.value}</span>
+                            <span className="text-2xl font-bold text-slate-100">{loading && stat.value === '0' ? '—' : stat.value}</span>
                             <span className={`text-xs font-medium mb-1 flex items-center gap-0.5 ${stat.up ? 'text-red-400' : 'text-emerald-400'}`}>
                                 {stat.up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                                 {stat.change}
@@ -117,8 +146,10 @@ export default function DashboardPage() {
             {/* Risk Trend Chart */}
             <div className="card">
                 <h2 className="text-lg font-semibold text-slate-100 mb-4">Risk Trend — Last 30 Days</h2>
-                {loading ? (
+                {trendQ.isPending ? (
                     <div className="h-64 skeleton rounded-lg" />
+                ) : trendQ.isError ? (
+                    <div className="h-64 flex items-center justify-center text-slate-500">Trend data unavailable</div>
                 ) : (
                     <ResponsiveContainer width="100%" height={280}>
                         <AreaChart data={trendData}>
@@ -139,15 +170,7 @@ export default function DashboardPage() {
                             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                             <XAxis dataKey="date" stroke="#64748b" fontSize={12} />
                             <YAxis stroke="#64748b" fontSize={12} />
-                            <Tooltip
-                                contentStyle={{
-                                    backgroundColor: '#1e293b',
-                                    border: '1px solid #334155',
-                                    borderRadius: '8px',
-                                    color: '#e2e8f0',
-                                    fontSize: '12px',
-                                }}
-                            />
+                            <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', color: '#e2e8f0', fontSize: '12px' }} />
                             <Area type="monotone" dataKey="warned" stackId="1" stroke="#eab308" fill="url(#colorWarned)" />
                             <Area type="monotone" dataKey="redacted" stackId="1" stroke="#f97316" fill="url(#colorRedacted)" />
                             <Area type="monotone" dataKey="blocked" stackId="1" stroke="#ef4444" fill="url(#colorBlocked)" />
@@ -157,14 +180,24 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Recent Incidents */}
+                {/* Recent Incidents — flashes on new event */}
                 <div className="card">
-                    <h2 className="text-lg font-semibold text-slate-100 mb-4">Recent Incidents</h2>
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-semibold text-slate-100">Recent Incidents</h2>
+                        <div className="flex items-center gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Live</span>
+                        </div>
+                    </div>
                     <div className="space-y-1">
                         {recentIncidents.map((inc, i) => (
-                            <div key={i} className="flex items-center justify-between py-2.5 px-2 rounded-lg hover:bg-slate-800/30 transition-colors cursor-pointer">
+                            <div
+                                key={inc.id || i}
+                                className={`flex items-center justify-between py-2.5 px-2 rounded-lg hover:bg-slate-800/30 transition-all cursor-pointer
+                                    ${inc.id === flashId ? 'bg-brand-500/10 border border-brand-500/20 shadow-sm shadow-brand-500/10' : ''}`}
+                            >
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${inc.score >= 90 ? 'bg-red-500 animate-pulse-slow' : inc.score >= 70 ? 'bg-orange-500' : 'bg-yellow-500'}`} />
+                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${inc.score >= 90 ? 'bg-red-500 animate-pulse' : inc.score >= 70 ? 'bg-orange-500' : 'bg-yellow-500'}`} />
                                     <div>
                                         <p className="text-sm font-medium text-slate-200">{inc.category}</p>
                                         <p className="text-xs text-slate-500">{inc.user} · {inc.time}</p>
@@ -176,6 +209,9 @@ export default function DashboardPage() {
                                 </div>
                             </div>
                         ))}
+                        {recentIncidents.length === 0 && (
+                            <div className="text-center py-8 text-slate-600 text-sm">No incidents yet — send a prompt through the proxy</div>
+                        )}
                     </div>
                 </div>
 

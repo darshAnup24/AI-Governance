@@ -1,87 +1,94 @@
 import { useState } from 'react'
-import { Plus, Trash2, Edit, ToggleLeft, ToggleRight, Play } from 'lucide-react'
+import { Plus, Trash2, Edit, ToggleLeft, ToggleRight, Play, Loader2 } from 'lucide-react'
+import { usePolicies, useCreatePolicy, useUpdatePolicy, useDeletePolicy, useTogglePolicy } from '../lib/hooks'
+import { SkeletonTable } from '../components/Skeletons'
+import { InlineError } from '../components/ErrorBoundary'
 
 interface PolicyRule {
-    rule_id: string
+    id: string
     name: string
     description: string
     action: string
     priority: number
     enabled: boolean
-    conditions: {
-        operator: string
-        conditions: { field: string; op: string; value: string | number }[]
-    }
+    conditions: any[]
+    logic?: string
 }
-
-const defaultPolicies: PolicyRule[] = [
-    {
-        rule_id: 'default-block-api-keys',
-        name: 'Block API Key Leakage',
-        description: 'Automatically block any prompt containing API keys or secrets',
-        action: 'BLOCK',
-        priority: 10,
-        enabled: true,
-        conditions: {
-            operator: 'AND', conditions: [
-                { field: 'risk_score', op: 'gte', value: 90 },
-                { field: 'detection.category', op: 'contains', value: 'API_KEY' },
-            ]
-        },
-    },
-    {
-        rule_id: 'default-redact-pii',
-        name: 'Redact PII in Prompts',
-        description: 'Redact personally identifiable information before forwarding',
-        action: 'REDACT',
-        priority: 20,
-        enabled: true,
-        conditions: {
-            operator: 'AND', conditions: [
-                { field: 'risk_score', op: 'gte', value: 80 },
-                { field: 'detection.category', op: 'contains', value: 'PII' },
-            ]
-        },
-    },
-    {
-        rule_id: 'default-warn-code',
-        name: 'Warn on Source Code',
-        description: 'Warn users when source code is detected in prompts',
-        action: 'WARN',
-        priority: 30,
-        enabled: true,
-        conditions: {
-            operator: 'AND', conditions: [
-                { field: 'risk_score', op: 'gte', value: 60 },
-                { field: 'detection.category', op: 'contains', value: 'SOURCE_CODE' },
-            ]
-        },
-    },
-]
 
 const actionColors: Record<string, string> = {
     BLOCK: 'badge-red',
     REDACT: 'badge-orange',
     WARN: 'badge-yellow',
     ALLOW: 'badge-green',
+    LOG: 'badge-blue',
 }
 
 export default function PoliciesPage() {
-    const [policies, setPolicies] = useState<PolicyRule[]>(defaultPolicies)
+    const { data: policies, isPending, isError, refetch } = usePolicies()
+    const createMutation = useCreatePolicy()
+    const updateMutation = useUpdatePolicy()
+    const deleteMutation = useDeletePolicy()
+    const toggleMutation = useTogglePolicy()
+
     const [showCreate, setShowCreate] = useState(false)
     const [testResult, setTestResult] = useState<string | null>(null)
     const [testScore, setTestScore] = useState(75)
+    const [editingId, setEditingId] = useState<string | null>(null)
+    const [form, setForm] = useState({
+        name: '',
+        description: '',
+        action: 'WARN',
+        priority: 100,
+        conditions: [{ field: 'riskScore', op: 'gte', value: '60' }],
+        enabled: true,
+    })
 
-    const togglePolicy = (ruleId: string) => {
-        setPolicies(prev => prev.map(p =>
-            p.rule_id === ruleId ? { ...p, enabled: !p.enabled } : p
-        ))
+    const handleToggle = (id: string, enabled: boolean) => {
+        toggleMutation.mutate({ id, enabled: !enabled })
+    }
+
+    const handleDelete = (id: string, name: string) => {
+        if (confirm(`Delete policy "${name}"?`)) {
+            deleteMutation.mutate(id)
+        }
+    }
+
+    const handleEdit = (policy: PolicyRule) => {
+        setEditingId(policy.id)
+        setForm({
+            name: policy.name,
+            description: policy.description || '',
+            action: policy.action,
+            priority: policy.priority,
+            conditions: policy.conditions || [],
+            enabled: policy.enabled,
+        })
+        setShowCreate(true)
+    }
+
+    const handleSave = async () => {
+        if (!form.name.trim()) return
+        const payload = {
+            ...form,
+            conditions: form.conditions,
+        }
+        if (editingId) {
+            await updateMutation.mutateAsync({ id: editingId, ...payload })
+        } else {
+            await createMutation.mutateAsync(payload)
+        }
+        setShowCreate(false)
+        setEditingId(null)
+        setForm({ name: '', description: '', action: 'WARN', priority: 100, conditions: [{ field: 'riskScore', op: 'gte', value: '60' }], enabled: true })
     }
 
     const runTest = () => {
         let result = 'ALLOW'
-        for (const policy of policies.filter(p => p.enabled).sort((a, b) => a.priority - b.priority)) {
-            const scoreCondition = policy.conditions.conditions.find(c => c.field === 'risk_score')
+        const activePolicies = (policies || [])
+            .filter((p: PolicyRule) => p.enabled)
+            .sort((a: PolicyRule, b: PolicyRule) => a.priority - b.priority)
+        for (const policy of activePolicies) {
+            const scoreCondition = policy.conditions?.find((c: any) => c.field === 'riskScore' || c.field === 'risk_score')
             if (scoreCondition && testScore >= Number(scoreCondition.value)) {
                 result = policy.action
                 break
@@ -97,10 +104,12 @@ export default function PoliciesPage() {
                     <h1 className="text-2xl font-bold text-slate-100">Policies</h1>
                     <p className="text-slate-500 mt-1">Manage detection and enforcement rules</p>
                 </div>
-                <button onClick={() => setShowCreate(!showCreate)} className="btn-primary flex items-center gap-2">
+                <button onClick={() => { setShowCreate(!showCreate); setEditingId(null); setForm({ name: '', description: '', action: 'WARN', priority: 100, conditions: [{ field: 'riskScore', op: 'gte', value: '60' }], enabled: true }) }} className="btn-primary flex items-center gap-2">
                     <Plus className="w-4 h-4" /> New Policy
                 </button>
             </div>
+
+            {isError && <InlineError message="Failed to load policies." onRetry={() => refetch()} />}
 
             {/* Policy Test Sandbox */}
             <div className="card border border-brand-500/20 bg-brand-500/5">
@@ -133,55 +142,81 @@ export default function PoliciesPage() {
                 </div>
             </div>
 
+            {/* Create/Edit Form */}
+            {showCreate && (
+                <div className="card border border-brand-500/20 space-y-4">
+                    <h3 className="text-sm font-semibold text-brand-400">{editingId ? 'Edit Policy' : 'New Policy'}</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <input className="input" placeholder="Policy name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+                        <input className="input" placeholder="Description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+                        <select className="input" value={form.action} onChange={e => setForm({ ...form, action: e.target.value })}>
+                            <option value="ALLOW">ALLOW</option>
+                            <option value="LOG">LOG</option>
+                            <option value="WARN">WARN</option>
+                            <option value="REDACT">REDACT</option>
+                            <option value="BLOCK">BLOCK</option>
+                        </select>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={handleSave} disabled={!form.name.trim() || createMutation.isPending || updateMutation.isPending} className="btn-primary flex items-center gap-2">
+                            {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                            {editingId ? 'Update' : 'Create'}
+                        </button>
+                        <button onClick={() => setShowCreate(false)} className="btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            )}
+
             {/* Policy Rules */}
-            <div className="space-y-3">
-                {policies.map((policy) => (
-                    <div
-                        key={policy.rule_id}
-                        className={`card-hover transition-all ${!policy.enabled ? 'opacity-50' : ''}`}
-                    >
-                        <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                                <div className="flex items-center gap-3 mb-1">
-                                    <h3 className="text-base font-semibold text-slate-100">{policy.name}</h3>
-                                    <span className={actionColors[policy.action]}>{policy.action}</span>
-                                    <span className="badge bg-slate-800 text-slate-400 border-slate-700">P{policy.priority}</span>
+            {isPending ? (
+                <SkeletonTable rows={4} />
+            ) : (
+                <div className="space-y-3">
+                    {(policies || []).length === 0 && !showCreate && (
+                        <div className="card text-center py-12 text-slate-500">
+                            No policies yet. <button onClick={() => setShowCreate(true)} className="text-brand-400 hover:underline">Create your first policy →</button>
+                        </div>
+                    )}
+                    {(policies || []).map((policy: PolicyRule) => (
+                        <div
+                            key={policy.id}
+                            className={`card-hover transition-all ${!policy.enabled ? 'opacity-50' : ''}`}
+                        >
+                            <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-1">
+                                        <h3 className="text-base font-semibold text-slate-100">{policy.name}</h3>
+                                        <span className={actionColors[policy.action] || 'badge'}>{policy.action}</span>
+                                        <span className="badge bg-slate-800 text-slate-400 border-slate-700">P{policy.priority}</span>
+                                    </div>
+                                    <p className="text-sm text-slate-400 mb-3">{policy.description || 'No description'}</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {(policy.conditions || []).map((cond: any, i: number) => (
+                                            <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-800/80 text-xs text-slate-300 font-mono">
+                                                {cond.field} <span className="text-brand-400">{cond.op || cond.operator}</span> <span className="text-emerald-400">{String(cond.value)}</span>
+                                            </span>
+                                        ))}
+                                    </div>
                                 </div>
-                                <p className="text-sm text-slate-400 mb-3">{policy.description}</p>
-
-                                {/* Conditions */}
-                                <div className="flex flex-wrap gap-2">
-                                    {policy.conditions.conditions.map((cond, i) => (
-                                        <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-800/80 text-xs text-slate-300 font-mono">
-                                            {cond.field}
-                                            <span className="text-brand-400">{cond.op}</span>
-                                            <span className="text-emerald-400">{String(cond.value)}</span>
-                                            {i < policy.conditions.conditions.length - 1 && (
-                                                <span className="text-slate-500 ml-1">{policy.conditions.operator}</span>
-                                            )}
-                                        </span>
-                                    ))}
+                                <div className="flex items-center gap-2 ml-4">
+                                    <button
+                                        onClick={() => handleToggle(policy.id, policy.enabled)}
+                                        className={`transition-colors ${policy.enabled ? 'text-emerald-400' : 'text-slate-600'}`}
+                                    >
+                                        {policy.enabled ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+                                    </button>
+                                    <button onClick={() => handleEdit(policy)} className="text-slate-500 hover:text-slate-300 transition-colors">
+                                        <Edit className="w-4 h-4" />
+                                    </button>
+                                    <button onClick={() => handleDelete(policy.id, policy.name)} className="text-slate-500 hover:text-red-400 transition-colors">
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
                                 </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 ml-4">
-                                <button
-                                    onClick={() => togglePolicy(policy.rule_id)}
-                                    className={`transition-colors ${policy.enabled ? 'text-emerald-400' : 'text-slate-600'}`}
-                                >
-                                    {policy.enabled ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
-                                </button>
-                                <button className="text-slate-500 hover:text-slate-300 transition-colors">
-                                    <Edit className="w-4 h-4" />
-                                </button>
-                                <button className="text-slate-500 hover:text-red-400 transition-colors">
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
                             </div>
                         </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
         </div>
     )
 }

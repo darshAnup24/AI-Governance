@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Plus, GripVertical, Clock, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import govApi from '../../lib/govApi'
+import { useIncidents, useQueryClient, useMutation } from '../../lib/hooks'
 import { SkeletonTable } from '../../components/Skeletons'
 import { InlineError } from '../../components/ErrorBoundary'
+import govApi from '../../lib/govApi'
 
 // ── Types / Constants ─────────────────────────────────────────────────────────
 
@@ -118,13 +118,7 @@ function IncidentCard({ inc, onMove, moving }: {
 
 export default function IncidentsPage() {
   const qc = useQueryClient()
-
-  const { data: incidents, isPending, isError, refetch } = useQuery({
-    queryKey: ['incidents'],
-    queryFn: () => govApi.get('/api/incidents').then(r => r.data),
-    initialData: FALLBACK,
-    retry: 1,
-  })
+  const { data: incidents, isPending, isError, refetch } = useIncidents()
 
   const moveMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>

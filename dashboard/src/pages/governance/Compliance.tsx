@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { CheckCircle2, AlertCircle, XCircle, Loader2 } from 'lucide-react'
+import { useComplianceFrameworks, useComplianceChecks } from '../../lib/hooks'
+import { SkeletonCard } from '../../components/Skeletons'
+import { InlineError } from '../../components/ErrorBoundary'
 import govApi from '../../lib/govApi'
 
 interface Framework {
@@ -16,37 +19,22 @@ const statusColors: Record<string, string> = {
 }
 
 const statusIcons: Record<string, any> = {
-    COMPLIANT: CheckCircle2, PARTIALLY_COMPLIANT: AlertCircle, NON_COMPLIANT: XCircle
+    COMPLIANT: CheckCircle2, PARTIALLY_COMPLIANT: AlertCircle, NON_COMPLIANT: XCircle, IN_PROGRESS: AlertCircle, NOT_STARTED: AlertCircle
 }
 
-const fallbackFrameworks: Framework[] = [
-    { id: 'EU_AI_ACT', name: 'EU AI ACT', questionCount: 8, questions: ['Is the AI system classified by risk?', 'Human oversight mechanism?', 'Conformity assessment?', 'Transparency documentation?', 'Data governance?', 'Risk management system?', 'Accuracy/robustness/cybersecurity?', 'Post-market monitoring?'] },
-    { id: 'ISO_42001', name: 'ISO 42001', questionCount: 6, questions: ['AI management system policy?', 'AI risks identified?', 'Competence requirements?', 'Documented lifecycle?', 'Third-party components managed?', 'Continuous monitoring?'] },
-    { id: 'NIST_AI_RMF', name: 'NIST AI RMF', questionCount: 6, questions: ['Risks mapped/categorized?', 'Measurement plan?', 'Governance structures?', 'Stakeholder engagement?', 'Bias/fairness testing?', 'Transparency in decisions?'] },
-    { id: 'ISO_27001', name: 'ISO 27001', questionCount: 6, questions: ['ISMS in place?', 'Access controls?', 'Data encryption?', 'Incident response?', 'Business continuity?', 'Third-party assessments?'] },
-]
-
-const fallbackChecks: Check[] = [
-    { id: '1', framework: 'EU_AI_ACT', score: 72, status: 'PARTIALLY_COMPLIANT' },
-    { id: '2', framework: 'ISO_42001', score: 68, status: 'PARTIALLY_COMPLIANT' },
-    { id: '3', framework: 'NIST_AI_RMF', score: 81, status: 'COMPLIANT' },
-    { id: '4', framework: 'ISO_27001', score: 75, status: 'PARTIALLY_COMPLIANT' },
-]
-
 export default function Compliance() {
-    const [frameworks] = useState<Framework[]>(fallbackFrameworks)
-    const [checks, setChecks] = useState<Check[]>(fallbackChecks)
+    const fwQ = useComplianceFrameworks()
+    const checksQ = useComplianceChecks()
     const [selected, setSelected] = useState<string | null>(null)
     const [analyzing, setAnalyzing] = useState(false)
     const [gapResult, setGapResult] = useState('')
 
-    useEffect(() => {
-        govApi.get('/api/compliance/frameworks').then(r => r.data).catch(() => fallbackFrameworks)
-        govApi.get('/api/compliance/checks/org').then(r => setChecks(r.data)).catch(() => { })
-    }, [])
+    const frameworks: Framework[] = fwQ.data || []
+    const checks: Check[] = checksQ.data || []
 
     const handleGapAnalysis = async () => {
         setAnalyzing(true)
+        setGapResult('')
         try {
             const r = await govApi.post('/api/compliance/gap-analysis/all')
             setGapResult(r.data.gapAnalysis)
@@ -58,6 +46,9 @@ export default function Compliance() {
 
     const selectedFw = frameworks.find(f => f.id === selected)
     const selectedCheck = checks.find(c => c.framework === selected)
+
+    const isLoading = fwQ.isPending || checksQ.isPending
+    const isError = fwQ.isError || checksQ.isError
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -72,31 +63,38 @@ export default function Compliance() {
                 </button>
             </div>
 
-            {/* Framework Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {frameworks.map(fw => {
-                    const check = checks.find(c => c.framework === fw.id)
-                    const score = check?.score ?? 0
-                    const StatusIcon = statusIcons[check?.status || ''] || AlertCircle
-                    return (
-                        <button key={fw.id} onClick={() => setSelected(fw.id === selected ? null : fw.id)}
-                            className={`card text-left transition-all ${selected === fw.id ? 'ring-2 ring-brand-500' : ''}`}>
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-sm font-semibold text-slate-200">{fw.name}</h3>
-                                <StatusIcon className={`w-5 h-5 ${statusColors[check?.status || 'NOT_STARTED']}`} />
-                            </div>
-                            <div className="relative w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-2">
-                                <div className={`h-full rounded-full transition-all duration-700 ${score >= 80 ? 'bg-emerald-500' : score >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                                    style={{ width: `${score}%` }} />
-                            </div>
-                            <div className="flex justify-between text-xs">
-                                <span className="text-slate-500">{fw.questionCount} checks</span>
-                                <span className={statusColors[check?.status || 'NOT_STARTED']}>{score}%</span>
-                            </div>
-                        </button>
-                    )
-                })}
-            </div>
+            {isError && <InlineError message="Failed to load compliance data." onRetry={() => { fwQ.refetch(); checksQ.refetch() }} />}
+
+            {isLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {[1,2,3,4].map(i => <SkeletonCard key={i} />)}
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {frameworks.map(fw => {
+                        const check = checks.find(c => c.framework === fw.id)
+                        const score = check?.score ?? 0
+                        const StatusIcon = statusIcons[check?.status || 'NOT_STARTED'] || AlertCircle
+                        return (
+                            <button key={fw.id} onClick={() => setSelected(fw.id === selected ? null : fw.id)}
+                                className={`card text-left transition-all ${selected === fw.id ? 'ring-2 ring-brand-500' : ''}`}>
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-sm font-semibold text-slate-200">{fw.name}</h3>
+                                    <StatusIcon className={`w-5 h-5 ${statusColors[check?.status || 'NOT_STARTED']}`} />
+                                </div>
+                                <div className="relative w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-2">
+                                    <div className={`h-full rounded-full transition-all duration-700 ${score >= 80 ? 'bg-emerald-500' : score >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                                        style={{ width: `${score}%` }} />
+                                </div>
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-slate-500">{fw.questionCount} checks</span>
+                                    <span className={statusColors[check?.status || 'NOT_STARTED']}>{score}%</span>
+                                </div>
+                            </button>
+                        )
+                    })}
+                </div>
+            )}
 
             {/* Checklist View */}
             {selectedFw && (

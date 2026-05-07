@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, RefreshCw, BarChart3, Globe, Shield, AlertTriangle, CheckCircle2, Loader2, ExternalLink } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useVendors, useMutation, useQueryClient } from '../../lib/hooks'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, PolarRadiusAxis } from 'recharts'
 import govApi from '../../lib/govApi'
 import { SkeletonTable } from '../../components/Skeletons'
@@ -24,13 +24,6 @@ const RISK_BAR: Record<string, string> = {
   MINIMAL: 'bg-emerald-500', LIMITED: 'bg-yellow-500', HIGH: 'bg-orange-500', UNACCEPTABLE: 'bg-red-500',
 }
 
-const FALLBACK_VENDORS: Vendor[] = [
-  { id: '1', name: 'CloudAI Inc.', riskLevel: 'HIGH', services: ['LLM API', 'Fine-tuning'], assessmentScore: 72, lastAssessed: '2024-05-15', createdAt: '2024-01-10', website: 'cloudai.io', soc2: true, gdprDpa: false },
-  { id: '2', name: 'DataPipeline Co.', riskLevel: 'LIMITED', services: ['Data labeling', 'ETL'], assessmentScore: 45, lastAssessed: '2024-04-20', createdAt: '2024-02-05', website: 'datapipeline.co', soc2: true, gdprDpa: true },
-  { id: '3', name: 'SecureML Ltd.', riskLevel: 'MINIMAL', services: ['Model monitoring', 'Observability'], assessmentScore: 22, lastAssessed: '2024-06-01', createdAt: '2024-03-01', website: 'secureml.io', soc2: true, gdprDpa: true },
-  { id: '4', name: 'GenAI Startup', riskLevel: 'UNACCEPTABLE', services: ['Custom LLM', 'Data training'], assessmentScore: 88, lastAssessed: '2024-03-10', createdAt: '2024-03-10', website: 'genai.app', soc2: false, gdprDpa: false },
-]
-
 // Radar chart data for vendor comparison
 function buildRadarData(score: number) {
   const n = score
@@ -41,17 +34,6 @@ function buildRadarData(score: number) {
     { axis: 'Transparency', value: Math.min(100, 100 - n * 0.5 + Math.random() * 20) },
     { axis: 'Resilience', value: Math.min(100, 100 - n * 0.6 + Math.random() * 15) },
   ].map(d => ({ ...d, value: Math.round(Math.max(10, d.value)) }))
-}
-
-// ── Hooks ─────────────────────────────────────────────────────────────────────
-
-function useVendors() {
-  return useQuery({
-    queryKey: ['vendors'],
-    queryFn: () => govApi.get('/api/vendors').then(r => r.data),
-    initialData: FALLBACK_VENDORS,
-    retry: 1,
-  })
 }
 
 // ── Vendor Detail Drawer ──────────────────────────────────────────────────────
@@ -258,7 +240,7 @@ export default function Vendors() {
         </div>
       </div>
 
-      {isError && <InlineError message="Using cached vendor list." onRetry={() => refetch()} />}
+      {isError && <InlineError message="Failed to load vendors." onRetry={() => refetch()} />}
 
       {/* Risk summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -305,6 +287,11 @@ export default function Vendors() {
         <SkeletonTable rows={3} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {(vendors ?? []).length === 0 && !showAdd && (
+            <div className="col-span-full card text-center py-12 text-slate-500">
+              No vendors yet. <button onClick={() => setShowAdd(true)} className="text-brand-400 hover:underline">Add your first vendor →</button>
+            </div>
+          )}
           {(vendors ?? []).map((v: Vendor) => (
             <VendorCard
               key={v.id}

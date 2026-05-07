@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, X, ChevronLeft, ChevronRight, Flag, Download } from 'lucide-react'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts'
+import api from '../lib/api'
 
 interface Incident {
     id: string
@@ -14,42 +15,7 @@ interface Incident {
     detections: { detector: string; confidence: number; category: string }[]
 }
 
-const sampleIncidents: Incident[] = [
-    {
-        id: '1', timestamp: '2024-01-15 14:32:01', user: 'EMP-4821', department: 'Engineering', riskScore: 95, category: 'API Key', action: 'BLOCKED', promptHash: 'a1b2c3d4', detections: [
-            { detector: 'regex', confidence: 0.98, category: 'API_KEY' },
-            { detector: 'ner', confidence: 0.45, category: 'PII' },
-        ]
-    },
-    {
-        id: '2', timestamp: '2024-01-15 14:28:45', user: 'EMP-1293', department: 'Marketing', riskScore: 82, category: 'PII (SSN)', action: 'REDACTED', promptHash: 'e5f6g7h8', detections: [
-            { detector: 'regex', confidence: 0.92, category: 'PII' },
-            { detector: 'ner', confidence: 0.78, category: 'PII' },
-        ]
-    },
-    {
-        id: '3', timestamp: '2024-01-15 14:15:22', user: 'EMP-7744', department: 'Engineering', riskScore: 65, category: 'Source Code', action: 'WARNED', promptHash: 'i9j0k1l2', detections: [
-            { detector: 'llama', confidence: 0.72, category: 'SOURCE_CODE' },
-        ]
-    },
-    {
-        id: '4', timestamp: '2024-01-15 13:55:10', user: 'EMP-3019', department: 'Sales', riskScore: 78, category: 'PII (Email)', action: 'REDACTED', promptHash: 'm3n4o5p6', detections: [
-            { detector: 'regex', confidence: 0.85, category: 'PII' },
-        ]
-    },
-    {
-        id: '5', timestamp: '2024-01-15 13:41:38', user: 'EMP-5562', department: 'Legal', riskScore: 92, category: 'Credentials', action: 'BLOCKED', promptHash: 'q7r8s9t0', detections: [
-            { detector: 'regex', confidence: 0.95, category: 'CREDENTIALS' },
-        ]
-    },
-    {
-        id: '6', timestamp: '2024-01-15 13:30:20', user: 'EMP-8901', department: 'HR', riskScore: 61, category: 'Confidential', action: 'WARNED', promptHash: 'u1v2w3x4', detections: [
-            { detector: 'llama', confidence: 0.65, category: 'CONFIDENTIAL' },
-            { detector: 'ner', confidence: 0.55, category: 'CONFIDENTIAL' },
-        ]
-    },
-]
-
+// No sample data, using API
 const actionBadge: Record<string, string> = {
     BLOCKED: 'badge-red',
     REDACTED: 'badge-orange',
@@ -65,11 +31,47 @@ function scoreColor(score: number): string {
 }
 
 export default function IncidentsPage() {
+    const [incidents, setIncidents] = useState<Incident[]>([])
     const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null)
     const [actionFilter, setActionFilter] = useState('ALL')
     const [searchQuery, setSearchQuery] = useState('')
 
-    const filtered = sampleIncidents.filter(inc => {
+    useEffect(() => {
+        const fetchIncidents = async () => {
+            try {
+                const resp = await api.get('/api/v1/audit-events?per_page=50')
+                const rawData = resp.data.data || []
+                
+                // Map the backend data to our frontend format
+                const mapped: Incident[] = rawData.map((d: any) => {
+                    const detections = d.detection_results?.detected_spans || []
+                    return {
+                        id: d.event_id,
+                        timestamp: d.timestamp ? new Date(d.timestamp).toLocaleString() : 'Unknown',
+                        user: d.user_id === 'dev-user-001' ? 'EMP-1293' : d.user_id, // Map dev user to something pretty
+                        department: 'Engineering', // Hardcoded for demo unless provided by API
+                        riskScore: d.risk_score,
+                        category: detections.length > 0 ? detections[0].category : 'Clean',
+                        action: d.action_taken,
+                        promptHash: d.prompt_hash?.substring(0, 8) || 'N/A',
+                        detections: detections.map((det: any) => ({
+                            detector: det.detector || 'regex',
+                            confidence: det.confidence || 0.9,
+                            category: det.category
+                        }))
+                    }
+                })
+                setIncidents(mapped)
+            } catch (e) {
+                console.error("Failed to fetch incidents", e)
+            }
+        }
+        fetchIncidents()
+        const interval = setInterval(fetchIncidents, 3000)
+        return () => clearInterval(interval)
+    }, [])
+
+    const filtered = incidents.filter(inc => {
         if (actionFilter !== 'ALL' && inc.action !== actionFilter) return false
         if (searchQuery) {
             const q = searchQuery.toLowerCase()

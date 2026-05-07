@@ -103,6 +103,20 @@ complianceRouter.get("/checks/:orgId", async (req: Request, res: Response) => {
     }
 });
 
+// GET /api/compliance/checks/org — alias for frontend convenience
+complianceRouter.get("/checks/org", async (req: Request, res: Response) => {
+    try {
+        const checks = await prisma.complianceCheck.findMany({
+            where: { orgId: req.user!.orgId },
+            include: { model: { select: { name: true } } },
+            orderBy: { createdAt: "desc" },
+        });
+        res.json(checks);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // POST /api/compliance/gap-analysis/:modelId — Ollama-powered gap analysis
 complianceRouter.post("/gap-analysis/:modelId", async (req: Request, res: Response) => {
     try {
@@ -130,6 +144,54 @@ Provide a detailed gap analysis with:
 4. Risk of non-compliance for each gap
 
 Be specific and cite regulation articles where applicable.`;
+
+        const ollamaRes = await fetch(`${OLLAMA_URL}/api/generate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false }),
+        });
+
+        if (!ollamaRes.ok) {
+            res.status(502).json({ error: "Ollama unavailable for gap analysis" });
+            return;
+        }
+
+        const result = (await ollamaRes.json()) as any;
+        res.json({ gapAnalysis: result.response, model: OLLAMA_MODEL });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/compliance/gap-analysis/all — Gap analysis for all models in org
+complianceRouter.post("/gap-analysis/all", async (req: Request, res: Response) => {
+    try {
+        const [checks, models] = await Promise.all([
+            prisma.complianceCheck.findMany({ where: { orgId: req.user!.orgId } }),
+            prisma.aIModel.findMany({ where: { orgId: req.user!.orgId }, take: 10 }),
+        ]);
+
+        const modelSummary = models.map((m) => ({
+            name: m.name,
+            provider: m.provider,
+            riskLevel: m.riskLevel,
+        })).join("\n");
+
+        const checkSummary = checks.map((c) => `- ${c.framework}: ${c.score}%`).join("\n");
+
+        const prompt = `You are an AI governance expert. Analyze the organization's overall AI governance posture:
+
+Models in inventory:
+${modelSummary}
+
+Compliance checks:
+${checkSummary || "No compliance checks completed yet"}
+
+Provide a comprehensive gap analysis covering:
+1. Organization-wide compliance gaps
+2. Priority action items (numbered)
+3. Risk ratings for each gap (High/Medium/Low)
+4. Recommended next steps`;
 
         const ollamaRes = await fetch(`${OLLAMA_URL}/api/generate`, {
             method: "POST",

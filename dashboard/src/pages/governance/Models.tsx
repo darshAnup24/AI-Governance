@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Plus, Scan, Trash2, ChevronDown, ChevronUp, Activity, ExternalLink } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useModels, useMutation, useQueryClient } from '../../lib/hooks'
 import govApi from '../../lib/govApi'
 import { SkeletonTable } from '../../components/Skeletons'
 import { InlineError } from '../../components/ErrorBoundary'
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+// ── Types ───────────────────────────────────────────────────────────────────────
 
 interface AIModel {
   id: string; name: string; provider: string; version: string; purpose: string
@@ -13,7 +13,7 @@ interface AIModel {
   riskAssessments?: { overallScore: number }[]
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────────
+// ── Constants ───────────────────────────────────────────────────────────────────
 
 const RISK_COLORS: Record<string, string> = {
   MINIMAL: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
@@ -28,26 +28,9 @@ const STATUS_COLORS: Record<string, string> = {
   ACTIVE: 'text-emerald-400', UNDER_REVIEW: 'text-yellow-400', DEPRECATED: 'text-slate-500',
 }
 
-const FALLBACK_MODELS: AIModel[] = [
-  { id: '1', name: 'GPT Wrapper Service', provider: 'Internal', version: '2.1', purpose: 'Customer support chatbot', riskLevel: 'HIGH', status: 'ACTIVE', createdAt: '2024-01-15', riskAssessments: [{ overallScore: 72 }] },
-  { id: '2', name: 'HR Screening Tool', provider: 'Internal', version: '1.0', purpose: 'Resume screening and ranking', riskLevel: 'UNACCEPTABLE', status: 'UNDER_REVIEW', createdAt: '2024-02-01', riskAssessments: [{ overallScore: 91 }] },
-  { id: '3', name: 'Customer Chatbot', provider: 'Internal', version: '3.2', purpose: 'FAQ and support', riskLevel: 'LIMITED', status: 'ACTIVE', createdAt: '2024-03-10', riskAssessments: [{ overallScore: 35 }] },
-  { id: '4', name: 'Fraud Detector', provider: 'Internal', version: '1.5', purpose: 'Transaction fraud detection', riskLevel: 'HIGH', status: 'ACTIVE', createdAt: '2024-04-20', riskAssessments: [{ overallScore: 78 }] },
-  { id: '5', name: 'Internal Search', provider: 'Internal', version: '1.0', purpose: 'Document search and retrieval', riskLevel: 'MINIMAL', status: 'ACTIVE', createdAt: '2024-05-15', riskAssessments: [{ overallScore: 12 }] },
-]
 
-// ── Hooks ──────────────────────────────────────────────────────────────────────
 
-function useModels() {
-  return useQuery({
-    queryKey: ['models'],
-    queryFn: () => govApi.get('/api/models').then(r => r.data),
-    initialData: FALLBACK_MODELS,
-    retry: 1,
-  })
-}
-
-// ── Score Bar ─────────────────────────────────────────────────────────────────
+// ── Score Bar ───────────────────────────────────────────────────────────────────
 
 function ScoreBar({ score, riskLevel }: { score: number; riskLevel: string }) {
   return (
