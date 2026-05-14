@@ -148,7 +148,7 @@ export default function ShadowAIPage() {
     fetchGeo()
   }, [])
 
-  const rawShadowTools = shadowData?.data || []
+  const rawShadowTools = Array.isArray(shadowData) ? shadowData : []
 
   // Aggregate by tool
   const aggregated: Record<string, any> = {}

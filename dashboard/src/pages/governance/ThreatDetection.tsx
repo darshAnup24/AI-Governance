@@ -125,8 +125,8 @@ export default function ThreatDetection() {
     setScanning(false)
   }
 
-  const eventList = Array.isArray(events) ? events : (events?.data ?? [])
-  const breakdownList = Array.isArray(breakdown) ? breakdown : (breakdown?.data ?? [])
+  const eventList = Array.isArray(events) ? events : []
+  const breakdownList = Array.isArray(breakdown) ? breakdown : []
 
   const normalizedEvents = eventList.map((e: any) => ({
     ...e,

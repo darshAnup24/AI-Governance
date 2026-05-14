@@ -57,10 +57,16 @@ export default function Compliance() {
                     <h1 className="text-2xl font-bold text-slate-100">Compliance</h1>
                     <p className="text-slate-500 mt-1">Track compliance across regulatory frameworks</p>
                 </div>
-                <button onClick={handleGapAnalysis} disabled={analyzing} className="btn-primary flex items-center gap-2">
-                    {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    {analyzing ? 'Analyzing...' : 'Gap Analysis (AI)'}
-                </button>
+                <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="text-xs font-semibold text-emerald-400">LIVE</span>
+                    </div>
+                    <button onClick={handleGapAnalysis} disabled={analyzing} className="btn-primary flex items-center gap-2">
+                        {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                        {analyzing ? 'Analyzing...' : 'Gap Analysis (AI)'}
+                    </button>
+                </div>
             </div>
 
             {isError && <InlineError message="Failed to load compliance data." onRetry={() => { fwQ.refetch(); checksQ.refetch() }} />}

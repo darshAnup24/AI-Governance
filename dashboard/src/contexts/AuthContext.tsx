@@ -67,12 +67,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             user_id: data.user?.id ?? '',
             email: data.user?.email ?? email,
             role: String(data.user?.role ?? 'user').toLowerCase(),
-            department: data.user?.org?.name ?? '',
-            org_id: data.user?.org?.id ?? '',
+            department: data.user?.org?.name ?? data.user?.organization?.name ?? '',
+            org_id: data.user?.org?.id ?? data.user?.organization?.id ?? '',
         }
 
-        setSession(data.accessToken, authUser)
-        setToken(data.accessToken)
+        const accessToken = data.accessToken ?? data.access_token
+        if (!accessToken) {
+            throw new Error('Authentication response did not include an access token')
+        }
+
+        setSession(accessToken, authUser)
+        setToken(accessToken)
         setUser(authUser)
     }, [])
 

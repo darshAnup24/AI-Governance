@@ -95,9 +95,12 @@ class RiskScoreAggregator:
                 severity = CATEGORY_SEVERITY.get(category_key, "medium")
                 severity_mult = SEVERITY_MULTIPLIERS.get(severity, 1.0)
 
-                # Calculate contribution
-                contribution = weight * span.confidence * severity_mult * 30
-                base_score += contribution
+                # Calculate standalone risk score for this detection
+                single_risk = weight * span.confidence * severity_mult * 50
+                
+                # Rule: When models disagree, always escalate - never average down.
+                # We enforce a confidence floor by taking the maximum risk found by ANY model.
+                base_score = max(base_score, single_risk)
 
                 # Track breakdown
                 if category_key not in breakdown:
@@ -111,7 +114,9 @@ class RiskScoreAggregator:
                 breakdown[category_key]["max_confidence"] = max(
                     breakdown[category_key]["max_confidence"], span.confidence
                 )
-                breakdown[category_key]["total_contribution"] += contribution
+                breakdown[category_key]["total_contribution"] = max(
+                    breakdown[category_key]["total_contribution"], single_risk
+                )
 
         # Apply context modifier for privileged roles
         context_modifier = 0.5 if user_role.lower() in REDUCED_SENSITIVITY_ROLES else 1.0

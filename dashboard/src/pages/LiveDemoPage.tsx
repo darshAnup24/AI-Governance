@@ -190,12 +190,18 @@ export default function LiveDemoPage() {
     try {
       const resp = await api.post('/api/v1/inspect', { text: prompt })
       setResult(resp.data)
-      // Force dashboard sections to refresh immediately after each demo scan.
+      // Force all dashboard sections to refresh immediately after each demo scan
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['auditEvents'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboardStats'] }),
         queryClient.invalidateQueries({ queryKey: ['incidents'] }),
         queryClient.invalidateQueries({ queryKey: ['shadowAIAlerts'] }),
+        queryClient.invalidateQueries({ queryKey: ['analyticsTrend'] }),
+        queryClient.invalidateQueries({ queryKey: ['detectionBreakdown'] }),
+        queryClient.invalidateQueries({ queryKey: ['policies'] }),
+        queryClient.invalidateQueries({ queryKey: ['complianceChecks'] }),
+        queryClient.invalidateQueries({ queryKey: ['threats'] }),
+        queryClient.invalidateQueries({ queryKey: ['models'] }),
       ])
     } catch (e: any) {
       setError(e?.response?.data?.detail || 'Detection service unavailable — ensure containers are running.')

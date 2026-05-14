@@ -90,6 +90,10 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:5173",
         "http://dashboard:3000",
+        "https://chatgpt.com",
+        "https://claude.ai",
+        "https://*.chatgpt.com",
+        "https://*.anthropic.com"
     ],
     allow_credentials=True,
     allow_methods=["*"],

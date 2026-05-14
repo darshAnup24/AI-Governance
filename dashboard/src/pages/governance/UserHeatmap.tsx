@@ -38,8 +38,10 @@ export default function UserHeatmapPage() {
   const heatmapQ = useUserHeatmap()
   const usersQ = useUsers()
 
-  const heatmap = heatmapQ.data ?? []
-  const users = usersQ.data ?? []
+  const rawHeatmap = heatmapQ.data
+  const rawUsers = usersQ.data
+  const heatmap = Array.isArray(rawHeatmap) ? rawHeatmap : (rawHeatmap?.data ?? [])
+  const users = Array.isArray(rawUsers) ? rawUsers : (rawUsers?.data ?? [])
 
   const overallRisk = users.length
     ? Math.round(users.reduce((a: number, u: any) => a + (u.riskScore ?? 0), 0) / users.length)

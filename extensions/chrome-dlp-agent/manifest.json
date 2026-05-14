@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "ShieldAI Corporate DLP Agent",
+  "version": "1.0",
+  "description": "Locally intercepts and blocks sensitive data before it reaches unauthorized AI models in the browser.",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://chatgpt.com/*",
+        "*://*.chatgpt.com/*",
+        "*://claude.ai/*",
+        "*://*.anthropic.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*"
+  ],
+  "action": {
+    "default_title": "ShieldAI Endpoint DLP"
+  }
+}

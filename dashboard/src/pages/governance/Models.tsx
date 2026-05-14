@@ -186,9 +186,15 @@ export default function Models() {
             {(models ?? []).length} models tracked · Manage and assess your AI inventory
           </p>
         </div>
-        <button id="add-model-btn" onClick={() => setShowAdd(!showAdd)} className="btn-primary flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add Model
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-xs font-semibold text-emerald-400">LIVE</span>
+          </div>
+          <button id="add-model-btn" onClick={() => setShowAdd(!showAdd)} className="btn-primary flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add Model
+          </button>
+        </div>
       </div>
 
       {isError && <InlineError message="Using cached model registry." onRetry={() => refetch()} />}

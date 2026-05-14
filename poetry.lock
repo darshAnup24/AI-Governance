@@ -4899,7 +4899,11 @@ docs = ["Sphinx", "furo", "repoze.sphinx.autointerface"]
 test = ["coverage[toml]", "zope.event", "zope.testing"]
 testing = ["coverage[toml]", "zope.event", "zope.testing"]
 
+[extras]
+onnx = []
+sinkhole = []
+
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "e3ee942ef3e3c226ea3442682e04d396f17b84c3eda902aa225ae5fb0bbdaf17"
+content-hash = "c934cd79e05b552fde6e0c7c44dedd82e7d0b7d8afe5139fb1afc0fd40fbe78c"

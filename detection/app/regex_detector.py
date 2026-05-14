@@ -5,6 +5,8 @@ High-precision patterns, target <5ms execution.
 
 from __future__ import annotations
 
+import base64
+import json
 import math
 import re
 from collections import Counter
@@ -22,6 +24,12 @@ class RegexPattern:
     category: DetectionCategory
     confidence: float
     validator: str | None = None  # Name of optional post-match validation function
+    span_group: int = 0  # re match group index for start/end (0 = full match)
+
+
+# RFC 4648 base32 alphabet — AWS key body decodes as base32 (see TruffleHog GetAccountNumFromAWSID).
+_AWS_KEY_ID_SUFFIX_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
+_JWT_BLOB_RE = re.compile(r"eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}")
 
 
 class RegexDetector:
@@ -33,11 +41,24 @@ class RegexDetector:
     PATTERNS: ClassVar[list[RegexPattern]] = [
         # ─── API Keys ─────────────────────────────────────
         RegexPattern("openai_key", re.compile(r"sk-[a-zA-Z0-9]{20,}"), DetectionCategory.API_KEY, 0.98),
-        RegexPattern("aws_access_key", re.compile(r"AKIA[0-9A-Z]{16}"), DetectionCategory.API_KEY, 0.97),
-        RegexPattern("aws_secret_key", re.compile(r"(?:aws_secret_access_key|secret_key)\s*[:=]\s*[A-Za-z0-9/+=]{40}"), DetectionCategory.API_KEY, 0.95),
+        # IAM-style IDs: base32 body + keyword proximity + optional anchored assignment (high precision).
+        RegexPattern(
+            "aws_access_key",
+            re.compile(r"\b(?:AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}\b"),
+            DetectionCategory.API_KEY,
+            0.97,
+            "validate_aws_access_key_id",
+        ),
+        RegexPattern("aws_secret_key", re.compile(r"(?:aws_secret_access_key|secret_key)\s*[:=]\s*[A-Za-z0-9/+=]{40}"), DetectionCategory.API_KEY, 0.95, "validate_aws_secret_assignment"),
         RegexPattern("github_pat", re.compile(r"gh[pso]_[a-zA-Z0-9]{36}"), DetectionCategory.API_KEY, 0.98),
         RegexPattern("github_fine_grained", re.compile(r"github_pat_[a-zA-Z0-9_]{22,}"), DetectionCategory.API_KEY, 0.97),
-        RegexPattern("jwt_token", re.compile(r"eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}"), DetectionCategory.API_KEY, 0.90),
+        RegexPattern(
+            "jwt_token",
+            _JWT_BLOB_RE,
+            DetectionCategory.API_KEY,
+            0.90,
+            "validate_jwt_structure",
+        ),
         RegexPattern("slack_token", re.compile(r"xox[baprs]-[a-zA-Z0-9-]{10,}"), DetectionCategory.API_KEY, 0.95),
         RegexPattern("stripe_key", re.compile(r"[sr]k_(live|test)_[a-zA-Z0-9]{20,}"), DetectionCategory.API_KEY, 0.97),
         RegexPattern("google_api_key", re.compile(r"AIza[0-9A-Za-z\-_]{35}"), DetectionCategory.API_KEY, 0.95),
@@ -74,6 +95,22 @@ class RegexDetector:
         RegexPattern("high_entropy", re.compile(r"\b[a-zA-Z0-9+/=_-]{24,}\b"), DetectionCategory.API_KEY, 0.50, "validate_entropy"),
     ]
 
+    # Keyword proximity for secrets (chars each side of span). Slightly wider than ±10 so
+    # typical assignments like AWS_ACCESS_KEY_ID=... still anchor without hurting latency.
+    SECRET_KEYWORD_WINDOW = 40
+    SECRET_KEYWORD_RE = re.compile(
+        r"(?i)(?:api[\s_.-]*key|access[\s_.-]*key(?:[\s_.-]*id)?|accesskeyid|"
+        r"secret(?:[\s_.-]*access)?(?:[\s_.-]*key)?|password|passwd|pwd|token|"
+        r"jwt|id[\s_.-]*token|"
+        r"auth|bearer|credential|aws|account|session[\s_.-]*token)",
+    )
+
+    PLACEHOLDER_HINT_RE = re.compile(
+        r"(?i)(?:\b(?:dummy|fake|sample|placeholder|changeme)\b|"
+        r"123456789|your[_-]?key|insert[_-]?here|lorem|ipsum|"
+        r"AKIAIOSFODNN7EXAMPLE)",
+    )
+
     # Context patterns that REDUCE false positives for emails
     CODE_CONTEXT_PATTERNS = re.compile(
         r"(?:import\s|from\s|require\(|#include|//|/\*|def\s|class\s|function\s|var\s|const\s|let\s)",
@@ -89,26 +126,34 @@ class RegexDetector:
 
         for pat in self.PATTERNS:
             for match in pat.pattern.finditer(text):
-                matched_text = match.group()
+                gi = pat.span_group
+                try:
+                    matched_text = match.group(gi)
+                except IndexError:
+                    continue
+                if not matched_text:
+                    continue
+                span_start = match.start(gi)
+                span_end = match.end(gi)
                 confidence = pat.confidence
 
                 # Run post-match validators
                 if pat.validator:
                     validator_fn = getattr(self, pat.validator, None)
                     if validator_fn:
-                        valid, adjusted_confidence = validator_fn(matched_text, text, match.start())
+                        valid, adjusted_confidence = validator_fn(matched_text, text, span_start)
                         if not valid:
                             continue
                         confidence = adjusted_confidence
 
                 # Get context (±40 chars)
-                ctx_start = max(0, match.start() - 40)
-                ctx_end = min(len(text), match.end() + 40)
+                ctx_start = max(0, span_start - 40)
+                ctx_end = min(len(text), span_end + 40)
                 context = text[ctx_start:ctx_end]
 
                 spans.append(DetectedSpan(
-                    start=match.start(),
-                    end=match.end(),
+                    start=span_start,
+                    end=span_end,
                     category=pat.category,
                     confidence=confidence,
                     matched_text=matched_text[:50] + "..." if len(matched_text) > 50 else matched_text,
@@ -127,6 +172,92 @@ class RegexDetector:
         )
 
     # ─── Validators ───────────────────────────────────────
+
+    @staticmethod
+    def _slice_window(text: str, pos: int, span_end: int, window: int) -> str:
+        a = max(0, pos - window)
+        b = min(len(text), span_end + window)
+        return text[a:b]
+
+    @staticmethod
+    def _b64url_decode(segment: str) -> bytes | None:
+        """Decode a JWT segment (base64url, no newline)."""
+        s = segment.strip()
+        pad = "=" * ((4 - len(s) % 4) % 4)
+        try:
+            return base64.urlsafe_b64decode(s + pad)
+        except (ValueError, TypeError):
+            return None
+
+    def validate_aws_access_key_id(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
+        """
+        Structural gate for IAM-style access key IDs: suffix must be valid base32
+        (same construction AWS uses; see TruffleHog GetAccountNumFromAWSID / base32 body).
+        Requires credential-related keywords within SECRET_KEYWORD_WINDOW chars.
+        """
+        raw = matched.strip()
+        if len(raw) != 20:
+            return False, 0
+        prefix = raw[:4]
+        if prefix not in ("AKIA", "ASIA", "ABIA", "ACCA"):
+            return False, 0
+        suffix = raw[4:]
+        if any(c not in _AWS_KEY_ID_SUFFIX_CHARS for c in suffix):
+            return False, 0
+        try:
+            decoded = base64.b32decode(suffix)
+        except Exception:
+            return False, 0
+        if len(decoded) < 6:
+            return False, 0
+        if self.PLACEHOLDER_HINT_RE.search(raw):
+            return False, 0
+        span_end = pos + len(raw)
+        win = self._slice_window(text, pos, span_end, self.SECRET_KEYWORD_WINDOW)
+        if self.PLACEHOLDER_HINT_RE.search(win):
+            return False, 0
+        if not self.SECRET_KEYWORD_RE.search(win):
+            return False, 0
+        return True, 0.97
+
+    def validate_aws_secret_assignment(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
+        """Drop 40-char hex blobs that match AWS secret shape but are usually git SHAs."""
+        m = re.search(r"[:=]\s*([A-Za-z0-9/+=]{40})", matched)
+        if not m:
+            return True, 0.95
+        secret = m.group(1)
+        if re.fullmatch(r"[0-9a-fA-F]{40}", secret):
+            return False, 0
+        if self.PLACEHOLDER_HINT_RE.search(matched) or self.PLACEHOLDER_HINT_RE.search(
+            self._slice_window(text, pos, pos + len(matched), self.SECRET_KEYWORD_WINDOW),
+        ):
+            return False, 0
+        return True, 0.95
+
+    def validate_jwt_structure(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
+        """Require a decodable header object with alg (reduces random dotted base64 strings)."""
+        parts = matched.split(".")
+        if len(parts) != 3:
+            return False, 0
+        if not parts[0].startswith("eyJ"):
+            return False, 0
+        header_raw = self._b64url_decode(parts[0])
+        if not header_raw:
+            return False, 0
+        try:
+            header = json.loads(header_raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+            return False, 0
+        if not isinstance(header, dict) or "alg" not in header:
+            return False, 0
+        if self.PLACEHOLDER_HINT_RE.search(matched):
+            return False, 0
+        win = self._slice_window(text, pos, pos + len(matched), self.SECRET_KEYWORD_WINDOW)
+        if self.PLACEHOLDER_HINT_RE.search(win):
+            return False, 0
+        if not self.SECRET_KEYWORD_RE.search(win):
+            return False, 0
+        return True, 0.92
 
     def validate_ssn(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
         """Validate SSN: exclude dates and phone-like patterns."""
@@ -209,6 +340,22 @@ class RegexDetector:
 
     def validate_entropy(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
         """Validate high-entropy strings using Shannon entropy."""
+        if self.PLACEHOLDER_HINT_RE.search(matched):
+            return False, 0
+        span_end = pos + len(matched)
+        if self.PLACEHOLDER_HINT_RE.search(self._slice_window(text, pos, span_end, 48)):
+            return False, 0
+
+        # Do not double-count JWT segments as generic high-entropy blobs.
+        lo = max(0, pos - 80)
+        hi = min(len(text), span_end + 400)
+        chunk = text[lo:hi]
+        for jm in _JWT_BLOB_RE.finditer(chunk):
+            j_abs_start = lo + jm.start()
+            j_abs_end = lo + jm.end()
+            if j_abs_start <= pos and j_abs_end >= span_end:
+                return False, 0
+
         entropy = self._shannon_entropy(matched)
         if entropy < 4.5:
             return False, 0

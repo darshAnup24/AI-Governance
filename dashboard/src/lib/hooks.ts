@@ -17,7 +17,7 @@ export function useAuditEvents(params?: { action?: string; limit?: number }) {
   return useQuery({
     queryKey: ['auditEvents', params],
     queryFn: () =>
-      api.get('/api/v1/audit-events', { params }).then(r => r.data),
+      api.get('/api/v1/audit-events', { params }).then(r => r.data.data ?? []),
     retry: 2,
     staleTime: 2_000,
     refetchInterval: 2_500,
@@ -31,7 +31,9 @@ export function useAnalyticsTrend(days = 30) {
     queryFn: () =>
       api.get('/api/v1/analytics/trend', { params: { days } }).then(r => r.data.data),
     retry: 2,
-    staleTime: 60_000,
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
   })
 }
 
@@ -39,9 +41,15 @@ export function useDetectionBreakdown() {
   return useQuery({
     queryKey: ['detectionBreakdown'],
     queryFn: () =>
-      api.get('/api/v1/analytics/categories').then(r => r.data),
+      api.get('/api/v1/analytics/categories').then(r => {
+        // endpoint returns a plain array; guard in case it ever returns a wrapper
+        const d = r.data
+        return Array.isArray(d) ? d : (d?.data ?? [])
+      }),
     retry: 2,
-    staleTime: 60_000,
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
   })
 }
 
@@ -49,7 +57,7 @@ export function useShadowAIAlerts() {
   return useQuery({
     queryKey: ['shadowAIAlerts'],
     queryFn: () =>
-      api.get('/api/v1/shadow-ai/detections').then(r => r.data),
+      api.get('/api/v1/shadow-ai/detections').then(r => r.data.data ?? []),
     retry: 2,
     staleTime: 5_000,
     refetchInterval: 5_000,
@@ -75,8 +83,13 @@ export function usePolicies() {
   return useQuery({
     queryKey: ['policies'],
     queryFn: () =>
-      govApi.get('/api/policies').then(r => r.data),
+      govApi.get('/api/policies').then(r => {
+        const d = r.data; return Array.isArray(d) ? d : (d?.data ?? [])
+      }),
     retry: 2,
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
   })
 }
 
@@ -84,7 +97,9 @@ export function useUsers() {
   return useQuery({
     queryKey: ['users'],
     queryFn: () =>
-      govApi.get('/api/users').then(r => r.data),
+      govApi.get('/api/users').then(r => {
+        const d = r.data; return Array.isArray(d) ? d : (d?.data ?? [])
+      }),
     retry: 2,
   })
 }
@@ -93,7 +108,9 @@ export function useUserHeatmap() {
   return useQuery({
     queryKey: ['userHeatmap'],
     queryFn: () =>
-      govApi.get('/api/audit-logs/by-user').then(r => r.data),
+      govApi.get('/api/audit-logs/by-user').then(r => {
+        const d = r.data; return Array.isArray(d) ? d : (d?.data ?? [])
+      }),
     retry: 2,
     staleTime: 120_000,
   })
@@ -103,8 +120,13 @@ export function useComplianceChecks() {
   return useQuery({
     queryKey: ['complianceChecks'],
     queryFn: () =>
-      govApi.get('/api/compliance/checks/org').then(r => r.data),
+      govApi.get('/api/compliance/checks/org').then(r => {
+        const d = r.data; return Array.isArray(d) ? d : (d?.data ?? [])
+      }),
     retry: 2,
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
   })
 }
 
@@ -112,7 +134,9 @@ export function useComplianceFrameworks() {
   return useQuery({
     queryKey: ['complianceFrameworks'],
     queryFn: () =>
-      govApi.get('/api/compliance/frameworks').then(r => r.data),
+      govApi.get('/api/compliance/frameworks').then(r => {
+        const d = r.data; return Array.isArray(d) ? d : (d?.data ?? [])
+      }),
     retry: 2,
     staleTime: 300_000,
   })
@@ -121,7 +145,9 @@ export function useComplianceFrameworks() {
 export function useVendors() {
   return useQuery({
     queryKey: ['vendors'],
-    queryFn: () => govApi.get('/api/vendors').then(r => r.data),
+    queryFn: () => govApi.get('/api/vendors').then(r => {
+      const d = r.data; return Array.isArray(d) ? d : (d?.data ?? [])
+    }),
     retry: 2,
   })
 }
@@ -129,7 +155,9 @@ export function useVendors() {
 export function useIncidents() {
   return useQuery({
     queryKey: ['incidents'],
-    queryFn: () => govApi.get('/api/incidents').then(r => r.data),
+    queryFn: () => govApi.get('/api/incidents').then(r => {
+      const d = r.data; return Array.isArray(d) ? d : (d?.data ?? [])
+    }),
     retry: 2,
     staleTime: 5_000,
     refetchInterval: 5_000,
@@ -140,16 +168,26 @@ export function useIncidents() {
 export function useModels() {
   return useQuery({
     queryKey: ['models'],
-    queryFn: () => govApi.get('/api/models').then(r => r.data),
+    queryFn: () => govApi.get('/api/models').then(r => {
+      const d = r.data; return Array.isArray(d) ? d : (d?.data ?? [])
+    }),
     retry: 2,
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
   })
 }
 
 export function useThreats(params?: { status?: string; severity?: string; days?: number }) {
   return useQuery({
     queryKey: ['threats', params],
-    queryFn: () => govApi.get('/api/threats', { params }).then(r => r.data),
+    queryFn: () => govApi.get('/api/threats', { params }).then(r => {
+      const d = r.data; return Array.isArray(d) ? d : (d?.data ?? [])
+    }),
     retry: 2,
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
   })
 }
 

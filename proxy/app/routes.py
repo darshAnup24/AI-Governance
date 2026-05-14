@@ -39,6 +39,10 @@ from proxy.app.models import (
     ProblemDetail,
     UserContext,
 )
+# Sprint 1: Semantic cache
+from proxy.app.semantic_cache import get_cached_detection, set_cached_detection
+# Sprint 3: Stateful seamless redaction
+from proxy.app.stateful_redactor import StatefulRedactor
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -49,8 +53,18 @@ async def _call_detection(
     prompt_text: str,
     user: UserContext,
     settings: Settings,
+    redis: Any = None,
 ) -> dict[str, Any]:
-    """Call the detection service. Returns detection result or fail-open default."""
+    """Call the detection service with semantic cache.
+    Sprint 1: Check Redis semantic cache first; only call detection service on miss.
+    """
+    # ── Sprint 1: cache lookup ──────────────────────────────
+    cached = await get_cached_detection(redis, prompt_text)
+    if cached is not None:
+        cached["_from_cache"] = True
+        return cached
+
+    # ── Cache miss: call detection service ─────────────────
     try:
         resp = await http_client.post(
             f"{settings.detection_service_url}/detect",
@@ -64,7 +78,10 @@ async def _call_detection(
             timeout=settings.detection_timeout_ms / 1000,
         )
         resp.raise_for_status()
-        return resp.json()
+        result = resp.json()
+        # ── Sprint 1: populate cache for future requests ────
+        await set_cached_detection(redis, prompt_text, result)
+        return result
     except httpx.TimeoutException:
         log.warning("detection.timeout", timeout_ms=settings.detection_timeout_ms)
         return {"risk_score": 0, "action": "ALLOW", "detection_results": [], "detected_spans": []}
@@ -155,8 +172,8 @@ async def chat_completions(
     prompt_text = ProviderAdapter.extract_prompt_text(body.messages)
     prompt_hash = hashlib.sha256(prompt_text.encode()).hexdigest()
 
-    # Call detection service
-    detection_result = await _call_detection(http_client, prompt_text, user, settings)
+    # Call detection service (Sprint 1: cache-first)
+    detection_result = await _call_detection(http_client, prompt_text, user, settings, redis)
     action = ActionType(detection_result.get("action", "ALLOW"))
     risk_score = detection_result.get("risk_score", 0)
 
@@ -195,11 +212,23 @@ async def chat_completions(
             ).model_dump(),
         )
 
-    # Handle REDACT: replace sensitive spans before forwarding
+    # Sprint 3: Stateful seamless redaction — entity ID mapping per session
     messages_to_send = body.messages
+    redact_session_id: str | None = None
     if action == ActionType.REDACT:
         detected_spans = detection_result.get("detected_spans", [])
-        messages_to_send = _redact_prompt(body.messages, detected_spans, prompt_text)
+        stateful = StatefulRedactor(redis)
+        # Obtain session_id from request header (browser/SDK sends it) or create a new one
+        req_session_id = request.headers.get("X-Session-ID") or None
+        redacted_text, redact_session_id = await stateful.redact(
+            prompt_text, detected_spans, session_id=req_session_id
+        )
+        # Replace last user message content with redacted version
+        messages_to_send = [
+            ChatMessage(role=m.role,
+                        content=redacted_text if m.role == "user" else m.content)
+            for m in body.messages
+        ]
 
     # Build upstream request
     upstream_body = {
@@ -415,7 +444,7 @@ async def analytics_categories(
 
     query = text(f"""
         SELECT
-            jsonb_array_elementsText(
+            jsonb_array_elements_text(
                 COALESCE(detection_results->'detected_spans', '[]'::jsonb)
             )::jsonb->>'category' as category,
             COUNT(*) as count

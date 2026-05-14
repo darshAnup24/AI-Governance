@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { Search, X, ChevronLeft, ChevronRight, Flag, Download } from 'lucide-react'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts'
-import api from '../lib/api'
+import { useAuditEvents } from '../lib/hooks'
 
 interface Incident {
     id: string
@@ -31,47 +31,35 @@ function scoreColor(score: number): string {
 }
 
 export default function IncidentsPage() {
-    const [incidents, setIncidents] = useState<Incident[]>([])
+    const { data: auditEvents, isPending, isError, refetch } = useAuditEvents({ limit: 50 })
     const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null)
     const [actionFilter, setActionFilter] = useState('ALL')
     const [searchQuery, setSearchQuery] = useState('')
 
-    useEffect(() => {
-        const fetchIncidents = async () => {
-            try {
-                const resp = await api.get('/api/v1/audit-events?per_page=50')
-                const rawData = resp.data.data || []
-                
-                // Map the backend data to our frontend format
-                const mapped: Incident[] = rawData.map((d: any) => {
-                    const detections = d.detection_results?.detected_spans || []
-                    return {
-                        id: d.event_id,
-                        timestamp: d.timestamp ? new Date(d.timestamp).toLocaleString() : 'Unknown',
-                        user: d.user_id === 'dev-user-001' ? 'EMP-1293' : d.user_id, // Map dev user to something pretty
-                        department: 'Engineering', // Hardcoded for demo unless provided by API
-                        riskScore: d.risk_score,
-                        category: detections.length > 0 ? detections[0].category : 'Clean',
-                        action: d.action_taken,
-                        promptHash: d.prompt_hash?.substring(0, 8) || 'N/A',
-                        detections: detections.map((det: any) => ({
-                            detector: det.detector || 'regex',
-                            confidence: det.confidence || 0.9,
-                            category: det.category
-                        }))
-                    }
-                })
-                setIncidents(mapped)
-            } catch (e) {
-                console.error("Failed to fetch incidents", e)
-            }
-        }
-        fetchIncidents()
-        const interval = setInterval(fetchIncidents, 3000)
-        return () => clearInterval(interval)
-    }, [])
+    const incidents = useMemo(() => {
+        return (auditEvents || []).map((d: any) => {
+            const detections = d.detection_results?.detected_spans || []
+            const action = d.action_taken === 'BLOCK' ? 'BLOCKED' : d.action_taken === 'REDACT' ? 'REDACTED' : d.action_taken === 'WARN' ? 'WARNED' : 'ALLOWED'
 
-    const filtered = incidents.filter(inc => {
+            return {
+                id: d.event_id,
+                timestamp: d.timestamp ? new Date(d.timestamp).toLocaleString() : 'Unknown',
+                user: d.user_id === 'dev-user-001' ? 'EMP-1293' : d.user_id,
+                department: 'Engineering',
+                riskScore: d.risk_score ?? 0,
+                category: detections.length > 0 ? detections[0].category : 'Clean',
+                action,
+                promptHash: d.prompt_hash?.substring(0, 8) || 'N/A',
+                detections: detections.map((det: any) => ({
+                    detector: det.detector || 'regex',
+                    confidence: det.confidence || 0.9,
+                    category: det.category,
+                })),
+            } as Incident
+        })
+    }, [auditEvents])
+
+    const filtered = incidents.filter((inc: Incident) => {
         if (actionFilter !== 'ALL' && inc.action !== actionFilter) return false
         if (searchQuery) {
             const q = searchQuery.toLowerCase()
@@ -82,9 +70,15 @@ export default function IncidentsPage() {
 
     return (
         <div className="space-y-6 animate-fade-in">
+<div className="flex items-center justify-between">
             <div>
                 <h1 className="text-2xl font-bold text-slate-100">Incidents</h1>
                 <p className="text-slate-500 mt-1">Explore flagged events and detection details</p>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-semibold text-emerald-400">LIVE</span>
+            </div>
             </div>
 
             {/* Filter bar */}
@@ -106,6 +100,15 @@ export default function IncidentsPage() {
                 </select>
             </div>
 
+            {isError && (
+                <div className="card border border-red-500/20 bg-red-500/5 text-sm text-red-300">
+                    Live audit data is temporarily unavailable.
+                    <button onClick={() => refetch()} className="ml-2 text-red-200 underline">
+                        Retry
+                    </button>
+                </div>
+            )}
+
             {/* Table */}
             <div className="card overflow-x-auto">
                 <table className="w-full text-sm">
@@ -121,7 +124,7 @@ export default function IncidentsPage() {
                         </tr>
                     </thead>
                     <tbody>
-                        {filtered.map(inc => (
+                        {!isPending && filtered.map((inc: Incident) => (
                             <tr
                                 key={inc.id}
                                 className="border-b border-slate-800/30 hover:bg-slate-800/20 cursor-pointer transition-colors"
@@ -145,7 +148,7 @@ export default function IncidentsPage() {
                     </tbody>
                 </table>
 
-                {filtered.length === 0 && (
+                {!isPending && filtered.length === 0 && (
                     <div className="flex items-center justify-center py-12 text-slate-500">
                         <p>No incidents match your filters</p>
                     </div>

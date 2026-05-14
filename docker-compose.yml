@@ -159,22 +159,37 @@ services:
     networks:
       - ai-gateway-net
 
-  # ─── Ollama (LLM inference) ────────────────────────────
+  # ─── Ollama (LLM inference — fallback only, Sprint 2 uses ONNX) ──────────
   # Requires NVIDIA Container Toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
   ollama:
     image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
+    # Note: Using native Ollama on host (port 11434), so not exposing container port
+    # Internal docker services can still reach it via http://ollama:11434
     volumes:
       - ollama_data:/root/.ollama
-    # GPU disabled — remove comment and add deploy block below when NVIDIA driver is working:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    networks:
+      - ai-gateway-net
+
+  # ─── Sprint 4: DNS Sinkhole (Active Shadow AI Interception) ─────────────
+  dns-sinkhole:
+    build:
+      context: .
+      dockerfile: detection/Dockerfile
+    command: python -m detection.app.dns_sinkhole
+    # Note: DNS sinkhole runs internally only, doesn't expose to host
+    # Host DNS is handled by native systemd-resolve on port 5353
+    environment:
+      - DNS_UPSTREAM=8.8.8.8
+      - DNS_PORT=5353
+      - DNS_SINKHOLE_IP=${SHIELD_PROXY_IP:-127.0.0.1}
+      - PROXY_ALERT_URL=http://proxy:8000
+      - SINKHOLE_PASSTHROUGH=${SINKHOLE_PASSTHROUGH:-false}
+    volumes:
+      - ./detection:/app/detection
+      - ./proxy:/app/proxy
+    depends_on:
+      - proxy
+      - detection
     networks:
       - ai-gateway-net
 

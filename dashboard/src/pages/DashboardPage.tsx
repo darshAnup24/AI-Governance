@@ -19,7 +19,7 @@ const actionBadge: Record<string, string> = {
 export default function DashboardPage() {
     const trendQ = useAnalyticsTrend(30)
     const eventsQ = useAuditEvents({ limit: 100 })
-    useDashboardStats()
+    const statsQ = useDashboardStats()
 
     const [recentIncidents, setRecentIncidents] = useState<any[]>([])
     const [flashId, setFlashId] = useState<string | null>(null)
@@ -48,7 +48,7 @@ export default function DashboardPage() {
 
     useEffect(() => {
         if (!eventsQ.data) return
-        const rawEvents = eventsQ.data.data || []
+        const rawEvents = Array.isArray(eventsQ.data) ? eventsQ.data : []
 
         if (rawEvents.length > 0) {
             const topId = rawEvents[0].event_id
@@ -121,6 +121,23 @@ export default function DashboardPage() {
             </div>
 
             {isError && <InlineError message="Some data failed to load." onRetry={() => { trendQ.refetch(); eventsQ.refetch() }} />}
+
+            {/* Governance Snapshot */}
+            {statsQ.data && (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {[
+                        { label: 'AI Models', value: statsQ.data.totalModels ?? 0, tone: 'text-cyan-400' },
+                        { label: 'Active Incidents', value: statsQ.data.activeIncidents ?? 0, tone: 'text-red-400' },
+                        { label: 'Active Policies', value: statsQ.data.policiesActive ?? 0, tone: 'text-indigo-400' },
+                        { label: 'Compliance Score', value: `${statsQ.data.complianceScore ?? 0}%`, tone: 'text-emerald-400' },
+                    ].map(item => (
+                        <div key={item.label} className="card-hover border border-slate-800/80 bg-slate-900/60">
+                            <p className="text-[10px] uppercase tracking-wider text-slate-500">{item.label}</p>
+                            <p className={`mt-2 text-xl font-bold ${item.tone}`}>{item.value}</p>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

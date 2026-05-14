@@ -1,0 +1,1 @@
+{"id": "d93f50d8-d4f0-45a1-9054-846c3be66759", "detection_id": "test_001", "timestamp": "2026-05-14T08:42:34.138153", "text": "", "model_prediction": "PII", "model_confidence": 0.62, "model_threshold": 0.45, "user_correction": "SAFE", "user_confidence": 0.95, "notes": "Testing feedback endpoint", "status": "recorded"}

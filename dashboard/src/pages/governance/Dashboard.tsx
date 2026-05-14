@@ -61,7 +61,7 @@ export default function GovDashboard() {
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs text-emerald-400 font-medium">Live</span>
+          <span className="text-xs text-emerald-400 font-medium">Live (5s refresh)</span>
         </div>
       </div>
 

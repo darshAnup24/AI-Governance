@@ -1,0 +1,82 @@
+{
+  "CREDENTIALS": {
+    "category": "CREDENTIALS",
+    "current_threshold": 0.45,
+    "previous_threshold": 0.45,
+    "adjustment_history": [],
+    "reward_history": [],
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0,
+    "sample_count": 0,
+    "last_updated": "2026-05-14T14:13:30.044489"
+  },
+  "PROMPT_INJECTION": {
+    "category": "PROMPT_INJECTION",
+    "current_threshold": 0.45,
+    "previous_threshold": 0.45,
+    "adjustment_history": [],
+    "reward_history": [],
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0,
+    "sample_count": 0,
+    "last_updated": "2026-05-14T14:13:30.044501"
+  },
+  "REGULATORY": {
+    "category": "REGULATORY",
+    "current_threshold": 0.45,
+    "previous_threshold": 0.45,
+    "adjustment_history": [],
+    "reward_history": [],
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0,
+    "sample_count": 0,
+    "last_updated": "2026-05-14T14:13:30.044505"
+  },
+  "PII": {
+    "category": "PII",
+    "current_threshold": 0.61,
+    "previous_threshold": 0.53,
+    "adjustment_history": [
+      0.08,
+      0.08
+    ],
+    "reward_history": [],
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0,
+    "sample_count": 0,
+    "last_updated": "2026-05-14T14:15:23.676400"
+  },
+  "HALLUCINATION": {
+    "category": "HALLUCINATION",
+    "current_threshold": 0.45,
+    "previous_threshold": 0.45,
+    "adjustment_history": [],
+    "reward_history": [],
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0,
+    "sample_count": 0,
+    "last_updated": "2026-05-14T14:13:30.044509"
+  },
+  "BIAS": {
+    "category": "BIAS",
+    "current_threshold": 0.45,
+    "previous_threshold": 0.45,
+    "adjustment_history": [],
+    "reward_history": [],
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0,
+    "sample_count": 0,
+    "last_updated": "2026-05-14T14:13:30.044511"
+  },
+  "SAFE": {
+    "category": "SAFE",
+    "current_threshold": 0.45,
+    "previous_threshold": 0.45,
+    "adjustment_history": [],
+    "reward_history": [],
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0,
+    "sample_count": 0,
+    "last_updated": "2026-05-14T14:13:30.044513"
+  }
+}

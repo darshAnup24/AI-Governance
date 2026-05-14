@@ -328,9 +328,15 @@ export default function PoliciesPage() {
             Visual rule builder — IF [condition] THEN [action]
           </p>
         </div>
-        <button id="new-policy-btn" onClick={handleNew} className="btn-primary flex items-center gap-2">
-          <Plus className="w-4 h-4" /> New Policy
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-xs font-semibold text-emerald-400">LIVE</span>
+          </div>
+          <button id="new-policy-btn" onClick={handleNew} className="btn-primary flex items-center gap-2">
+            <Plus className="w-4 h-4" /> New Policy
+          </button>
+        </div>
       </div>
 
       {isError && <InlineError message="Using cached policy data — governance service may be offline." onRetry={() => refetch()} />}

@@ -318,9 +318,35 @@ class TestRegexDetector:
         assert any(s.category.value == "API_KEY" for s in result.spans)
 
     def test_aws_key_detected(self, regex_detector):
-        text = "Access key: AKIAIOSFODNN7EXAMPLE"
+        # Documented AWS sample IDs are filtered; use structurally valid base32 body + keyword context.
+        text = "AWS_ACCESS_KEY_ID=AKIAQWERTYUIOPASDFGH"
         result = regex_detector.detect(text)
         assert any(s.category.value == "API_KEY" for s in result.spans)
+
+    def test_aws_doc_example_filtered(self, regex_detector):
+        text = "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE"
+        result = regex_detector.detect(text)
+        assert not any("AKIA" in (s.matched_text or "") for s in result.spans)
+
+    def test_aws_random_alnum_suffix_filtered(self, regex_detector):
+        text = "aws_access_key=AKIA1234567890123456"
+        result = regex_detector.detect(text)
+        assert not any("AKIA1234567890123456" in (s.matched_text or "") for s in result.spans)
+
+    def test_jwt_with_context_detected(self, regex_detector):
+        import base64
+        import json
+
+        def b64u(raw: bytes) -> str:
+            return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+        h = b64u(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+        p = b64u(json.dumps({"sub": "user-1"}).encode())
+        sig = b64u(b"0123456789abcdef0123456789abcdef")
+        token = f"{h}.{p}.{sig}"
+        text = f"Bearer {token} for the session"
+        result = regex_detector.detect(text)
+        assert any(s.category.value == "API_KEY" and "eyJ" in (s.matched_text or "") for s in result.spans)
 
     def test_github_pat_detected(self, regex_detector):
         text = "Token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"

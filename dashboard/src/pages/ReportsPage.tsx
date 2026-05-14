@@ -46,6 +46,10 @@ export default function ReportsPage() {
                     <h1 className="text-2xl font-bold text-slate-100">Reports</h1>
                     <p className="text-slate-500 mt-1">Generate compliance and audit reports</p>
                 </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-xs font-semibold text-emerald-400">LIVE</span>
+                </div>
             </div>
 
             {generateMutation.isError && (

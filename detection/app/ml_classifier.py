@@ -122,18 +122,33 @@ class MLClassifier:
 
     # ── Inference ─────────────────────────────────────────────────────────────
 
+    def _segment_text(self, text: str, max_chars: int = 1000, overlap: int = 100) -> list[str]:
+        """Splits text into chunks with sliding window overlap."""
+        if len(text) <= max_chars:
+            return [text]
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + max_chars
+            chunks.append(text[start:end])
+            if end >= len(text):
+                break
+            start += max_chars - overlap
+        return chunks
+
     def _sklearn_predict(self, text: str) -> dict[str, float]:
         """Run sklearn model, return {category: probability}."""
         try:
+            chunks = self._segment_text(text, max_chars=1000, overlap=100)
             # sklearn MultiOutputClassifier.predict_proba returns list of arrays
-            proba_list = self._sklearn_model.predict_proba([text])
-            scores: dict[str, float] = {}
+            proba_list = self._sklearn_model.predict_proba(chunks)
+            scores: dict[str, float] = {cat: 0.0 for cat in self._all_cats}
+            
             for i, cat in enumerate(self._all_cats):
-                # Each element is array of shape (1, 2) → proba of positive class
                 if i < len(proba_list):
-                    scores[cat] = float(proba_list[i][0][1])
-                else:
-                    scores[cat] = 0.0
+                    # proba_list[i] is an array of shape (n_chunks, 2)
+                    chunk_probs = [float(p[1]) for p in proba_list[i]]
+                    scores[cat] = max(chunk_probs)
             return scores
         except Exception as e:
             log.warning("ml_classifier.sklearn_predict_failed", error=str(e))
@@ -142,8 +157,13 @@ class MLClassifier:
     def _spacy_predict(self, text: str) -> dict[str, float]:
         """Run spaCy textcat, return {category: probability}."""
         try:
-            doc = self._spacy_nlp(text[:4000])  # Limit for performance
-            return {cat: float(doc.cats.get(cat, 0.0)) for cat in self._all_cats}
+            chunks = self._segment_text(text, max_chars=1000, overlap=100)
+            max_scores = {cat: 0.0 for cat in self._all_cats}
+            for chunk in chunks:
+                doc = self._spacy_nlp(chunk)
+                for cat in self._all_cats:
+                    max_scores[cat] = max(max_scores[cat], float(doc.cats.get(cat, 0.0)))
+            return max_scores
         except Exception as e:
             log.warning("ml_classifier.spacy_predict_failed", error=str(e))
             return {}
