@@ -57,3 +57,7 @@ coverage/
 detection/ml/data/raw/massive_dataset.jsonl
 detection/models/
 detection/ml/data_backup/
+
+# Analysis caches
+graphify-out/
+.cache/

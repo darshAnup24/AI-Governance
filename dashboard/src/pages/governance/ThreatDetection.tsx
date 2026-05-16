@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, Zap, RefreshCw, AlertTriangle, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { Search, Zap, RefreshCw, AlertTriangle, ShieldAlert, ShieldCheck, ExternalLink, ChevronRight } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import { useAuditEvents, useDetectionBreakdown } from '../../lib/hooks'
 import { SkeletonTable } from '../../components/Skeletons'
 import { InlineError } from '../../components/ErrorBoundary'
-import govApi from '../../lib/govApi'
+import api from '../../lib/api'
+import { Link } from 'react-router-dom'
 
 const ACTION_COLORS: Record<string, string> = {
   BLOCK: 'bg-red-500/10 text-red-400',
@@ -12,6 +13,24 @@ const ACTION_COLORS: Record<string, string> = {
   WARN: 'bg-yellow-500/10 text-yellow-400',
   LOG: 'bg-blue-500/10 text-blue-400',
   ALLOW: 'bg-emerald-500/10 text-emerald-400',
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  PII: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+  PROMPT_INJECTION: 'bg-red-500/10 text-red-300 border-red-500/30',
+  API_KEY: 'bg-orange-500/10 text-orange-300 border-orange-500/30',
+  CREDENTIALS: 'bg-orange-500/10 text-orange-300 border-orange-500/30',
+  REGULATORY: 'bg-purple-500/10 text-purple-300 border-purple-500/30',
+  SECURITY_VULN: 'bg-rose-500/10 text-rose-300 border-rose-500/30',
+  CONFIDENTIAL: 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30',
+  SOURCE_CODE: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30',
+}
+
+function euAiActLevel(score: number): string {
+  if (score >= 90) return 'UNACCEPTABLE'
+  if (score >= 70) return 'HIGH'
+  if (score >= 40) return 'LIMITED'
+  return 'MINIMAL'
 }
 
 const TIER_COLORS: Record<string, string> = {
@@ -97,6 +116,7 @@ export default function ThreatDetection() {
 
   const [scanText, setScanText] = useState('')
   const [scanResult, setScanResult] = useState<any>(null)
+  const [scanError, setScanError] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
   const [filterAction, setFilterAction] = useState<string>('ALL')
 
@@ -109,18 +129,22 @@ export default function ThreatDetection() {
   const handleScan = async () => {
     if (!scanText.trim()) return
     setScanning(true)
+    setScanResult(null)
+    setScanError(null)
     try {
-      const r = await govApi.post('/api/threats/scan', { text: scanText })
-      setScanResult(r.data)
-    } catch {
-      // Mock scan result for demo
-      const score = Math.floor(Math.random() * 100)
+      const r = await api.post('/api/v1/inspect', { text: scanText })
+      const d = r.data
       setScanResult({
-        riskScore: score,
-        action: score >= 90 ? 'BLOCK' : score >= 80 ? 'REDACT' : score >= 60 ? 'WARN' : score >= 30 ? 'LOG' : 'ALLOW',
-        threatsDetected: Math.floor(score / 20),
-        euAiActRiskLevel: score >= 90 ? 'UNACCEPTABLE' : score >= 70 ? 'HIGH' : score >= 40 ? 'LIMITED' : 'MINIMAL',
+        riskScore: d.risk_score ?? 0,
+        action: d.action ?? 'ALLOW',
+        categories: d.categories ?? [],
+        detectedSpans: d.detected_spans ?? [],
+        euAiActRiskLevel: euAiActLevel(d.risk_score ?? 0),
+        threatsDetected: (d.detected_spans ?? []).length,
+        durationMs: d.duration_ms ?? 0,
       })
+    } catch (e: any) {
+      setScanError(e?.response?.data?.detail || 'Detection service unavailable — ensure containers are running.')
     }
     setScanning(false)
   }
@@ -159,9 +183,18 @@ export default function ThreatDetection() {
 
       {/* Manual Scan */}
       <div className="card border border-brand-500/20 bg-brand-500/3">
-        <h3 className="text-sm font-semibold text-brand-400 mb-3 flex items-center gap-2">
-          <Search className="w-4 h-4" /> Manual Scan
-        </h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-brand-400 flex items-center gap-2">
+            <Search className="w-4 h-4" /> Quick Threat Scan
+          </h3>
+          <Link
+            to="/live-demo"
+            className="flex items-center gap-1 text-xs text-slate-500 hover:text-brand-400 transition-colors"
+          >
+            Deep span analysis
+            <ExternalLink className="w-3 h-3" />
+          </Link>
+        </div>
         <textarea
           id="scan-textarea"
           className="input w-full h-28 font-mono text-sm mb-3 resize-none"
@@ -169,7 +202,7 @@ export default function ThreatDetection() {
           value={scanText}
           onChange={e => setScanText(e.target.value)}
         />
-        <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             id="scan-btn"
             onClick={handleScan}
@@ -179,36 +212,107 @@ export default function ThreatDetection() {
             {scanning
               ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               : <Zap className="w-4 h-4" />}
-            {scanning ? 'Scanning...' : 'Scan Prompt'}
+            {scanning ? 'Scanning...' : 'Scan'}
           </button>
 
-          {scanResult && (
-            <div className="flex items-center gap-6 text-sm flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500">Risk Score</span>
-                <span className={`text-lg font-bold ${scanResult.riskScore >= 70 ? 'text-red-400' : scanResult.riskScore >= 40 ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                  {scanResult.riskScore}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-500 mr-1">Action</span>
-                <span className={`font-semibold text-xs px-2 py-0.5 rounded ${ACTION_COLORS[scanResult.action]}`}>
-                  {scanResult.action}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-500 mr-1">EU AI Act</span>
-                <span className={`font-semibold text-xs ${TIER_COLORS[scanResult.euAiActRiskLevel]}`}>
-                  {scanResult.euAiActRiskLevel} RISK
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-500 mr-1">Threats</span>
-                <span className="text-slate-200 font-semibold">{scanResult.threatsDetected}</span>
-              </div>
-            </div>
+          {scanError && (
+            <p className="text-xs text-red-400">⚠ {scanError}</p>
           )}
         </div>
+
+        {scanResult && (
+          <div className="mt-4 p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3 animate-fade-in">
+            {/* Top metrics row */}
+            <div className="flex items-center gap-6 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 text-xs">Risk Score</span>
+                <span className={`text-2xl font-bold font-mono ${
+                  scanResult.riskScore >= 70 ? 'text-red-400' :
+                  scanResult.riskScore >= 40 ? 'text-yellow-400' : 'text-emerald-400'
+                }`}>{scanResult.riskScore}</span>
+              </div>
+              <div>
+                <span className={`font-semibold text-xs px-2.5 py-1 rounded-full border ${
+                  ACTION_COLORS[scanResult.action]
+                }`}>{scanResult.action}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-500 text-xs">EU AI Act</span>
+                <span className={`font-bold text-xs ${TIER_COLORS[scanResult.euAiActRiskLevel]}`}>
+                  {scanResult.euAiActRiskLevel}
+                </span>
+              </div>
+              <div className="ml-auto text-right">
+                <p className="text-[10px] text-slate-600 font-mono">{scanResult.durationMs}ms</p>
+                <p className="text-[10px] text-slate-600">{scanResult.threatsDetected} span{scanResult.threatsDetected !== 1 ? 's' : ''} found</p>
+              </div>
+            </div>
+
+            {/* Detected categories */}
+            {scanResult.categories.length > 0 ? (
+              <div>
+                <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-2">Detected Categories</p>
+                <div className="flex flex-wrap gap-2">
+                  {scanResult.categories.map((cat: string) => (
+                    <span key={cat}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-semibold ${
+                        CATEGORY_COLORS[cat] || 'bg-slate-700/50 text-slate-300 border-slate-700'
+                      }`}
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                      {cat.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                <ShieldCheck className="w-4 h-4" />
+                No violations detected
+              </div>
+            )}
+
+            {/* Top span details */}
+            {scanResult.detectedSpans.length > 0 && (
+              <div className="space-y-1.5 pt-1 border-t border-slate-800">
+                {scanResult.detectedSpans.slice(0, 4).map((sp: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        sp.category === 'PROMPT_INJECTION' ? 'bg-red-400' :
+                        sp.category === 'PII' ? 'bg-blue-400' :
+                        sp.category === 'API_KEY' ? 'bg-orange-400' :
+                        sp.category === 'REGULATORY' ? 'bg-purple-400' :
+                        sp.category === 'SECURITY_VULN' ? 'bg-rose-400' : 'bg-yellow-400'
+                      }`} />
+                      <span className="text-slate-400">{sp.category?.replace(/_/g, ' ')}</span>
+                      {sp.matched_text && (
+                        <code className="text-[10px] text-slate-600 bg-slate-800 px-1 rounded truncate max-w-40">
+                          {sp.matched_text.slice(0, 28)}…
+                        </code>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-12 h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-brand-500 to-red-500 rounded-full"
+                          style={{ width: `${Math.round((sp.confidence || 1) * 100)}%` }} />
+                      </div>
+                      <span className="text-[10px] text-slate-500 font-mono w-7 text-right">
+                        {Math.round((sp.confidence || 1) * 100)}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {scanResult.detectedSpans.length > 4 && (
+                  <Link to="/live-demo" className="text-[10px] text-brand-400 hover:underline flex items-center gap-1">
+                    +{scanResult.detectedSpans.length - 4} more spans — view full breakdown
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </Link>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Charts + Feed */}

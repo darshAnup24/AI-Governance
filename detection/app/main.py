@@ -18,15 +18,17 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import hashlib
 import json
+import math
 import os
 from redis.asyncio import Redis
 
 from proxy.app.logging_config import setup_logging
-from proxy.app.models import ActionType, DetectedSpan, DetectionResult, FinalRiskScore
+from proxy.app.models import ActionType, DetectedSpan, DetectionCategory, DetectionResult, FinalRiskScore
 
+from detection.app.preprocessor import sanitize, fast_path_route, length_defense
 from detection.app.regex_detector import RegexDetector
-from detection.app.ner_detector import SpacyNERDetector
-from detection.app.risk_scorer import RiskScoreAggregator, redact_prompt
+from detection.app.ner_detector import DebertaNERDetector
+from detection.app.risk_scorer import RiskScoreAggregator, redact_prompt, REDUCED_SENSITIVITY_ROLES
 from detection.app.llama_classifier import LlamaClassifier
 from detection.app.detectors.hallucination_detector import HallucinationDetector
 from detection.app.detectors.bias_detector import BiasDetector
@@ -44,7 +46,7 @@ log = structlog.get_logger()
 # ─── Globals (loaded once at startup) ─────────────────────
 
 regex_detector = RegexDetector()
-ner_detector = SpacyNERDetector()
+ner_detector = DebertaNERDetector()
 risk_aggregator = RiskScoreAggregator()
 llama_classifier = LlamaClassifier()
 hallucination_detector = HallucinationDetector()
@@ -56,13 +58,69 @@ ml_classifier = MLClassifier()  # Trained sklearn + spaCy ensemble
 # Phase 4: RL Feedback Store
 feedback_store = FeedbackStore()
 
-TIER3_THRESHOLD_LOW = 40
+TIER3_THRESHOLD_LOW  = 40
 TIER3_THRESHOLD_HIGH = 70
-MAX_PROMPT_CHARS = 4000
+MAX_PROMPT_CHARS     = 4000
 
 redis_client: Redis | None = None
 # True parallel execution for C-extension ML models (which release the GIL)
 ml_executor = ThreadPoolExecutor(max_workers=8)
+
+
+# ─── Tier 0: Semantic Fast-Path ───────────────────────────
+# Classify input BEFORE running the full detector suite.
+# Route:
+#   "code"             → all tiers + syntax-aware chunking (full 50ms budget)
+#   "natural_language" → Tier 1 regex + ML only; skip heavy NER/security detectors
+#   "mixed"            → all tiers (conservative)
+#
+# Latency gain for pure NL prompts: ~15-30ms (skips spaCy NER, security_code,
+# hallucination, and bias detectors which are irrelevant for plain chat).
+
+import re as _re
+
+# Markers that strongly indicate a code block is present
+_CODE_BLOCK_RE = _re.compile(
+    r'(?:```|~~~|\bimport\b|\bfrom\b\s+\w+\s+\bimport\b|'
+    r'\bfunction\b|\bclass\b\s+\w+[\s:{(]|\bdef\b\s+\w+\s*\(|'
+    r'\bconst\b|\blet\b|\bvar\b\s+\w+\s*=|'
+    r'\b(?:public|private|protected)\b\s+(?:static\s+)?\w+|'
+    r'\bSELECT\b.*\bFROM\b|\bINSERT\s+INTO\b|\bUPDATE\b.*\bSET\b|'
+    r'\$\{|=>\s*\{|->\s*\{)',
+    _re.IGNORECASE | _re.DOTALL,
+)
+
+# Markers that strongly indicate a URL / connection string / structured data
+_STRUCTURED_DATA_RE = _re.compile(
+    r'(?:https?://|ftp://|ssh://|git@|mongodb\+srv://|postgresql://|'
+    r'redis://|amqp://|-----BEGIN|\bAKIA[A-Z0-9]{16}\b|'
+    r'eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]+)',
+)
+
+
+def classify_input_context(text: str) -> str:
+    """
+    Tier-0 semantic fast-path classifier.
+
+    Returns one of:
+      "code"             — contains code blocks, SQL, or structured data patterns
+      "natural_language" — plain prose / chat; no code markers detected
+      "mixed"            — ambiguous; fall back to full pipeline
+    """
+    has_code       = bool(_CODE_BLOCK_RE.search(text))
+    has_structured = bool(_STRUCTURED_DATA_RE.search(text))
+
+    if has_code or has_structured:
+        # Check if it also has natural-language sentences
+        # Simple heuristic: sentence-ending punctuation ratio
+        sentence_count = len(_re.findall(r'[.!?]\s', text))
+        word_count     = len(text.split())
+        nl_ratio       = sentence_count / max(word_count, 1)
+        if nl_ratio > 0.05 and not has_code:
+            return "mixed"
+        return "code"
+
+    return "natural_language"
 
 
 # ─── Request / Response Models ───────────────────────────
@@ -76,6 +134,7 @@ class DetectRequest(BaseModel):
 
 
 class DetectResponse(BaseModel):
+    detection_id: str = ""  # SHA-256 hash of the request text — used by feedback loop
     risk_score: int
     action: ActionType
     detection_results: list[DetectionResult]
@@ -150,24 +209,50 @@ async def detect(request: DetectRequest) -> DetectResponse:
     """
     start = time.perf_counter()
 
-    # DOS Protection / Prompt Length Attack Prevention
-    text_to_scan = request.text
+    # ── Preprocessing Stage 1: Input Sanitization ────────────────────────────
+    # Strip null bytes, NFKC-normalize, collapse whitespace.  Runs before any
+    # hashing or caching so all downstream stages see a clean, canonical text.
+    text_to_scan, _sv = sanitize(request.text)
+    log.debug("preprocess.sanitize", **_sv)
+
+    # ── Preprocessing Stage 2a: Empty-input fast path ────────────────────────
+    # Return immediately for blank / whitespace-only prompts — no scan needed.
+    _fp_verdict, _fpv = fast_path_route(text_to_scan)
+    log.debug("preprocess.fast_path", **_fpv)
+    if _fpv.get("route") == "empty":
+        log.info("preprocess.empty_fast_path", latency_ms=_fpv.get("latency_ms"))
+        _empty_hash = hashlib.sha256(text_to_scan.encode("utf-8")).hexdigest()
+        return DetectResponse(
+            detection_id=_empty_hash,
+            risk_score=0,
+            action=ActionType.ALLOW,
+            detection_results=[],
+            detected_spans=[],
+            processing_time_ms=round((time.perf_counter() - start) * 1000, 2),
+        )
+
+    # ── Preprocessing Stage 3: Verifiable Length Defense ─────────────────────
+    # Replaces the previous silent head+tail concatenation with an explicit
+    # [N_CHARS_SKIPPED_BY_SHIELD] marker so auditors can verify no edge data
+    # was dropped.  Also emits first/last edge SHA-256 fingerprints.
     synthetic_middle_risk = None
     if len(text_to_scan) > MAX_PROMPT_CHARS:
-        # Scan first + last 2000 chars to prevent parallel chunking server crashes
-        head = text_to_scan[:2000]
-        tail = text_to_scan[-2000:]
-        text_to_scan = f"{head}\n\n...[TRUNCATED]...\n\n{tail}"
+        text_to_scan, _ldv = length_defense(text_to_scan, max_len=MAX_PROMPT_CHARS, edge_len=2000)
+        log.info("preprocess.length_defense", **_ldv)
         synthetic_middle_risk = DetectionResult(
             detector_name="length_guard",
             spans=[],
-            risk_score=50.0, # Flag unseen middle as MEDIUM automatically
-            processing_time_ms=0.0
+            risk_score=50.0,
+            processing_time_ms=_ldv.get("latency_ms", 0.0),
         )
 
     # B4: Check Redis Cache
+    # Role is collapsed into a 2-state bucket: reduced-sensitivity roles
+    # (security/admin/ciso) all map to the same modifier in risk_scorer, so
+    # caching by raw role would split identical verdicts across 3 keys.
     prompt_hash = hashlib.sha256(text_to_scan.encode("utf-8")).hexdigest()
-    cache_key = f"detection:cache:{prompt_hash}:{request.role}"
+    role_bucket = "r" if request.role.lower() in REDUCED_SENSITIVITY_ROLES else "n"
+    cache_key = f"detection:cache:{prompt_hash}:{role_bucket}"
     
     if redis_client:
         try:
@@ -176,68 +261,112 @@ async def detect(request: DetectRequest) -> DetectResponse:
                 log.info("detection.cache_hit", hash=prompt_hash)
                 cached_dict = json.loads(cached_res)
                 cached_dict["processing_time_ms"] = round((time.perf_counter() - start) * 1000, 2)
+                # Cache only stores safe metadata — reconstruct DetectResponse with empty
+                # detection_results (raw results are never cached for security)
+                cached_dict.setdefault("detection_results", [])
                 return DetectResponse(**cached_dict)
         except Exception as e:
             log.warning("detection.cache_read_failed", error=str(e))
 
-    # ─── Run ALL detectors in parallel (Tier 1-2 + ML ensemble) ─────────────
+    # ─── Tier 0: Classify input type (fast path routing) ────────────────────
+    # fast_path_route() already ran above for empty detection.  Re-use its
+    # route decision to set input_context without a second pass when possible.
+    # Derive input_context from fast_path_route flags already computed above.
+    # If code_markers is True we already know it's "code" — no need to re-scan
+    # with classify_input_context()'s two extra regex passes.
+    if _fpv.get("route") == "natural_language":
+        input_context = "natural_language"
+    elif _fpv.get("code_markers"):
+        input_context = "code"
+    elif _fpv.get("secret_context") or _fpv.get("vuln_signal"):
+        # Structured secrets / attack payloads — treat as code for full detector suite
+        input_context = "code"
+    else:
+        # Injection / regulatory signals are prose-based; classify_input_context
+        # needed only to catch edge cases like JWTs/URLs not in _CODE_MARKERS
+        input_context = classify_input_context(text_to_scan)
+    log.debug("tier0.context", input_context=input_context, text_len=len(text_to_scan),
+              preprocess_route=_fpv.get("route"))
+
+    # ─── Run detectors in parallel — set varies by input context ─────────────
+    # Pure natural language: skip heavy NER, security_code, hallucination, bias
+    # (they add ~15-30ms and are irrelevant for plain chat messages).
+    # Code or mixed: run full suite.
     async def _run_detector_with_timeout(func, text, detector_name, timeout: float = 0.05):
         start_t = time.perf_counter()
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             # Run in explicit executor to achieve true parallelism (GIL released by ML engines)
             return await asyncio.wait_for(loop.run_in_executor(ml_executor, func, text), timeout)
         except asyncio.TimeoutError:
             log.warning("detector.timeout", detector=detector_name, timeout=timeout)
             return DetectionResult(
-                detector_name=detector_name, 
-                spans=[], 
-                risk_score=0, 
+                detector_name=detector_name,
+                spans=[],
+                risk_score=0,
                 processing_time_ms=timeout * 1000
             )
         except Exception as e:
             log.warning("detector.failed", detector=detector_name, error=str(e))
             return DetectionResult(
-                detector_name=detector_name, 
-                spans=[], 
-                risk_score=0, 
+                detector_name=detector_name,
+                spans=[],
+                risk_score=0,
                 processing_time_ms=(time.perf_counter() - start_t) * 1000
             )
 
+    # Tier 1 + ML — always run
     futures = [
-        _run_detector_with_timeout(regex_detector.detect, text_to_scan, "regex", 1.0),
-        _run_detector_with_timeout(ner_detector.detect, text_to_scan, "ner", 5.0),
-        _run_detector_with_timeout(hallucination_detector.detect, text_to_scan, "hallucination", 1.0),
-        _run_detector_with_timeout(bias_detector.detect, text_to_scan, "bias", 1.0),
-        _run_detector_with_timeout(security_code_detector.detect, text_to_scan, "security_code", 1.0),
-        _run_detector_with_timeout(regulatory_detector.detect, text_to_scan, "regulatory", 1.0),
-        _run_detector_with_timeout(prompt_injection_detector.detect, text_to_scan, "prompt_injection", 1.0),
-        _run_detector_with_timeout(ml_classifier.detect, text_to_scan, "ml_classifier", 5.0),
+        _run_detector_with_timeout(regex_detector.detect,              text_to_scan, "regex",            1.0),
+        _run_detector_with_timeout(prompt_injection_detector.detect,   text_to_scan, "prompt_injection",  1.0),
+        _run_detector_with_timeout(ml_classifier.detect,               text_to_scan, "ml_classifier",     5.0),
     ]
 
+    if input_context in ("code", "mixed", "unknown"):
+        # Full suite for code / mixed / unknown contexts
+        futures += [
+            _run_detector_with_timeout(ner_detector.detect,            text_to_scan, "ner",               5.0),
+            _run_detector_with_timeout(hallucination_detector.detect,  text_to_scan, "hallucination",     1.0),
+            _run_detector_with_timeout(bias_detector.detect,           text_to_scan, "bias",              1.0),
+            _run_detector_with_timeout(security_code_detector.detect,  text_to_scan, "security_code",     1.0),
+            _run_detector_with_timeout(regulatory_detector.detect,     text_to_scan, "regulatory",        1.0),
+        ]
+    else:
+        # Natural language fast path: only regulatory (compliance always required)
+        futures += [
+            _run_detector_with_timeout(regulatory_detector.detect,     text_to_scan, "regulatory",        1.0),
+        ]
+
     results = list(await asyncio.gather(*futures))
-    
+
     if synthetic_middle_risk:
         results.append(synthetic_middle_risk)
 
-    # Aggregate all detectors
-    intermediate_score = risk_aggregator.aggregate(results, request.role)
+    # Aggregate with weighted confidence fusion + input context
+    intermediate_score = risk_aggregator.aggregate(results, request.role, input_context)
 
-    # ─── Tier 3: ONNX micro-model (Sprint 2) → Llama fallback ─────────────────
+    # Track whether Tier 3 adds new evidence; only re-aggregate if it does.
+    _results_len_before_tier3 = len(results)
+
+    # ─── Tier 3: ONNX micro-model (Sprint 2) → Llama fallback ─────────────
     if TIER3_THRESHOLD_LOW <= intermediate_score.score <= TIER3_THRESHOLD_HIGH:
         if ONNX_ENABLED:
             try:
-                loop = asyncio.get_event_loop()
-                onnx_result = await loop.run_in_executor(None, classify_sensitivity, request.text)
+                loop = asyncio.get_running_loop()
+                # Use shared ml_executor (not None) to avoid creating a new thread-pool per call
+                # Wrapped in wait_for: ONNX was the only detector without a timeout
+                onnx_result = await asyncio.wait_for(
+                    loop.run_in_executor(ml_executor, classify_sensitivity, text_to_scan),
+                    timeout=5.0,
+                )
                 onnx_label = onnx_result.get("classification", "UNKNOWN")
                 onnx_conf = onnx_result.get("confidence", 0.0)
                 log.info("tier3.onnx", label=onnx_label, conf=onnx_conf,
                          ms=onnx_result.get("latency_ms"))
                 if onnx_label in ("SENSITIVE", "RESTRICTED") and onnx_conf > 0.55:
-                    from proxy.app.models import DetectedSpan as DS, DetectionCategory as DC
                     synthetic = DetectionResult(
                         detector_name="onnx_micro_model",
-                        spans=[DS(start=0, end=0, category=DC.CONFIDENTIAL,
+                        spans=[DetectedSpan(start=0, end=0, category=DetectionCategory.CONFIDENTIAL,
                                   confidence=onnx_conf,
                                   matched_text=f"[ONNX:{onnx_label}]",
                                   detector="onnx_micro_model",
@@ -260,8 +389,13 @@ async def detect(request: DetectRequest) -> DetectResponse:
             except Exception as e:
                 log.warning("tier3.llama_failed", error=str(e))
 
-    # Final aggregation
-    final_score = risk_aggregator.aggregate(results, request.role)
+    # Final aggregation (with context).  Skip the second pass when Tier 3 added
+    # nothing — the intermediate score is already final, saving ~1-3ms per
+    # request in the common case where the score wasn't in the ambiguous band.
+    if len(results) > _results_len_before_tier3:
+        final_score = risk_aggregator.aggregate(results, request.role, input_context)
+    else:
+        final_score = intermediate_score
     duration_ms = (time.perf_counter() - start) * 1000
 
     log.info(
@@ -274,6 +408,7 @@ async def detect(request: DetectRequest) -> DetectResponse:
     )
 
     response_obj = DetectResponse(
+        detection_id=prompt_hash,
         risk_score=final_score.score,
         action=final_score.recommended_action,
         detection_results=results,
@@ -286,20 +421,59 @@ async def detect(request: DetectRequest) -> DetectResponse:
 
     if redis_client:
         try:
-            await redis_client.setex(
-                cache_key,
-                60, # Cache for 60 seconds
-                response_obj.model_dump_json()
-            )
-            # Continuous Feedback Loop - Log verdict for weekly ONNX retraining
-            loop_data = {
-                "hash": prompt_hash,
-                "final_verdict": response_obj.action.value,
+            # ── SECURITY: only cache safe metadata — never matched_text or context ──
+            safe_spans = [
+                {
+                    "start": s.start,
+                    "end": s.end,
+                    "category": s.category.value if hasattr(s.category, "value") else str(s.category),
+                    "confidence": s.confidence,
+                    "detector": s.detector,
+                    # matched_text and context are intentionally omitted
+                }
+                for s in final_score.detected_spans
+            ]
+            safe_payload = json.dumps({
+                "detection_id": prompt_hash,
                 "risk_score": response_obj.risk_score,
-                "timestamp": time.time(),
-                "human_label": None
-            }
-            await redis_client.lpush("shield:training_loop", json.dumps(loop_data))
+                "action": response_obj.action.value,
+                "eu_ai_act_risk_level": response_obj.eu_ai_act_risk_level,
+                "regulatory_flags": response_obj.regulatory_flags,
+                "remediation_priority": response_obj.remediation_priority,
+                "detected_spans": safe_spans,
+                "processing_time_ms": response_obj.processing_time_ms,
+            })
+            # TTL varies by action: safe prompts cache longer (policy rarely changes);
+            # BLOCK/REDACT cache shorter so policy updates take effect quickly.
+            _ACTION_TTL = {"ALLOW": 300, "LOG": 180, "WARN": 90, "REDACT": 45, "BLOCK": 30}
+            ttl = _ACTION_TTL.get(response_obj.action.value, 60)
+            await redis_client.setex(cache_key, ttl, safe_payload)
+
+            # Continuous Feedback Loop — log verdict for weekly ONNX retraining
+            # Active Learning: Only push high-uncertainty samples to avoid retraining on 99% correct predictions
+            regex_hit = any(r.detector_name == "regex" and len(r.spans) > 0 for r in results)
+            transformer_conf = 0.0
+            for r in results:
+                if r.detector_name in ("onnx_micro_model", "ml_classifier", "spacy_ner"):
+                    if r.spans:
+                        transformer_conf = max(transformer_conf, max(s.confidence for s in r.spans))
+            
+            p = transformer_conf
+            # Calculate binary cross-entropy (uncertainty)
+            model_entropy = - (p * math.log2(p + 1e-9) + (1 - p) * math.log2(1 - p + 1e-9)) if p > 0 else 0
+            
+            # Uncertainty sampling for human review
+            if model_entropy > 0.5 or (regex_hit and transformer_conf < 0.3):
+                loop_data = {
+                    "hash": prompt_hash,
+                    "final_verdict": response_obj.action.value,
+                    "risk_score": response_obj.risk_score,
+                    "timestamp": time.time(),
+                    "human_label": None,
+                    "entropy": model_entropy,
+                    "needs_human_review": True
+                }
+                await redis_client.lpush("shield:training_loop", json.dumps(loop_data))
         except Exception as e:
             log.warning("detection.cache_write_failed", error=str(e))
 

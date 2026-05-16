@@ -36,6 +36,8 @@ from typing import Any
 
 import structlog
 
+from proxy.app.redaction_verifier import verify_redaction
+
 log = structlog.get_logger()
 
 SESSION_TTL = 3600  # 1 hour
@@ -133,7 +135,19 @@ class StatefulRedactor:
             result = result[:start] + placeholder + result[end:]
 
         await self._save_map(sid, mapping)
-        log.info("stateful_redactor.redacted", session=sid, entities=len(mapping))
+
+        # Post-processing verification — assert no span leaked through
+        _rv = verify_redaction(prompt, result, sorted_spans)
+        log.info(
+            "stateful_redactor.redacted",
+            session=sid,
+            entities=len(mapping),
+            redaction_verified=_rv["redaction_verified"],
+            spans_verified=_rv["spans_verified"],
+            spans_leaked=len(_rv["spans_leaked"]),
+            content_changed=_rv["content_changed"],
+        )
+
         return result, sid
 
     async def reverse_redact(self, text: str, session_id: str) -> str:

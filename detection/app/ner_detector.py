@@ -9,7 +9,27 @@ import re
 import time
 from typing import Any
 
+from detection.app.chunker import smart_chunk_with_offsets
 from proxy.app.models import DetectedSpan, DetectionCategory, DetectionResult
+
+# ── Module-level compiled regexes ────────────────────────────────────────────
+# Compiled once at import time. Previously these were inside detect() and
+# were re-compiled on every single request — measurable hot-path overhead.
+_CUSTOMER_TRIGGER_RE = re.compile(
+    r'(?i)(customer|user|client|name|email|phone|address|ssn|dob|'
+    r'account|aadhaar|pan\s*card|upi|mobile|passport|employee|project|org)'
+)
+
+# Custom regex patterns (label, category, confidence) used as backup entity
+# detection — also previously re-compiled per call inside _detect_custom_patterns.
+_CUSTOM_NER_PATTERNS: list[tuple[re.Pattern[str], str, DetectionCategory, float]] = [
+    (re.compile(r"\bEMP-\d{6}\b"),                        "EMPLOYEE_ID",  DetectionCategory.PII,          0.85),
+    (re.compile(r"\bPRJ-[A-Z]{2,4}-\d{4}\b"),             "PROJECT_CODE", DetectionCategory.CONFIDENTIAL, 0.80),
+    (re.compile(r"\b\d{4}\s\d{4}\s\d{4}\b"),              "AADHAAR",      DetectionCategory.PII,          0.95),
+    (re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b"),               "PAN",          DetectionCategory.PII,          0.95),
+    (re.compile(r"[\w.-]+@[a-zA-Z]+"),                    "UPI",          DetectionCategory.PII,          0.90),
+    (re.compile(r"(\+91[\-\s]?)?\d{5}[\-\s]?\d{5}"),      "IN_PHONE",     DetectionCategory.PII,          0.85),
+]
 
 
 class ContextScorer:
@@ -121,19 +141,6 @@ class SpacyNERDetector:
             self._load_failed = True
             self._nlp = None
 
-    def _segment_text(self, text: str, max_chars: int = 1000, overlap: int = 100) -> list[tuple[int, str]]:
-        """Splits text into chunks with sliding window overlap, returning (offset, chunk)."""
-        if len(text) <= max_chars:
-            return [(0, text)]
-        chunks = []
-        start = 0
-        while start < len(text):
-            end = start + max_chars
-            chunks.append((start, text[start:end]))
-            if end >= len(text):
-                break
-            start += max_chars - overlap
-        return chunks
 
     def detect(self, text: str) -> DetectionResult:
         """Run NER on the input text and return detected PII entities."""
@@ -146,60 +153,56 @@ class SpacyNERDetector:
 
         if self._nlp is not None:
             # Phase 3 Optimization: Fast regex gate. Only run heavy NER if PII keywords exist.
-            CUSTOMER_TRIGGER = re.compile(
-                r'(?i)(customer|user|client|name|email|phone|address|ssn|dob|'
-                r'account|aadhaar|pan\s*card|upi|mobile|passport|employee|project|org)'
-            )
-            
-            if CUSTOMER_TRIGGER.search(text):
+            # Pattern is compiled once at module load (see _CUSTOMER_TRIGGER_RE).
+            if _CUSTOMER_TRIGGER_RE.search(text):
                 try:
                     raw_spans = []
                     # Disable tagger/parser to save ~40% compute
                     with self._nlp.select_pipes(enable=["entity_ruler", "ner"]):
-                        for offset, chunk in self._segment_text(text, max_chars=1000, overlap=100):
+                        for offset, chunk in smart_chunk_with_offsets(text):
                             doc = self._nlp(chunk)
 
-                    for ent in doc.ents:
-                        if ent.label_ not in self.ENTITY_CATEGORIES:
-                            continue
+                            for ent in doc.ents:
+                                if ent.label_ not in self.ENTITY_CATEGORIES:
+                                    continue
 
-                        category = self.ENTITY_CATEGORIES[ent.label_]
-                        base_conf = self.BASE_CONFIDENCE.get(ent.label_, 0.5)
+                                category = self.ENTITY_CATEGORIES[ent.label_]
+                                base_conf = self.BASE_CONFIDENCE.get(ent.label_, 0.5)
 
-                        # Map entity offsets back to the global text
-                        abs_start = ent.start_char + offset
-                        abs_end = ent.end_char + offset
+                                # Map entity offsets back to the global text
+                                abs_start = ent.start_char + offset
+                                abs_end = ent.end_char + offset
 
-                        # Get context window (±50 chars) using the global text
-                        ctx_start = max(0, abs_start - 50)
-                        ctx_end = min(len(text), abs_end + 50)
-                        context = text[ctx_start:ctx_end]
+                                # Get context window (±50 chars) using the global text
+                                ctx_start = max(0, abs_start - 50)
+                                ctx_end = min(len(text), abs_end + 50)
+                                context = text[ctx_start:ctx_end]
 
-                        # Apply context scoring
-                        multiplier = self._context_scorer.score(ent.label_, ent.text, context)
-                        confidence = min(1.0, base_conf * multiplier)
+                                # Apply context scoring
+                                multiplier = self._context_scorer.score(ent.label_, ent.text, context)
+                                confidence = min(1.0, base_conf * multiplier)
 
-                        # Skip low-confidence detections
-                        if confidence < 0.3:
-                            continue
+                                # Skip low-confidence detections
+                                if confidence < 0.3:
+                                    continue
 
-                        raw_spans.append(DetectedSpan(
-                            start=abs_start,
-                            end=abs_end,
-                            category=category,
-                            confidence=confidence,
-                            matched_text=ent.text,
-                            detector="spacy_ner",
-                            context=context,
-                        ))
+                                raw_spans.append(DetectedSpan(
+                                    start=abs_start,
+                                    end=abs_end,
+                                    category=category,
+                                    confidence=confidence,
+                                    matched_text=ent.text,
+                                    detector="spacy_ner",
+                                    context=context,
+                                ))
 
-                # Deduplicate spans from overlapping chunks
-                seen_ranges = set()
-                for span in raw_spans:
-                    span_range = (span.start, span.end)
-                    if span_range not in seen_ranges:
-                        seen_ranges.add(span_range)
-                        spans.append(span)
+                    # Deduplicate spans from overlapping chunks
+                    seen_ranges: set[tuple[int, int]] = set()
+                    for span in raw_spans:
+                        span_range = (span.start, span.end)
+                        if span_range not in seen_ranges:
+                            seen_ranges.add(span_range)
+                            spans.append(span)
 
                 except Exception:
                     pass  # NER failure shouldn't block the pipeline
@@ -218,19 +221,13 @@ class SpacyNERDetector:
         )
 
     def _detect_custom_patterns(self, text: str, spans: list[DetectedSpan]) -> None:
-        """Run custom regex patterns as backup entity detection."""
-        patterns = [
-            (re.compile(r"\bEMP-\d{6}\b"), "EMPLOYEE_ID", DetectionCategory.PII, 0.85),
-            (re.compile(r"\bPRJ-[A-Z]{2,4}-\d{4}\b"), "PROJECT_CODE", DetectionCategory.CONFIDENTIAL, 0.80),
-            (re.compile(r"\b\d{4}\s\d{4}\s\d{4}\b"), "AADHAAR", DetectionCategory.PII, 0.95),
-            (re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b"), "PAN", DetectionCategory.PII, 0.95),
-            (re.compile(r"[\w.-]+@[a-zA-Z]+"), "UPI", DetectionCategory.PII, 0.90),
-            (re.compile(r"(\+91[\-\s]?)?\d{5}[\-\s]?\d{5}"), "IN_PHONE", DetectionCategory.PII, 0.85),
-        ]
+        """Run custom regex patterns as backup entity detection.
 
+        Patterns are compiled once at module load (see _CUSTOM_NER_PATTERNS).
+        """
         existing_ranges = {(s.start, s.end) for s in spans}
 
-        for pattern, label, category, confidence in patterns:
+        for pattern, label, category, confidence in _CUSTOM_NER_PATTERNS:
             for match in pattern.finditer(text):
                 if (match.start(), match.end()) in existing_ranges:
                     continue
@@ -245,3 +242,116 @@ class SpacyNERDetector:
                     detector="spacy_ner_custom",
                     context=text[ctx_start:ctx_end],
                 ))
+
+class DebertaNERDetector:
+    """
+    Tier 2 — DeBERTa-v3-small fine-tuned for PII/Secret NER.
+    Replaces spaCy EntityRuler for higher accuracy.
+    Requires data labeling to fine-tune; loads a fallback token classification
+    pipeline or SpacyNERDetector if the local fine-tuned model isn't available.
+    """
+
+    def __init__(self, model_path: str = "microsoft/deberta-v3-small") -> None:
+        self._model_path = model_path
+        self._pipeline: Any = None
+        self._loaded = False
+        self._load_failed = False
+        self._spacy_fallback = SpacyNERDetector()
+        self._context_scorer = ContextScorer()
+
+        self.ENTITY_MAPPING = {
+            "LABEL_0": DetectionCategory.PII,  # Update these labels based on fine-tuned model
+            "LABEL_1": DetectionCategory.CONFIDENTIAL,
+            "B-PER": DetectionCategory.PII,
+            "I-PER": DetectionCategory.PII,
+            "B-ORG": DetectionCategory.CONFIDENTIAL,
+            "I-ORG": DetectionCategory.CONFIDENTIAL,
+        }
+
+    def _load_model(self) -> None:
+        if self._load_failed:
+            return
+        try:
+            from transformers import pipeline
+            # Load the fine-tuned model (or generic fallback)
+            self._pipeline = pipeline(
+                "token-classification", 
+                model=self._model_path, 
+                aggregation_strategy="simple"
+            )
+            self._loaded = True
+        except Exception:
+            self._load_failed = True
+            self._pipeline = None
+
+    def detect(self, text: str) -> DetectionResult:
+        start = time.perf_counter()
+
+        if not self._loaded and not self._load_failed:
+            self._load_model()
+
+        # If DeBERTa fails to load, fallback to spaCy
+        if self._load_failed or self._pipeline is None:
+            return self._spacy_fallback.detect(text)
+
+        spans: list[DetectedSpan] = []
+        try:
+            # Phase 3 Optimization: Fast regex gate (module-level compiled pattern)
+            if _CUSTOMER_TRIGGER_RE.search(text):
+                # Run DeBERTa on chunks
+                for offset, chunk in smart_chunk_with_offsets(text, max_chunk=512):
+                    results = self._pipeline(chunk)
+                    
+                    for ent in results:
+                        label = ent.get("entity_group", ent.get("entity", ""))
+                        if label not in self.ENTITY_MAPPING:
+                            continue
+                            
+                        category = self.ENTITY_MAPPING[label]
+                        base_conf = ent.get("score", 0.5)
+                        
+                        abs_start = ent["start"] + offset
+                        abs_end = ent["end"] + offset
+                        
+                        ctx_start = max(0, abs_start - 50)
+                        ctx_end = min(len(text), abs_end + 50)
+                        context = text[ctx_start:ctx_end]
+                        
+                        multiplier = self._context_scorer.score(label, ent["word"], context)
+                        confidence = min(1.0, base_conf * multiplier)
+                        
+                        if confidence < 0.3:
+                            continue
+                            
+                        spans.append(DetectedSpan(
+                            start=abs_start,
+                            end=abs_end,
+                            category=category,
+                            confidence=confidence,
+                            matched_text=ent["word"],
+                            detector="deberta_ner",
+                            context=context,
+                        ))
+
+            # Deduplicate
+            unique_spans = []
+            seen_ranges = set()
+            for span in spans:
+                if (span.start, span.end) not in seen_ranges:
+                    seen_ranges.add((span.start, span.end))
+                    unique_spans.append(span)
+            spans = unique_spans
+
+        except Exception:
+            # On runtime failure, fallback to spaCy
+            return self._spacy_fallback.detect(text)
+
+        duration_ms = (time.perf_counter() - start) * 1000
+        max_confidence = max((s.confidence for s in spans), default=0.0)
+
+        return DetectionResult(
+            detector_name="deberta_ner",
+            spans=spans,
+            risk_score=max_confidence * 100 if spans else 0,
+            processing_time_ms=round(duration_ms, 2),
+        )

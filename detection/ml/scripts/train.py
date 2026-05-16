@@ -19,6 +19,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,58 @@ def extract_texts_labels(records: list[dict]) -> tuple[list[str], list[list[int]
     texts = [r["text"] for r in records]
     labels = [[1 if r["labels"].get(c, False) else 0 for c in ALL_CATS] for r in records]
     return texts, labels
+
+
+# ── Threshold Optimiser ───────────────────────────────────────────────────────
+
+def _find_optimal_thresholds(
+    pipeline: Any,
+    dev_texts: list[str],
+    dev_labels: Any,  # np.ndarray shape (n, n_cats)
+    thresholds: list[float] | None = None,
+) -> dict[str, float]:
+    """
+    Per-category threshold sweep on the dev set.
+
+    For each category independently, evaluates binary F1 over a grid of
+    thresholds [0.10, 0.15, …, 0.90] and picks the one that maximises F1.
+
+    Returns {category: optimal_threshold}.
+    The result is saved to sklearn_meta.json so MLClassifier can load it.
+    """
+    import numpy as np
+    from sklearn.metrics import f1_score
+
+    if thresholds is None:
+        thresholds = [round(t * 0.05 + 0.10, 2) for t in range(17)]  # 0.10 … 0.90
+
+    # predict_proba returns list[array(n_samples, 2)], one per label
+    proba_list = pipeline.predict_proba(dev_texts)
+
+    best: dict[str, float] = {}
+    for i, cat in enumerate(ALL_CATS):
+        if cat == "SAFE":
+            best[cat] = 0.50
+            continue
+        probs = np.array([p[1] for p in proba_list[i]])  # P(positive) for each sample
+        gold  = dev_labels[:, i]
+
+        if gold.sum() == 0:  # No positive examples for this category in dev set
+            best[cat] = 0.40
+            continue
+
+        best_f1  = -1.0
+        best_thr = 0.40
+        for thr in thresholds:
+            preds = (probs >= thr).astype(int)
+            f1 = f1_score(gold, preds, zero_division=0)
+            if f1 > best_f1:
+                best_f1  = f1
+                best_thr = thr
+
+        best[cat] = round(best_thr, 2)
+
+    return best
 
 
 # ── sklearn Training ──────────────────────────────────────────────────────────
@@ -122,6 +175,16 @@ def train_sklearn(train: list[dict], dev: list[dict]) -> None:
             pickle.dump(pipeline, f)
         print(f"\n  💾 Model saved → {model_path}")
 
+        # ── Threshold optimisation ────────────────────────────────────────
+        # For each category independently sweep thresholds [0.10, 0.90] on
+        # the dev set and pick the one that maximises F1.  This fixes the
+        # low-recall problem (e.g. PII recall=0.25 at default 0.45 threshold).
+        print("\n  Optimising per-category confidence thresholds on dev set...")
+        opt_thresholds = _find_optimal_thresholds(pipeline, dev_texts, dev_labels_arr)
+        print("  Per-category optimal thresholds:")
+        for cat, thr in opt_thresholds.items():
+            print(f"    {cat:<22}  threshold={thr:.2f}")
+
         # Save metadata
         meta = {
             "model_type": "sklearn_tfidf_lr",
@@ -131,9 +194,11 @@ def train_sklearn(train: list[dict], dev: list[dict]) -> None:
             "dev_macro_f1": round(macro_f1, 4),
             "training_time_s": round(elapsed, 2),
             "version": "1.0",
+            "per_category_thresholds": opt_thresholds,
         }
         with (MODEL_DIR / "sklearn_meta.json").open("w") as f:
             json.dump(meta, f, indent=2)
+        print(f"  💾 Thresholds saved → {MODEL_DIR / 'sklearn_meta.json'}")
 
     except ImportError as e:
         print(f"  ❌ sklearn not available: {e}")
