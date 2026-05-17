@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Navigate, useLocation } from 'react-router-dom'
-import { Scan, Shield, MessageSquare, ScrollText, Zap, Activity, Server, Database } from 'lucide-react'
+import { Scan, Shield, MessageSquare, ScrollText, Zap, Activity, Server, Database, Wifi } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import api from '../../lib/api'
 import govApi from '../../lib/govApi'
@@ -32,6 +32,13 @@ const TABS = [
     icon: ScrollText,
     color: 'from-orange-500 to-red-500',
     desc: 'Event log, violations, incident board integration',
+  },
+  {
+    path: '/live-demo/shadow-ai',
+    label: 'Shadow AI',
+    icon: Wifi,
+    color: 'from-yellow-500 to-orange-500',
+    desc: 'Simulate unauthorised AI tool usage across the org',
   },
 ]
 

@@ -46,6 +46,7 @@ const demoNavItems = [
     { to: '/live-demo/policy', label: 'Policy Enforcement', icon: Shield },
     { to: '/live-demo/chat', label: 'Chat Gateway', icon: Activity },
     { to: '/live-demo/audit', label: 'Audit & Incidents', icon: AlertTriangle },
+    { to: '/live-demo/shadow-ai', label: 'Shadow AI Sim', icon: Wifi },
 ]
 
 export default function AppLayout() {

@@ -16,6 +16,7 @@ import DetectionDemo from './pages/demo/DetectionDemo'
 import PolicyDemo from './pages/demo/PolicyDemo'
 import ChatDemo from './pages/demo/ChatDemo'
 import AuditDemo from './pages/demo/AuditDemo'
+import ShadowAIDemo from './pages/demo/ShadowAIDemo'
 // ─── ShieldAI Governance Pages ────────────────────────────────────────────────
 import Login from './pages/Login'
 import GovDashboard from './pages/governance/Dashboard'
@@ -57,6 +58,7 @@ export default function App() {
                             <Route path="policy" element={<PolicyDemo />} />
                             <Route path="chat" element={<ChatDemo />} />
                             <Route path="audit" element={<AuditDemo />} />
+                            <Route path="shadow-ai" element={<ShadowAIDemo />} />
                         </Route>
                         <Route path="/reports" element={<Wrap><ReportsPage /></Wrap>} />
                         <Route path="/settings" element={<Wrap><SettingsPage /></Wrap>} />
