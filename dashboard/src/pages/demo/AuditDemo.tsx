@@ -5,9 +5,12 @@ import {
   Filter, Zap,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import api from '../../lib/api'
+import axios from 'axios'
 import govApi from '../../lib/govApi'
 import { useAuditEvents, useIncidents, useQueryClient } from '../../lib/hooks'
+
+const PROXY_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const DEV_TOKEN = 'dev-secret-change-in-production'
 
 const ACTION_COLORS: Record<string, string> = {
   BLOCK:  'bg-red-500/10 text-red-400 border-red-500/20',
@@ -71,7 +74,12 @@ export default function AuditDemo() {
   const generateEvent = async (t: typeof TEST_EVENTS[0]) => {
     setGenerating(t.label)
     try {
-      await api.post('/api/v1/inspect', { text: t.prompt })
+      // Route through the real proxy so events land in audit DB + proxy monitor
+      await axios.post(
+        `${PROXY_URL}/v1/chat/completions`,
+        { model: 'gpt-4o', messages: [{ role: 'user', content: t.prompt }] },
+        { headers: { Authorization: `Bearer ${DEV_TOKEN}`, 'Content-Type': 'application/json' }, validateStatus: () => true }
+      )
 
       if (t.category !== 'CLEAN') {
         const inc = await govApi.post('/api/incidents', {
