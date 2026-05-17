@@ -16,10 +16,12 @@ services:
       - DETECTION_SERVICE_URL=http://detection:8001
       - DETECTION_TIMEOUT_MS=2000
       - GOVERNANCE_API_URL=http://governance:4000
+      - GOVERNANCE_SERVICE_TOKEN=internal-service-token-change-me
       - DATABASE_URL=postgresql+asyncpg://aigw:aigw_password@postgres:5432/ai_governance
       - REDIS_URL=redis://redis:6379/0
       - OLLAMA_URL=http://ollama:11434
       - DEV_JWT_SECRET=dev-secret-change-in-production
+      - DEV_ORG_ID=7c1f97c6-de64-4b50-b7a8-482755773d24
     command: /entrypoint.sh
     depends_on:
       postgres:
@@ -84,6 +86,7 @@ services:
       - OLLAMA_MODEL=llama3.1:8b
       - OLLAMA_FALLBACK_MODEL=mistral:7b
       - JWT_SECRET=shieldai-dev-secret-change-me
+      - INTERNAL_SERVICE_TOKEN=internal-service-token-change-me
       - CORS_ORIGIN=http://localhost:3000
     depends_on:
       postgres:

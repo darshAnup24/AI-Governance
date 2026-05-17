@@ -17,6 +17,7 @@ import { advisorRouter } from "./routes/advisor";
 import { reportsRouter } from "./routes/reports";
 import { auditRouter } from "./routes/audit";
 import { usersRouter } from "./routes/users";
+import { internalRouter } from "./routes/internal";
 import { authMiddleware } from "./middleware/auth";
 import { auditMiddleware } from "./middleware/auditLogger";
 
@@ -48,6 +49,9 @@ app.get("/health", (_req, res) => {
 
 // ─── Public Routes ───────────────────────────────────────
 app.use("/api/auth", authRouter);
+
+// ─── Internal Service Routes (service token, no user JWT) ────────────────────
+app.use("/api/internal", internalRouter);
 
 // ─── Protected Routes ────────────────────────────────────
 app.use("/api/dashboard", authMiddleware, auditMiddleware, dashboardRouter);

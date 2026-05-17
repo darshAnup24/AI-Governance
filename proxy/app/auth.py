@@ -68,7 +68,7 @@ class JWTAuth:
             department="engineering",
             role="user",
             permissions=["read", "write"],
-            org_id="org-001",
+            org_id=settings.dev_org_id,
         )
 
     async def __call__(

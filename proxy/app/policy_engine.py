@@ -160,7 +160,7 @@ def _evaluate_conditions(conditions_block: dict[str, Any], ctx: RequestContext) 
     conditions = conditions_block.get("conditions", [])
 
     if not conditions:
-        return True
+        return False  # No conditions = no match (fail-safe; prevents doc policies from blocking)
 
     if operator == "AND":
         return all(_evaluate_condition(c, ctx) for c in conditions)

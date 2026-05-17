@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "RS256"
     jwt_audience: str = "ai-governance-firewall"
     dev_jwt_secret: str = "dev-secret-change-in-production"
+    dev_org_id: str = "org-001"  # Override with real UUID from governance DB
 
     # ─── Database ─────────────────────────────────────────
     database_url: str = "postgresql+asyncpg://aigw:aigw_password@postgres:5432/ai_governance"
@@ -43,6 +44,7 @@ class Settings(BaseSettings):
 
     # ─── Governance Service ───────────────────────────────
     governance_api_url: str = "http://governance:4000"
+    governance_service_token: str = "internal-service-token-change-me"
     governance_policy_cache_ttl: int = 30  # seconds
 
     # ─── Redis ────────────────────────────────────────────

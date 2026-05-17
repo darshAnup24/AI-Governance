@@ -90,10 +90,15 @@ _CACHE: dict[str, tuple[list[dict[str, Any]], float]] = {}
 
 
 class GovernanceClient:
-    """Async client that fetches policies from the governance service with TTL caching."""
+    """Async client that fetches policies from the governance service with TTL caching.
 
-    def __init__(self, base_url: str, cache_ttl: int = 30) -> None:
+    Uses the internal service endpoint /api/internal/policies?org_id=<id>
+    authenticated with X-Service-Token so no user JWT is needed.
+    """
+
+    def __init__(self, base_url: str, service_token: str, cache_ttl: int = 30) -> None:
         self._base_url = base_url.rstrip("/")
+        self._service_token = service_token
         self._ttl = float(cache_ttl)
 
     def invalidate(self, org_id: str) -> None:
@@ -103,14 +108,10 @@ class GovernanceClient:
     async def fetch_policies(
         self,
         org_id: str,
-        auth_header: str,
+        auth_header: str = "",  # kept for API compatibility, no longer forwarded
     ) -> list[dict[str, Any]]:
         """
-        Return normalized policy rules for the org.
-
-        auth_header — the raw value of the incoming request's Authorization header
-                      (forwarded as-is to the governance service so the same JWT works).
-
+        Return normalized, enabled policy rules for the org ordered by priority.
         Falls back to stale cache on network error; returns [] if no cache exists.
         """
         now = time.monotonic()
@@ -121,8 +122,9 @@ class GovernanceClient:
         try:
             async with httpx.AsyncClient(timeout=2.0) as client:
                 resp = await client.get(
-                    f"{self._base_url}/api/policies",
-                    headers={"Authorization": auth_header} if auth_header else {},
+                    f"{self._base_url}/api/internal/policies",
+                    params={"org_id": org_id},
+                    headers={"X-Service-Token": self._service_token},
                 )
                 resp.raise_for_status()
                 raw: list[dict[str, Any]] = resp.json()
