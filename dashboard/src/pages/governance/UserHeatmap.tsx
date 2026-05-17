@@ -41,7 +41,23 @@ export default function UserHeatmapPage() {
   const rawHeatmap = heatmapQ.data
   const rawUsers = usersQ.data
   const heatmap = Array.isArray(rawHeatmap) ? rawHeatmap : (rawHeatmap?.data ?? [])
-  const users = Array.isArray(rawUsers) ? rawUsers : (rawUsers?.data ?? [])
+  const rawUsersArr = Array.isArray(rawUsers) ? rawUsers : (rawUsers?.data ?? [])
+
+  // Build a name→avgRisk map from heatmap rows (heatmap is source of truth for risk)
+  const heatmapRiskByName: Record<string, number> = {}
+  for (const row of heatmap as any[]) {
+    if (row.user && Array.isArray(row.days) && row.days.length) {
+      heatmapRiskByName[row.user] = Math.round(
+        row.days.reduce((s: number, v: number) => s + v, 0) / row.days.length
+      )
+    }
+  }
+
+  // Merge riskScore into users; fallback to 0 if no heatmap row
+  const users = (rawUsersArr as any[]).map((u: any) => ({
+    ...u,
+    riskScore: heatmapRiskByName[u.name] ?? heatmapRiskByName[u.email] ?? u.riskScore ?? 0,
+  }))
 
   const overallRisk = users.length
     ? Math.round(users.reduce((a: number, u: any) => a + (u.riskScore ?? 0), 0) / users.length)
