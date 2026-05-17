@@ -58,6 +58,7 @@ def _get_governance_client(settings: Settings) -> GovernanceClient:
     if _governance_client is None:
         _governance_client = GovernanceClient(
             base_url=settings.governance_api_url,
+            service_token=settings.governance_service_token,
             cache_ttl=settings.governance_policy_cache_ttl,
         )
     return _governance_client
