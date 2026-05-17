@@ -78,6 +78,8 @@ class RequestContext(BaseModel):
     risk_score: int = 0
     detection_categories: list[str] = []
     tool_name: str = ""
+    prompt_length: int = 0
+    eu_ai_act_tier: str = ""
 
 
 # ─── Condition Evaluator ─────────────────────────────────
@@ -93,20 +95,35 @@ def _evaluate_condition(condition: dict[str, Any], ctx: RequestContext) -> bool:
         field_value: Any = ctx.risk_score
     elif field == "user.department":
         field_value = ctx.department
-    elif field == "user.role":
+    elif field == "user.role" or field == "role":
         field_value = ctx.role
-    elif field == "detection.category":
-        field_value = ctx.detection_categories
+    elif field == "detection.category" or field == "category":
+        field_value = ctx.detection_categories  # list
     elif field == "tool_name":
         field_value = ctx.tool_name
+    elif field == "user_id":
+        field_value = ctx.user_id
+    elif field == "org_id":
+        field_value = ctx.org_id
+    elif field == "prompt_length":
+        field_value = ctx.prompt_length
+    elif field == "eu_ai_act_tier":
+        field_value = ctx.eu_ai_act_tier
     else:
         return False
 
+    # For list fields (detection categories), eq/neq behave as membership checks
+    is_list = isinstance(field_value, list)
+
     # Apply operator
-    if op == "eq":
-        return field_value == value
-    elif op == "neq":
-        return field_value != value
+    if op == "eq" or op == "equals":
+        if is_list:
+            return value in field_value
+        return str(field_value) == str(value) if not isinstance(field_value, (int, float)) else field_value == value
+    elif op == "neq" or op == "not_equals":
+        if is_list:
+            return value not in field_value
+        return str(field_value) != str(value) if not isinstance(field_value, (int, float)) else field_value != value
     elif op == "gt":
         return isinstance(field_value, (int, float)) and field_value > value
     elif op == "gte":
@@ -116,17 +133,23 @@ def _evaluate_condition(condition: dict[str, Any], ctx: RequestContext) -> bool:
     elif op == "lte":
         return isinstance(field_value, (int, float)) and field_value <= value
     elif op == "contains":
-        if isinstance(field_value, list):
+        if is_list:
             return value in field_value
-        return value in str(field_value)
+        return str(value) in str(field_value)
     elif op == "not_contains":
-        if isinstance(field_value, list):
+        if is_list:
             return value not in field_value
-        return value not in str(field_value)
+        return str(value) not in str(field_value)
     elif op == "in":
-        return field_value in (value if isinstance(value, list) else [value])
+        candidates = value if isinstance(value, list) else [value]
+        if is_list:
+            return any(v in candidates for v in field_value)
+        return field_value in candidates
     elif op == "not_in":
-        return field_value not in (value if isinstance(value, list) else [value])
+        candidates = value if isinstance(value, list) else [value]
+        if is_list:
+            return not any(v in candidates for v in field_value)
+        return field_value not in candidates
 
     return False
 

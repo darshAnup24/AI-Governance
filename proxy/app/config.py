@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     database_pool_size: int = 20
     database_max_overflow: int = 10
 
+    # ─── Governance Service ───────────────────────────────
+    governance_api_url: str = "http://governance:4000"
+    governance_policy_cache_ttl: int = 30  # seconds
+
     # ─── Redis ────────────────────────────────────────────
     redis_url: str = "redis://redis:6379/0"
 

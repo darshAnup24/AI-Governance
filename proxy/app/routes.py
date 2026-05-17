@@ -43,9 +43,24 @@ from proxy.app.models import (
 from proxy.app.semantic_cache import get_cached_detection, set_cached_detection
 # Sprint 3: Stateful seamless redaction
 from proxy.app.stateful_redactor import StatefulRedactor
+# Governance policy integration
+from proxy.app.governance_client import GovernanceClient
+from proxy.app.policy_engine import policy_engine, RequestContext
 
 log = structlog.get_logger()
 router = APIRouter()
+
+_governance_client: GovernanceClient | None = None
+
+
+def _get_governance_client(settings: Settings) -> GovernanceClient:
+    global _governance_client
+    if _governance_client is None:
+        _governance_client = GovernanceClient(
+            base_url=settings.governance_api_url,
+            cache_ttl=settings.governance_policy_cache_ttl,
+        )
+    return _governance_client
 
 
 async def _call_detection(
@@ -185,7 +200,40 @@ async def chat_completions(
         provider=provider.value,
     )
 
-    # ─── Policy Enforcement ───────────────────────────────
+    # ─── Policy Enforcement (governance service) ─────────
+    # Fetch org policies from governance service and evaluate them.
+    # The governance service is the authoritative source; the detection
+    # service only provides the base risk_score / detected_spans.
+    try:
+        gov_client = _get_governance_client(settings)
+        auth_header = request.headers.get("Authorization", "")
+        gov_policies = await gov_client.fetch_policies(user.org_id, auth_header)
+        if gov_policies:
+            detection_categories = [
+                s.get("category", "")
+                for s in detection_result.get("detected_spans", [])
+            ]
+            policy_ctx = RequestContext(
+                user_id=user.user_id,
+                role=user.role,
+                department=user.department,
+                org_id=user.org_id,
+                risk_score=risk_score,
+                detection_categories=detection_categories,
+                tool_name="",
+                prompt_length=len(prompt_text),
+            )
+            policy_decision = policy_engine.evaluate(policy_ctx, rules=gov_policies)
+            if policy_decision.action != ActionType.ALLOW:
+                action = policy_decision.action
+                log.info(
+                    "proxy.policy_override",
+                    rule=policy_decision.matched_rule_id,
+                    reason=policy_decision.reason,
+                    action=action.value,
+                )
+    except Exception as _policy_exc:
+        log.warning("proxy.policy_eval_failed", error=str(_policy_exc))
 
     if action == ActionType.BLOCK:
         # Emit audit event for block

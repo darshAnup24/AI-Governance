@@ -15,6 +15,7 @@ services:
       - UPSTREAM_ANTHROPIC_URL=${UPSTREAM_ANTHROPIC_URL:-https://api.anthropic.com}
       - DETECTION_SERVICE_URL=http://detection:8001
       - DETECTION_TIMEOUT_MS=2000
+      - GOVERNANCE_API_URL=http://governance:4000
       - DATABASE_URL=postgresql+asyncpg://aigw:aigw_password@postgres:5432/ai_governance
       - REDIS_URL=redis://redis:6379/0
       - OLLAMA_URL=http://ollama:11434
@@ -25,6 +26,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      governance:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
