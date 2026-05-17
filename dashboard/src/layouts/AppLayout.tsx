@@ -26,7 +26,6 @@ import {
 const govNavItems = [
     { to: '/governance', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/governance/models', label: 'AI Models', icon: Boxes },
-    { to: '/governance/threats', label: 'Threats', icon: Zap },
     { to: '/governance/compliance', label: 'Compliance', icon: CheckCircle2 },
     { to: '/governance/policies', label: 'Policy Builder', icon: Shield },
     { to: '/governance/heatmap', label: 'User Heatmap', icon: Activity },
@@ -40,7 +39,13 @@ const govNavItems = [
 const proxyNavItems = [
     { to: '/dashboard', label: 'Proxy Monitor', icon: LayoutDashboard },
     { to: '/shadow-ai', label: 'Shadow AI', icon: Wifi },
-    { to: '/live-demo', label: 'Live Demo', icon: Zap, badge: 'DEMO' },
+]
+
+const demoNavItems = [
+    { to: '/live-demo/detection', label: 'Prompt Inspector', icon: Zap },
+    { to: '/live-demo/policy', label: 'Policy Enforcement', icon: Shield },
+    { to: '/live-demo/chat', label: 'Chat Gateway', icon: Activity },
+    { to: '/live-demo/audit', label: 'Audit & Incidents', icon: AlertTriangle },
 ]
 
 export default function AppLayout() {
@@ -111,7 +116,7 @@ export default function AppLayout() {
                     <p className="px-3 mt-5 mb-2 text-[10px] uppercase tracking-widest text-slate-600 font-semibold">
                         Proxy
                     </p>
-                    {proxyNavItems.map(({ to, label, icon: Icon, badge }: any) => (
+                    {proxyNavItems.map(({ to, label, icon: Icon }) => (
                         <NavLink
                             key={to}
                             to={to}
@@ -124,13 +129,31 @@ export default function AppLayout() {
                             }
                         >
                             <Icon className="w-4 h-4 flex-shrink-0" />
-                            <span className="flex-1">{label}</span>
-                            {badge && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                                    {badge}
-                                </span>
-                            )}
+                            <span>{label}</span>
+                        </NavLink>
+                    ))}
+
+                    <p className="px-3 mt-5 mb-2 text-[10px] uppercase tracking-widest text-slate-600 font-semibold flex items-center gap-2">
+                        <span>Live Demo</span>
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-brand-500/20 text-brand-400 border border-brand-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse" />
+                            LIVE
+                        </span>
+                    </p>
+                    {demoNavItems.map(({ to, label, icon: Icon }) => (
+                        <NavLink
+                            key={to}
+                            to={to}
+                            onClick={() => setSidebarOpen(false)}
+                            className={({ isActive }) =>
+                                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150
+                                ${isActive
+                                    ? 'bg-brand-600/20 text-brand-400 border border-brand-500/20'
+                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`
+                            }
+                        >
+                            <Icon className="w-4 h-4 flex-shrink-0" />
+                            <span>{label}</span>
                         </NavLink>
                     ))}
                 </nav>

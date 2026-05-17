@@ -11,13 +11,15 @@ import PoliciesPage from './pages/PoliciesPage'
 import ShadowAIPage from './pages/ShadowAIPage'
 import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
-import LiveDemoPage from './pages/LiveDemoPage'
-
+import DemoLayout from './pages/demo/DemoLayout'
+import DetectionDemo from './pages/demo/DetectionDemo'
+import PolicyDemo from './pages/demo/PolicyDemo'
+import ChatDemo from './pages/demo/ChatDemo'
+import AuditDemo from './pages/demo/AuditDemo'
 // ─── ShieldAI Governance Pages ────────────────────────────────────────────────
 import Login from './pages/Login'
 import GovDashboard from './pages/governance/Dashboard'
 import Models from './pages/governance/Models'
-import ThreatDetection from './pages/governance/ThreatDetection'
 import Compliance from './pages/governance/Compliance'
 import Advisor from './pages/governance/Advisor'
 import GovIncidents from './pages/governance/Incidents'
@@ -50,14 +52,18 @@ export default function App() {
                         <Route path="/incidents" element={<Wrap><IncidentsPage /></Wrap>} />
                         <Route path="/policies" element={<Wrap><PoliciesPage /></Wrap>} />
                         <Route path="/shadow-ai" element={<Wrap><ShadowAIPage /></Wrap>} />
-                        <Route path="/live-demo" element={<Wrap><LiveDemoPage /></Wrap>} />
+                        <Route path="/live-demo" element={<Wrap><DemoLayout /></Wrap>}>
+                            <Route path="detection" element={<DetectionDemo />} />
+                            <Route path="policy" element={<PolicyDemo />} />
+                            <Route path="chat" element={<ChatDemo />} />
+                            <Route path="audit" element={<AuditDemo />} />
+                        </Route>
                         <Route path="/reports" element={<Wrap><ReportsPage /></Wrap>} />
                         <Route path="/settings" element={<Wrap><SettingsPage /></Wrap>} />
 
                         {/* ShieldAI Governance routes */}
                         <Route path="/governance" element={<Wrap><GovDashboard /></Wrap>} />
                         <Route path="/governance/models" element={<Wrap><Models /></Wrap>} />
-                        <Route path="/governance/threats" element={<Wrap><ThreatDetection /></Wrap>} />
                         <Route path="/governance/compliance" element={<Wrap><Compliance /></Wrap>} />
                         <Route path="/governance/advisor" element={<Wrap><Advisor /></Wrap>} />
                         <Route path="/governance/incidents" element={<Wrap><GovIncidents /></Wrap>} />
