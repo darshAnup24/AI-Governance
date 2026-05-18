@@ -63,7 +63,7 @@ class JWTAuth:
             email = "dev@company.com"
 
         return UserContext(
-            user_id="dev-user-001",
+            user_id="9f618df9-c2a6-40fd-ae05-0221b58c9b28",  # Matches seeded user for heatmap demo
             email=email,
             department="engineering",
             role="user",

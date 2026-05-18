@@ -48,6 +48,47 @@ from proxy.app.governance_client import GovernanceClient
 from proxy.app.policy_engine import policy_engine, RequestContext
 
 log = structlog.get_logger()
+
+
+async def write_audit_event_to_db(
+    db: AsyncSession,
+    event: AuditEvent,
+    user: UserContext,
+) -> None:
+    """Write audit event directly to Postgres (bypasses Redis consumer for demo)."""
+    try:
+        # Convert string IDs to UUID, use fallback for invalid/dev IDs
+        def to_uuid(s: str | None) -> uuid.UUID:
+            if not s:
+                return uuid.UUID("00000000-0000-0000-0000-000000000000")
+            try:
+                return uuid.UUID(s)
+            except (ValueError, AttributeError):
+                return uuid.UUID("00000000-0000-0000-0000-000000000000")
+
+        record = AuditEventRecord(
+            event_id=to_uuid(event.event_id),
+            timestamp=datetime.utcnow(),
+            org_id=to_uuid(user.org_id),
+            user_id=to_uuid(user.user_id),
+            session_id=event.session_id or "",
+            tool_name=event.tool_name or "",
+            llm_provider=event.llm_provider or "",
+            prompt_hash=event.prompt_hash or "",
+            detection_results=event.detection_results or {},
+            risk_score=event.risk_score or 0,
+            action_taken=event.action_taken.value if event.action_taken else "ALLOW",
+            policy_rule_id=to_uuid(event.policy_rule_id) if event.policy_rule_id else None,
+            redacted_prompt=event.redacted_prompt,
+            request_duration_ms=event.request_duration_ms or 0,
+            upstream_status_code=event.upstream_status_code,
+        )
+        db.add(record)
+        await db.commit()
+        log.info("audit_event.written_to_db", event_id=str(record.event_id), action=record.action_taken)
+    except Exception as e:
+        log.error("audit_event.write_failed", error=str(e))
+        await db.rollback()
 router = APIRouter()
 
 _governance_client: GovernanceClient | None = None
@@ -164,6 +205,7 @@ async def chat_completions(
     body: ChatCompletionRequest,
     user: UserContext = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
+    db: AsyncSession = Depends(get_db),
 ) -> Any:
     """
     OpenAI-compatible chat completions endpoint.
@@ -248,7 +290,7 @@ async def chat_completions(
             action_taken=ActionType.BLOCK,
             request_duration_ms=(time.perf_counter() - start_time) * 1000,
         )
-        await audit_emitter.emit(redis, audit_event)
+        await write_audit_event_to_db(db, audit_event, user)
 
         return JSONResponse(
             status_code=403,
@@ -318,7 +360,7 @@ async def chat_completions(
                         action_taken=action,
                         request_duration_ms=(time.perf_counter() - start_time) * 1000,
                     )
-                    await audit_emitter.emit(redis, audit_event)
+                    await write_audit_event_to_db(db, audit_event, user)
 
             return StreamingResponse(
                 stream_with_audit(),
@@ -394,7 +436,7 @@ async def chat_completions(
                 request_duration_ms=duration_ms,
                 upstream_status_code=resp.status_code,
             )
-            await audit_emitter.emit(redis, audit_event)
+            await write_audit_event_to_db(db, audit_event, user)
 
             # Return upstream response with governance headers
             response = JSONResponse(

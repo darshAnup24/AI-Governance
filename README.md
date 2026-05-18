@@ -1,44 +1,107 @@
-# 🛡️ AI Governance Firewall
+# 🛡️ ShieldAI Governance Platform
 
-An enterprise-grade API proxy that sits between corporate employees and LLM APIs (OpenAI, Anthropic, etc.), providing real-time content detection, policy enforcement, audit logging, and shadow AI monitoring.
-
-## Architecture
-
-```
-┌──────────────┐     ┌─────────────────────────────┐     ┌──────────────┐
-│   Employee   │────▶│   AI Governance Firewall    │────▶│  LLM APIs    │
-│  (Browser /  │     │                             │     │  (OpenAI,    │
-│   IDE / App) │◀────│  Proxy ←→ Detection Engine  │◀────│  Anthropic,  │
-└──────────────┘     │  ↕         ↕                │     │  Azure, etc) │
-                     │  Policy    Audit Log         │     └──────────────┘
-                     │  Engine    (TimescaleDB)     │
-                     └─────────────────────────────┘
-                                  ↕
-                     ┌─────────────────────────────┐
-                     │   Admin Dashboard (React)   │
-                     │  • Executive Overview       │
-                     │  • Incident Explorer        │
-                     │  • Policy Manager           │
-                     │  • Shadow AI Monitor        │
-                     └─────────────────────────────┘
-```
-
-
-## Tech Stack
-| Layer | Technology |
-|-------|-----------|
-| **API Proxy** | FastAPI + Python 3.11 + HTTPX |
-| **Detection** | spaCy NER + Regex + Ollama/Llama 3.1 |
-| **Dashboard** | React 18 + TypeScript + Vite + TailwindCSS + Recharts |
-| **Database** | PostgreSQL 15 + TimescaleDB |
-| **Cache/Queue** | Redis 7 (rate limiting + audit streams) |
-| **LLM Inference** | Ollama (local, no data leakage) |
-| **Deployment** | Docker Compose (dev) + Kubernetes Helm (prod) |
-| **CI/CD** | GitHub Actions |
+An enterprise-grade AI security and compliance platform that sits between corporate employees and LLM APIs (OpenAI, Anthropic, etc.), providing real-time content detection, policy enforcement, audit logging, shadow AI monitoring, and governance dashboards.
 
 ---
 
-## 🚀 HOW TO RUN
+## 🏗️ Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                              BROWSER / CLIENT                                           │
+│                                            (React Dashboard)                                            │
+│                                                                                                         │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                                    │
+                                                    │ HTTPS / JWT
+                                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐  │
+│  │                                    NGINX / REVERSE PROXY                                          │  │
+│  │                                            :443 → :3000                                           │  │
+│  └─────────────────────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐  │
+│  │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │                             DASHBOARD SERVICE                                             │  │  │
+│  │  │                           (React + Vite + PWA)                                             │  │  │
+│  │  │                              Port 3000                                                     │  │  │
+│  │  │                                                                                             │  │  │
+│  │  │  Pages: Dashboard, Shadow AI, Incidents, Policies, Vendors, User Heatmap, Live Demo     │  │  │
+│  │  └─────────────────────────────────────────────────────────────────────────────────────────┘  │  │
+│  │                                                                                                         │
+│  │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │                           GOVERNANCE SERVICE                                                │  │  │
+│  │  │                        (Node.js + Express + Prisma)                                         │  │  │
+│  │  │                              Port 4000                                                     │  │  │
+│  │  │                                                                                             │  │  │
+│  │  │  API Endpoints: Users, Policies, Incidents, Vendors, Audit Logs, Dashboard, Heatmap      │  │  │
+│  │  └─────────────────────────────────────────────────────────────────────────────────────────┘  │  │
+│  │                                                                                                         │
+│  │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │                               PROXY SERVICE                                                 │  │  │
+│  │  │                          (Python + FastAPI)                                                 │  │  │
+│  │  │                              Port 8000                                                     │  │  │
+│  │  │                                                                                             │  │  │
+│  │  │  /v1/chat/completions → Auth → Rate Limit → Detection → Policy → Block/Redact/Allow     │  │  │
+│  │  └─────────────────────────────────────────────────────────────────────────────────────────┘  │  │
+│  │                                                                                                         │
+│  │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │                            DETECTION SERVICE                                               │  │  │
+│  │  │                          (Python + FastAPI)                                                 │  │  │
+│  │  │                              Port 8001                                                     │  │  │
+│  │  │                                                                                             │  │  │
+│  │  │  8 Detectors: Regex, NER (DeBERTa), ML (sklearn), ML (spaCy), Prompt Injection,         │  │  │
+│  │  │              Code Markers, Secret Context, Vuln Signals                                   │  │  │
+│  │  └─────────────────────────────────────────────────────────────────────────────────────────┘  │  │
+│  └─────────────────────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                                         │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                                    │
+                                ┌───────────────┼───────────────┐
+                                ▼               ▼               ▼
+                    ┌─────────────────┐ ┌─────────────┐ ┌─────────────────┐
+                    │  PostgreSQL     │ │  Redis      │ │  External LLMs  │
+                    │  (Primary DB)   │ │  (Cache)    │ │  OpenAI         │
+                    │  Users, Policies│ │  Queue      │ │  Anthropic      │
+                    │  Incidents,     │ │  Rate Limit │ │  Azure          │
+                    │  Audit Events   │ │             │ │  Ollama (local) │
+                    └─────────────────┘ └─────────────┘ └─────────────────┘
+```
+
+---
+
+## 📋 High-Level Design (HLD)
+
+### Core Components
+
+| Component | Responsibility | Tech Stack |
+|-----------|----------------|-----------|
+| **Dashboard** | UI for monitoring, policy management, incidents, vendors, heatmap | React + Vite + PWA |
+| **Proxy** | Request interception, auth, detection orchestration, policy enforcement, redaction, audit | Python + FastAPI |
+| **Detection Service** | Multi-detector pipeline, risk scoring, span annotation | Python + FastAPI + ML models |
+| **Governance Service** | Policy CRUD, incident management, user/org management, vendor registry, audit logs | Node.js + Express + Prisma |
+| **PostgreSQL** | Persistent storage for all governance, audit, and configuration data | PostgreSQL 15 |
+| **Redis** | Caching (detection results, policies), rate limiting, audit queue | Redis 7 |
+| **Upstream LLMs** | Actual LLM inference (OpenAI, Anthropic, Azure, Ollama) | External APIs |
+
+### Data Flow
+
+1. **User Request**: User sends prompt from Dashboard (Live Demo → Chat Gateway)
+2. **Proxy Auth**: POST /v1/chat/completions (Proxy:8000) → JWT auth → UserContext extracted
+3. **Rate Limit**: Check Redis for user/department RPM/TPM limits
+4. **Detection**: POST /detect (Detection:8001) → risk_score, detected_spans, action
+5. **Policy Fetch**: GET /api/internal/policies (Governance:4000) → policy rules (cached 30s)
+6. **Policy Evaluate**: PolicyEngine.evaluate() → overrides detection action if policy matches
+7. **Final Decision**: BLOCK / REDACT / ALLOW
+8. **Audit**: AuditEvent emitted to Redis → Postgres (audit_events table)
+9. **Forward**: POST to Upstream LLM (OpenAI / Anthropic / Ollama)
+10. **Response Inspection**: Detect/redact LLM output
+11. **Dashboard Poll**: Proxy Monitor, Shadow AI, User Heatmap, Incidents, Policies, Vendors
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
@@ -46,11 +109,11 @@ An enterprise-grade API proxy that sits between corporate employees and LLM APIs
 - **Git**
 - (Optional) NVIDIA GPU + drivers for Ollama Llama inference
 
+### Development Setup
 
-### Quick Start (Development)
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-org/AI-Governance.git
+git clone https://github.com/darshAnup24/AI-Governance.git
 cd AI-Governance
 
 # 2. Copy environment config
@@ -60,100 +123,64 @@ cp .env.example .env
 docker compose up --build
 
 # This starts:
+#   - Dashboard:  http://localhost:3000  (React admin UI)
 #   - Proxy:      http://localhost:8000  (FastAPI + Swagger at /docs)
 #   - Detection:  http://localhost:8001  (Detection engine)
-#   - Dashboard:  http://localhost:3000  (React admin UI)
-#   - PostgreSQL: localhost:5432
+#   - Governance: http://localhost:4000  (Governance API)
+#   - PostgreSQL: localhost:5433
 #   - Redis:      localhost:6379
 #   - Ollama:     localhost:11434
 ```
 
-### Running Dashboard Locally (without Docker)
+### Access the Dashboard
 
-```bash
-cd dashboard
-npm install
-npm run dev
-# Open http://localhost:3000
-```
-
-### Running Backend Locally (without Docker)
-
-```bash
-# Install Poetry
-pip install poetry
-
-# Install dependencies
-poetry install
-
-# Start proxy
-poetry run uvicorn proxy.app.main:app --reload --port 8000
-
-# Start detection (in another terminal)
-poetry run uvicorn detection.app.main:app --reload --port 8001
-```
-
-### Running Tests
-
-```bash
-# Unit + integration tests
-poetry run pytest tests/ -v
-
-# With coverage
-poetry run pytest tests/ -v --cov=proxy --cov=detection --cov-report=term-missing
-
-# Load test (requires running proxy)
-poetry run locust -f tests/load_test.py --host http://localhost:8000
-```
-
-### Kubernetes Deployment
-
-```bash
-# Build and push Docker images
-docker build -t your-registry/ai-gw-proxy:latest -f proxy/Dockerfile .
-docker build -t your-registry/ai-gw-detection:latest -f detection/Dockerfile .
-docker build -t your-registry/ai-gw-dashboard:latest -f dashboard/Dockerfile .
-
-# Deploy with Helm
-cd infra/helm
-helm install ai-gw ./ai-gateway -f ai-gateway/values.yaml -n ai-governance --create-namespace
-```
+Open `http://localhost:3000` in your browser. Dev mode accepts any email/password.
 
 ---
 
-## 📖 HOW TO USE
+## 📖 Dashboard Features
 
-### 1. Access the Dashboard
+### Main Pages
 
-1. Open `http://localhost:3000` in your browser
-2. Log in with any email/ford (dev mode accepts all credentials)
-3. You'll see the **Executive Dashboard** with real-time metrics
+| Page | Purpose | Key Features |
+|------|---------|--------------|
+| **Dashboard** | Executive overview | KPI cards, risk trend chart, recent incidents, department rankings |
+| **Shadow AI** | Unauthorized AI monitoring | Bar charts by tool, pie charts by category, geo detections, weekly trends |
+| **Incidents** | Security incident board | Kanban board (OPEN → IN REVIEW → RESOLVED → CLOSED), severity levels |
+| **Policies** | Policy management | CRUD rules, test sandbox, risk score slider |
+| **Vendors** | AI vendor registry | Risk assessment, radar charts, certifications tracking |
+| **User Heatmap** | Risk per employee × day | GitHub-style heatmap, risk color coding, user ranking |
+| **Compliance** | EU AI Act / SOC 2 / GDPR | Compliance dashboard, risk assessments, audit log exports |
 
-### 2. Dashboard Pages
+### Live Demo Center
 
-| Page | Purpose |
-|------|---------|
-| **Dashboard** | KPI cards, risk trend chart, recent incidents, department rankings |
-| **Incidents** | Search/filter flagged events, view detection details with radar chart |
-| **Policies** | Create/edit/toggle policy rules, test sandbox with risk score slider |
-| **Shadow AI** | Unauthorized AI tool usage charts by tool and department |
-| **Reports** | Generate compliance reports in PDF, CSV, or JSON |
-| **Settings** | Organization config, detection sensitivity, system status |
+Located at `/live-demo/`, the Live Demo Center provides interactive demonstrations of all features:
 
-### 3. Use as API Proxy
+| Demo Tab | What It Does |
+|----------|--------------|
+| **Prompt Inspector** | Detection pipeline visualization, span highlighting, risk gauge |
+| **Policy Enforcement** | Live policy list + 6-step request flow demonstration |
+| **Chat Gateway** | Full chat UI routed through proxy with real-time detection |
+| **Audit & Incidents** | Test events that populate audit DB and auto-create incidents |
+| **Shadow AI Sim** | Inject tool usage events that appear on Shadow AI page |
 
-Point your LLM API calls through the proxy instead of directly to OpenAI/Anthropic:
+---
+
+## 🔧 API Usage
+
+### OpenAI-Compatible Proxy Endpoint
+
+Point your LLM API calls through the proxy:
 
 ```python
 import openai
 
-# Instead of: openai.base_url = "https://api.openai.com/v1"
 client = openai.OpenAI(
-    base_url="http://localhost:8000/v1",  # ← AI Governance Proxy
+    base_url="http://localhost:8000/v1",  # ← ShieldAI Proxy
     api_key="your-openai-key",
     default_headers={
-        "Authorization": "Bearer your-jwt-token",  # Corporate auth
-        "X-LLM-Provider": "openai",                # Provider selection
+        "Authorization": "Bearer dev-secret-change-in-production",  # Dev JWT
+        "X-LLM-Provider": "openai",
     },
 )
 
@@ -163,29 +190,52 @@ response = client.chat.completions.create(
 )
 ```
 
-### 4. API Endpoints
+### Key API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/v1/chat/completions` | POST | OpenAI-compatible proxy endpoint |
 | `/health` | GET | Health check |
-| `/metrics` | GET | Prometheus metrics |
 | `/docs` | GET | Swagger API documentation |
-| `/api/v1/policies` | GET/POST | List/create policy rules |
-| `/api/v1/policies/test` | POST | Test policy against sample data |
-| `/api/v1/policies/{id}` | PUT/DELETE | Update/delete policy |
-| `/api/v1/analytics/trend` | GET | Risk trend data (30 days) |
-| `/api/v1/audit-events` | GET | List audit events |
+| `/api/v1/shadow-ai/events` | POST | Shadow AI detection ingestion |
+| `/api/v1/shadow-ai/detections` | GET | List shadow AI alerts |
+| `/api/v1/audit-events` | GET | Audit event query |
+| `/api/v1/inspect` | POST | Ad-hoc detection (demo only) |
 
-### 5. Detection Tiers
+---
 
-| Tier | Engine | Speed | What it Detects |
-|------|--------|-------|-----------------|
-| **Tier 1** | Regex + Rules | <5ms | API keys, SSNs, credit cards, credentials, JWTs, connection strings |
-| **Tier 2** | spaCy NER | <80ms | Person names, organizations, employee IDs, project codes |
-| **Tier 3** | Llama 3.1 (local) | <3s | Ambiguous content, trade secrets, confidential business context |
+## 🔍 Detection Pipeline
 
-### 6. Policy Actions
+### 8 Parallel Detectors
+
+1. **Regex Detector** → PII, API keys, credentials, patterns
+2. **NER Detector (DeBERTa)** → Customer names, custom entities
+3. **ML Classifier (sklearn)** → PII, bias, hallucination, regulatory
+4. **ML Classifier (spaCy)** → PII, bias, hallucination, regulatory
+5. **Prompt Injection Detector** → System prompt overrides, jailbreaks
+6. **Code Markers Detector** → Code language detection
+7. **Secret Context Detector** → Secret-related patterns
+8. **Vuln Signal Detector** → Security vulnerability patterns
+
+### Risk Scoring
+
+- **Base score**: Max(span confidence)
+- **Category multipliers**: Injection ×1.5, PII ×1.2, etc.
+- **User role modifiers**: Admin ×0.85, Security ×0.7
+- **Input context**: Code vs natural language
+- **EU AI Act tier classification**
+
+### Performance
+
+- **Detection latency**: 2.79ms median, 3.51ms p95
+- **Throughput**: 1000+ concurrent requests
+- **Cache hit rate**: > 80% (semantic cache)
+
+---
+
+## 🎯 Policy Enforcement
+
+### Policy Actions
 
 | Score Range | Action | Behavior |
 |-------------|--------|----------|
@@ -195,16 +245,13 @@ response = client.chat.completions.create(
 | 80-89 | **REDACT** | Replace sensitive spans with `[REDACTED:CATEGORY]` |
 | 90-100 | **BLOCK** | Return 403 Forbidden |
 
-### 7. Response Headers
+### Policy Evaluation Flow
 
-Every proxied response includes governance metadata:
-
-```
-X-Request-ID: uuid
-X-Risk-Score: 42
-X-Action: ALLOW
-X-Response-Time: 0.0823s
-```
+1. Detection gives base risk_score
+2. Governance policies fetched (cached 30s)
+3. PolicyEngine evaluates against user context
+4. Final decision: BLOCK / REDACT / ALLOW
+5. Policy can ONLY make stricter decisions (never loosen)
 
 ---
 
@@ -218,55 +265,96 @@ AI-Governance/
 │   │   ├── config.py       # Pydantic settings
 │   │   ├── models.py       # Shared data models
 │   │   ├── routes.py       # /v1/chat/completions endpoint
-│   │   ├── adapters.py     # Multi-provider normalization
 │   │   ├── auth.py         # JWT auth + rate limiter
-│   │   ├── audit.py        # Redis Streams emitter
-│   │   ├── audit_consumer.py  # Background audit writer
-│   │   ├── policy_engine.py   # Rule evaluator + API
+│   │   ├── audit.py        # Audit event emitter
 │   │   ├── db_models.py    # SQLAlchemy ORM models
 │   │   └── database.py     # Async DB sessions
 │   └── Dockerfile
 ├── detection/              # ML detection engine
 │   ├── app/
 │   │   ├── main.py         # Detection service + pipeline
-│   │   ├── regex_detector.py  # Tier 1: regex patterns
-│   │   ├── ner_detector.py    # Tier 2: spaCy NER
-│   │   ├── llama_classifier.py # Tier 3: Llama (Ollama)
+│   │   ├── detectors/      # 8 detector implementations
 │   │   ├── risk_scorer.py  # Score aggregation
-│   │   ├── shadow_ai.py    # Shadow AI detection
-│   │   └── ai_domains.yaml # 60+ AI tool domains
+│   │   └── stateful_redactor.py  # Stateful redaction
+│   └── Dockerfile
+├── governance/             # Node.js governance service
+│   ├── src/
+│   │   ├── index.ts        # App + middleware
+│   │   ├── routes/        # API routes (users, policies, incidents, etc.)
+│   │   └── prisma/         # Database schema
 │   └── Dockerfile
 ├── dashboard/              # React admin dashboard
 │   ├── src/
-│   │   ├── pages/          # Dashboard, Incidents, Policies, etc.
+│   │   ├── pages/          # Dashboard, Shadow AI, Incidents, Policies, etc.
+│   │   ├── pages/demo/     # Live Demo Center
 │   │   ├── layouts/        # AppLayout with sidebar
-│   │   ├── contexts/       # AuthContext
-│   │   ├── components/     # ProtectedRoute
-│   │   └── lib/            # Axios API client
+│   │   └── components/     # Reusable components
 │   └── Dockerfile
-├── infra/
-│   └── helm/ai-gateway/    # Kubernetes Helm chart
-├── tests/                  # Integration + load tests
-├── scripts/                # DB init scripts
 ├── docker-compose.yml
-├── pyproject.toml
-├── Makefile
-└── .github/workflows/ci.yml
+├── .env.example
+└── README.md
 ```
 
 ---
 
 ## 🔒 Security Features
 
-- **JWT Authentication** with JWKS validation and key rotation
+- **JWT Authentication** with JWKS validation (dev mode: any Bearer token accepted)
 - **Rate Limiting** per-user and per-department (RPM + TPM)
+- **Role-Based Access Control** (ADMIN, MANAGER, VIEWER)
+- **Org-Level Isolation** (all queries scoped to org_id)
+- **Audit Logging** for all governance actions
 - **SSRF Prevention** via URL allowlisting for upstream providers
-- **No Data Leakage** — Llama runs 100% on-premise via Ollama
-- **Audit Trail** — every request logged to TimescaleDB via Redis Streams
-- **Network Policies** — K8s restricts service-to-service communication
-- **Read-Only Filesystem** in container security contexts
+- **No Data Leakage** — Ollama runs 100% on-premise
 - **Row-Level Security** for multi-tenant data isolation
 
-## License
+---
+
+## 📊 Compliance Features
+
+### EU AI Act
+- Tier classification (Minimal / Limited / High / Unacceptable)
+- Model risk assessments
+- Regulatory flags
+
+### SOC 2
+- Full audit trail
+- Access controls (RBAC)
+- Change logging
+
+### GDPR
+- PII detection + redaction
+- Right-to-be-forgotten (user deletion)
+- Data processing records
+
+---
+
+## 🐛 Known Issues & Recent Fixes
+
+### User Heatmap Not Updating with Live Demo Events
+**Problem**: Proxy emitted audit events to Redis streams, but no consumer was running to write them to Postgres. User Heatmap reads from Postgres `audit_events` table, so it never updated with new demo events.
+
+**Fix**: Modified proxy to write audit events directly to Postgres instead of Redis (bypasses consumer for demo environment). Added proper UUID conversion for dev token user_ids.
+
+**Status**: ✅ Fixed - audit events now written directly to Postgres, User Heatmap updates in real-time.
+
+---
+
+## 📝 Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | React 18, Vite, TypeScript, TailwindCSS, Recharts, Lucide Icons |
+| **Proxy Backend** | Python 3.11, FastAPI, httpx, asyncpg |
+| **Detection Backend** | Python 3.11, FastAPI, sklearn, spaCy, ONNX, regex |
+| **Governance Backend** | Node.js 20, Express, Prisma ORM |
+| **Database** | PostgreSQL 15 |
+| **Cache** | Redis 7 |
+| **Infrastructure** | Docker, Docker Compose (dev), Nginx (reverse proxy) |
+| **LLM Providers** | OpenAI, Anthropic, Azure OpenAI, Ollama (local) |
+
+---
+
+## 📄 License
 
 MIT
