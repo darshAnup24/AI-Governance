@@ -118,10 +118,27 @@ class MLClassifier:
 
     def _load_thresholds(self) -> dict[str, float]:
         """
-        Load per-category thresholds from sklearn_meta.json if the threshold
-        optimizer has been run (key ``per_category_thresholds`` present).
-        Falls back to ``_DEFAULT_CAT_THRESHOLDS``.
+        Load per-category thresholds in priority order:
+          1. RL-tuned thresholds (tuned_thresholds.json) — from user feedback
+          2. sklearn_meta.json (threshold optimizer output)
+          3. _DEFAULT_CAT_THRESHOLDS (hardcoded evidence-based defaults)
         """
+        # Priority 1: RL-tuned thresholds from user feedback
+        try:
+            from detection.app.rl_threshold_tuner import load_tuned_thresholds
+            tuned = load_tuned_thresholds()
+            if tuned != _DEFAULT_CAT_THRESHOLDS:
+                merged = {**_DEFAULT_CAT_THRESHOLDS, **tuned}
+                log.info(
+                    "ml_classifier.thresholds_loaded",
+                    source="rl_tuned",
+                    thresholds=tuned,
+                )
+                return merged
+        except Exception as e:
+            log.debug("ml_classifier.rl_thresholds_unavailable", error=str(e))
+
+        # Priority 2: sklearn_meta.json from training optimizer
         meta_path = _MODEL_DIR / "sklearn_meta.json"
         if meta_path.exists():
             try:
@@ -138,6 +155,8 @@ class MLClassifier:
                     return merged
             except Exception as e:
                 log.warning("ml_classifier.threshold_load_failed", error=str(e))
+
+        # Priority 3: hardcoded defaults
         log.debug("ml_classifier.thresholds_default", thresholds=_DEFAULT_CAT_THRESHOLDS)
         return dict(_DEFAULT_CAT_THRESHOLDS)
 

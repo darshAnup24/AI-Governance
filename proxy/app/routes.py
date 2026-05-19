@@ -771,7 +771,10 @@ async def inspect_prompt(
         duration_ms=duration_ms,
     )
 
+    detection_id = detection_response.get("detection_id", "") if isinstance(detection_response, dict) else ""
+
     return {
+        "detection_id": detection_id,
         "risk_score": risk_score,
         "action": action,
         "categories": categories,

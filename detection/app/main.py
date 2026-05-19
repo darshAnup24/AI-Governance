@@ -40,6 +40,7 @@ from detection.app.ml_classifier import MLClassifier
 from detection.app.onnx_classifier import classify_sensitivity, ONNX_ENABLED
 # Phase 4: RL Feedback Collection
 from detection.app.feedback_api import FeedbackStore
+from detection.app.rl_threshold_tuner import RLThresholdTuner
 
 log = structlog.get_logger()
 
@@ -607,6 +608,46 @@ async def get_unprocessed_feedback(limit: int = 100) -> dict[str, Any]:
             "count": 0,
             "message": str(e)
         }
+
+
+@app.post("/ml/retrain")
+async def retrain_thresholds(apply: bool = True) -> dict[str, Any]:
+    """
+    Run the RL threshold tuner on collected user feedback.
+    Reads detection/data/feedback/user_feedback.jsonl and adjusts per-category
+    confidence thresholds in ml_classifier based on FP/FN rates.
+
+    Query params:
+      apply=true  (default) → write tuned_thresholds.json + mark feedback processed
+      apply=false            → dry run, return adjustments without writing
+    """
+    try:
+        loop = asyncio.get_running_loop()
+        tuner = RLThresholdTuner()
+
+        def _run_tuner():
+            return tuner.run(apply=apply, verbose=False)
+
+        result = await loop.run_in_executor(ml_executor, _run_tuner)
+
+        log.info(
+            "rl_tuner.completed",
+            feedback_count=result["feedback_count"],
+            applied=result["applied"],
+            categories_adjusted=sum(
+                1 for a in result["adjustments"].values() if a.get("adjustment", 0) != 0
+            ),
+        )
+        return {
+            "status": "ok",
+            "feedback_processed": result["feedback_count"],
+            "applied": result["applied"],
+            "adjustments": result["adjustments"],
+            "new_thresholds": result["new_thresholds"],
+        }
+    except Exception as e:
+        log.error("rl_tuner.failed", error=str(e))
+        return {"status": "error", "message": str(e)}
 
 
 @app.exception_handler(Exception)

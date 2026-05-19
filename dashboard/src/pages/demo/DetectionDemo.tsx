@@ -1,11 +1,14 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Shield, AlertTriangle, CheckCircle2, Loader2, Send,
-  ChevronRight, Info, Scan, ArrowRight,
+  ChevronRight, Info, Scan, ArrowRight, ThumbsDown, ThumbsUp,
+  RefreshCw, BarChart2, X, CheckCheck,
 } from 'lucide-react'
 import api from '../../lib/api'
 import govApi from '../../lib/govApi'
 import { useQueryClient } from '../../lib/hooks'
+
+const DETECTION_API = 'http://localhost:8001'
 
 // ── Presets ───────────────────────────────────────────────────────────────────
 const PRESETS = [
@@ -62,9 +65,26 @@ function RiskGauge({ score }: { score: number }) {
 }
 
 interface InspectResult {
+  detection_id?: string
   risk_score: number; action: string; categories: string[]
   segments: { text: string; highlight: boolean; category: string | null; confidence?: number }[]
   detected_spans: any[]; duration_ms: number
+}
+
+interface FeedbackStats {
+  total_feedback: number
+  unprocessed: number
+  processed: number
+  correction_rate: number
+  by_category: Record<string, number>
+}
+
+interface RetrainResult {
+  status: string
+  feedback_processed: number
+  applied: boolean
+  adjustments: Record<string, { current: number; new: number; adjustment: number; reason: string; fp?: number; fn?: number; total?: number }>
+  new_thresholds: Record<string, number>
 }
 
 export default function DetectionDemo() {
@@ -77,15 +97,42 @@ export default function DetectionDemo() {
   const [incidentCreated, setIncidentCreated] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // Feedback state
+  const [feedbackSent, setFeedbackSent] = useState<Record<number, 'fp' | 'fn' | 'ok'>>({})
+  const [feedbackLoading, setFeedbackLoading] = useState<Record<number, boolean>>({})
+  const [feedbackStats, setFeedbackStats] = useState<FeedbackStats | null>(null)
+  const [statsLoading, setStatsLoading] = useState(false)
+  const [retrainLoading, setRetrainLoading] = useState(false)
+  const [retrainResult, setRetrainResult] = useState<RetrainResult | null>(null)
+  const [showStats, setShowStats] = useState(false)
+
+  // Load feedback stats on mount
+  useEffect(() => {
+    loadFeedbackStats()
+  }, [])
+
+  const loadFeedbackStats = async () => {
+    setStatsLoading(true)
+    try {
+      const resp = await fetch(`${DETECTION_API}/feedback/stats`)
+      const data = await resp.json()
+      setFeedbackStats(data)
+    } catch {
+      // Detection service may not be running yet — silent fail
+    } finally {
+      setStatsLoading(false)
+    }
+  }
+
   const handleInspect = async () => {
     if (!prompt.trim()) return
     setLoading(true); setError(null); setResult(null); setIncidentCreated(false)
+    setFeedbackSent({}); setRetrainResult(null)
     try {
       const resp = await api.post('/api/v1/inspect', { text: prompt })
       const data: InspectResult = resp.data
       setResult(data)
 
-      // Auto-create incident for BLOCK or high-risk results
       if (data.action === 'BLOCK' || data.risk_score >= 70) {
         const cats = data.categories.join(', ') || 'unknown'
         await govApi.post('/api/incidents', {
@@ -106,6 +153,47 @@ export default function DetectionDemo() {
       setError(e?.response?.data?.detail || 'Detection service unavailable.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const submitFeedback = async (spanIdx: number, span: any, correction: 'fp' | 'fn') => {
+    if (!result?.detection_id) return
+    setFeedbackLoading(prev => ({ ...prev, [spanIdx]: true }))
+    try {
+      await fetch(`${DETECTION_API}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          detection_id: result.detection_id,
+          model_prediction: span.category,
+          model_confidence: span.confidence ?? 1.0,
+          model_threshold: 0.55,
+          user_correction: correction === 'fp' ? 'SAFE' : span.category,
+          user_confidence: 0.95,
+          notes: correction === 'fp' ? 'False positive — not actually sensitive' : 'Missed detection confirmed by user',
+        }),
+      })
+      setFeedbackSent(prev => ({ ...prev, [spanIdx]: correction === 'fp' ? 'fp' : 'ok' }))
+      await loadFeedbackStats()
+    } catch {
+      // silent
+    } finally {
+      setFeedbackLoading(prev => ({ ...prev, [spanIdx]: false }))
+    }
+  }
+
+  const handleRetrain = async (dryRun = false) => {
+    setRetrainLoading(true)
+    setRetrainResult(null)
+    try {
+      const resp = await fetch(`${DETECTION_API}/ml/retrain?apply=${!dryRun}`, { method: 'POST' })
+      const data = await resp.json()
+      setRetrainResult(data)
+      await loadFeedbackStats()
+    } catch (e: any) {
+      setRetrainResult({ status: 'error', feedback_processed: 0, applied: false, adjustments: {}, new_thresholds: {} })
+    } finally {
+      setRetrainLoading(false)
     }
   }
 
@@ -184,6 +272,106 @@ export default function DetectionDemo() {
               </div>
             </div>
           )}
+
+          {/* ── RL Feedback Stats Panel ─────────────────────────── */}
+          <div className="card border border-slate-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-purple-400" />
+                <span className="text-sm font-semibold text-slate-200">RL Feedback Loop</span>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={loadFeedbackStats} disabled={statsLoading}
+                  className="p-1.5 rounded-lg border border-slate-700 hover:border-slate-500 text-slate-400 hover:text-slate-200 transition-all disabled:opacity-40">
+                  <RefreshCw className={`w-3.5 h-3.5 ${statsLoading ? 'animate-spin' : ''}`} />
+                </button>
+                <button onClick={() => setShowStats(v => !v)}
+                  className="px-2 py-1 rounded-lg border border-slate-700 hover:border-slate-500 text-xs text-slate-400 hover:text-slate-200 transition-all">
+                  {showStats ? 'Hide' : 'Details'}
+                </button>
+              </div>
+            </div>
+
+            {/* Stats summary row */}
+            {feedbackStats && (
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div className="bg-slate-900/60 rounded-lg p-2 text-center">
+                  <p className="text-lg font-bold text-slate-200">{feedbackStats.total_feedback}</p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Total</p>
+                </div>
+                <div className="bg-slate-900/60 rounded-lg p-2 text-center">
+                  <p className="text-lg font-bold text-yellow-400">{feedbackStats.unprocessed}</p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Pending</p>
+                </div>
+                <div className="bg-slate-900/60 rounded-lg p-2 text-center">
+                  <p className="text-lg font-bold text-emerald-400">{Math.round((feedbackStats.correction_rate ?? 0) * 100)}%</p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">FP Rate</p>
+                </div>
+              </div>
+            )}
+
+            {/* Expanded stats */}
+            {showStats && feedbackStats && Object.keys(feedbackStats.by_category).length > 0 && (
+              <div className="mb-3 space-y-1.5 border-t border-slate-800 pt-3">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Corrections by Category</p>
+                {Object.entries(feedbackStats.by_category).map(([cat, count]) => (
+                  <div key={cat} className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">{cat}</span>
+                    <span className="font-mono text-slate-300">{count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Retrain buttons */}
+            <div className="flex gap-2">
+              <button onClick={() => handleRetrain(true)} disabled={retrainLoading || !feedbackStats?.unprocessed}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-700 hover:border-purple-500/50 text-xs text-slate-400 hover:text-purple-300 transition-all disabled:opacity-40">
+                {retrainLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BarChart2 className="w-3.5 h-3.5" />}
+                Dry Run
+              </button>
+              <button onClick={() => handleRetrain(false)} disabled={retrainLoading || !feedbackStats?.unprocessed}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 hover:border-purple-500/60 text-xs text-purple-300 hover:text-purple-200 transition-all disabled:opacity-40">
+                {retrainLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Apply Retraining
+              </button>
+            </div>
+
+            {/* Retrain output */}
+            {retrainResult && (
+              <div className={`mt-3 rounded-lg p-3 border text-xs animate-fade-in ${retrainResult.status === 'ok' ? 'bg-purple-500/5 border-purple-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
+                {retrainResult.status === 'error' ? (
+                  <p className="text-red-400">Retraining failed — detection service may be offline.</p>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCheck className="w-3.5 h-3.5 text-purple-400" />
+                      <span className="text-purple-300 font-semibold">
+                        {retrainResult.applied ? 'Thresholds Updated' : 'Dry Run Complete'} — {retrainResult.feedback_processed} samples analyzed
+                      </span>
+                    </div>
+                    {Object.keys(retrainResult.adjustments).length === 0 ? (
+                      <p className="text-slate-500">No adjustments needed (insufficient feedback per category).</p>
+                    ) : (
+                      <div className="space-y-1 mt-1">
+                        {Object.entries(retrainResult.adjustments).map(([cat, adj]) => (
+                          <div key={cat} className="flex items-center justify-between">
+                            <span className="text-slate-400">{cat}</span>
+                            <span className={`font-mono ${adj.adjustment > 0 ? 'text-orange-400' : adj.adjustment < 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
+                              {adj.current.toFixed(3)} → {adj.new.toFixed(3)}
+                              {adj.adjustment !== 0 && (
+                                <span className="ml-1 text-[10px]">({adj.adjustment > 0 ? '↑' : '↓'} {adj.reason})</span>
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right: Results */}
@@ -240,28 +428,65 @@ export default function DetectionDemo() {
                 </div>
               </div>
 
+              {/* ── Detector Breakdown with Feedback Buttons ──────────── */}
               {result.detected_spans.length > 0 && (
                 <div className="card border border-slate-800">
-                  <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">Detector Breakdown</p>
-                  <div className="space-y-2">
-                    {result.detected_spans.map((span: any, i: number) => (
-                      <div key={i} className="flex items-center justify-between bg-slate-900/50 rounded-lg px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${span.category === 'PROMPT_INJECTION' ? 'bg-red-400' : span.category === 'PII' ? 'bg-blue-400' : span.category === 'API_KEY' ? 'bg-orange-400' : 'bg-yellow-400'}`} />
-                          <span className="text-xs text-slate-300 font-medium">{span.category?.replace(/_/g, ' ')}</span>
-                          {span.matched_text && (
-                            <code className="text-[10px] text-slate-600 bg-slate-800 px-1 rounded truncate max-w-28">{span.matched_text.slice(0, 22)}…</code>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <div className="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-gradient-to-r from-brand-500 to-red-500 transition-all duration-500" style={{ width: `${Math.round((span.confidence || 1) * 100)}%` }} />
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-mono w-8 text-right">{Math.round((span.confidence || 1) * 100)}%</span>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider">Detector Breakdown</p>
+                    <p className="text-[10px] text-slate-600">Flag incorrect detections to improve the model</p>
                   </div>
+                  <div className="space-y-2">
+                    {result.detected_spans.map((span: any, i: number) => {
+                      const fb = feedbackSent[i]
+                      const isLoading = feedbackLoading[i]
+                      return (
+                        <div key={i} className="flex items-center justify-between bg-slate-900/50 rounded-lg px-3 py-2 gap-2">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${span.category === 'PROMPT_INJECTION' ? 'bg-red-400' : span.category === 'PII' ? 'bg-blue-400' : span.category === 'API_KEY' ? 'bg-orange-400' : 'bg-yellow-400'}`} />
+                            <span className="text-xs text-slate-300 font-medium truncate">{span.category?.replace(/_/g, ' ')}</span>
+                            {span.matched_text && (
+                              <code className="text-[10px] text-slate-600 bg-slate-800 px-1 rounded truncate max-w-24">{span.matched_text.slice(0, 18)}…</code>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="w-12 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-gradient-to-r from-brand-500 to-red-500 transition-all duration-500" style={{ width: `${Math.round((span.confidence || 1) * 100)}%` }} />
+                            </div>
+                            <span className="text-[10px] text-slate-500 font-mono w-7 text-right">{Math.round((span.confidence || 1) * 100)}%</span>
+
+                            {/* Feedback buttons */}
+                            {fb ? (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${fb === 'fp' ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                                {fb === 'fp' ? 'Flagged FP' : 'Confirmed'}
+                              </span>
+                            ) : (
+                              <div className="flex gap-1">
+                                <button
+                                  title="False Positive — not actually sensitive"
+                                  onClick={() => submitFeedback(i, span, 'fp')}
+                                  disabled={isLoading}
+                                  className="p-1 rounded hover:bg-red-500/20 text-slate-600 hover:text-red-400 transition-all disabled:opacity-40">
+                                  {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsDown className="w-3 h-3" />}
+                                </button>
+                                <button
+                                  title="Confirmed — this IS sensitive"
+                                  onClick={() => submitFeedback(i, span, 'fn')}
+                                  disabled={isLoading}
+                                  className="p-1 rounded hover:bg-emerald-500/20 text-slate-600 hover:text-emerald-400 transition-all disabled:opacity-40">
+                                  {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsUp className="w-3 h-3" />}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[10px] text-slate-600 mt-2 flex items-center gap-1">
+                    <ThumbsDown className="w-3 h-3" /> = False Positive &nbsp;·&nbsp;
+                    <ThumbsUp className="w-3 h-3" /> = Confirmed detection &nbsp;·&nbsp;
+                    Feedback trains the RL threshold tuner
+                  </p>
                 </div>
               )}
 
@@ -270,6 +495,14 @@ export default function DetectionDemo() {
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-300 animate-fade-in">
                   <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                   <span>Incident auto-created on the <strong>Incidents board</strong> — check Governance → Incidents</span>
+                </div>
+              )}
+
+              {/* Feedback sent notice */}
+              {Object.keys(feedbackSent).length > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300 animate-fade-in">
+                  <X className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>{Object.keys(feedbackSent).length} correction(s) sent. Click <strong>Apply Retraining</strong> below to update model thresholds.</span>
                 </div>
               )}
             </div>
