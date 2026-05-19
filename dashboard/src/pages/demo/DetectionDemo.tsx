@@ -182,6 +182,25 @@ export default function DetectionDemo() {
     }
   }
 
+  const handleMarkAsAllowed = async () => {
+    if (!prompt.trim()) return
+    try {
+      const resp = await fetch(`${DETECTION_API}/whitelist/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: prompt }),
+      })
+      const data = await resp.json()
+      if (data.status === 'ok') {
+        alert('Prompt added to whitelist — it will be allowed on future inspections')
+      } else {
+        alert('Failed to add to whitelist: ' + (data.message || 'Unknown error'))
+      }
+    } catch {
+      alert('Detection service unavailable — could not add to whitelist')
+    }
+  }
+
   const handleRetrain = async (dryRun = false) => {
     setRetrainLoading(true)
     setRetrainResult(null)
@@ -408,6 +427,15 @@ export default function DetectionDemo() {
                   <p className="font-mono font-bold">{result.duration_ms}ms</p>
                 </div>
               </div>
+
+              {/* Mark as Allowed button for blocked/high-risk prompts */}
+              {(result.action === 'BLOCK' || result.risk_score >= 70) && (
+                <button onClick={handleMarkAsAllowed}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-sm font-medium transition-all">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Mark this prompt as "Allowed" (whitelist)
+                </button>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="card border border-slate-800 flex items-center justify-center py-4">

@@ -59,6 +59,41 @@ ml_classifier = MLClassifier()  # Trained sklearn + spaCy ensemble
 # Phase 4: RL Feedback Store
 feedback_store = FeedbackStore()
 
+# ─── Prompt Whitelist ─────────────────────────────────────────
+# Store SHA256 hashes of prompts explicitly marked as "allowed" by users
+# These prompts skip detection entirely
+WHITELIST_FILE = "detection/data/whitelist.jsonl"
+_whitelist: set[str] = set()
+
+def load_whitelist():
+    """Load whitelist from JSONL file"""
+    global _whitelist
+    try:
+        if os.path.exists(WHITELIST_FILE):
+            with open(WHITELIST_FILE, 'r') as f:
+                _whitelist = {line.strip() for line in f if line.strip()}
+            log.info("detection.whitelist_loaded", count=len(_whitelist))
+    except Exception as e:
+        log.warning("detection.whitelist_load_failed", error=str(e))
+
+def add_to_whitelist(text: str):
+    """Add prompt hash to whitelist"""
+    global _whitelist
+    h = hashlib.sha256(text.encode()).hexdigest()
+    _whitelist.add(h)
+    try:
+        os.makedirs(os.path.dirname(WHITELIST_FILE), exist_ok=True)
+        with open(WHITELIST_FILE, 'a') as f:
+            f.write(h + '\n')
+        log.info("detection.whitelist_added", hash=h[:16])
+    except Exception as e:
+        log.warning("detection.whitelist_write_failed", error=str(e))
+
+def is_whitelisted(text: str) -> bool:
+    """Check if prompt is in whitelist"""
+    h = hashlib.sha256(text.encode()).hexdigest()
+    return h in _whitelist
+
 TIER3_THRESHOLD_LOW  = 40
 TIER3_THRESHOLD_HIGH = 70
 MAX_PROMPT_CHARS     = 4000
@@ -148,6 +183,10 @@ class DetectResponse(BaseModel):
 
 # ─── Phase 4: RL Feedback Models ──────────────────────
 
+class WhitelistRequest(BaseModel):
+    """Request to add a prompt to the whitelist"""
+    text: str
+
 class FeedbackRequest(BaseModel):
     """User feedback on a detection result"""
     detection_id: str
@@ -178,7 +217,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         redis_client = Redis.from_url(redis_url, decode_responses=True)
     except Exception as e:
         log.warning("detection.redis_init_failed", error=str(e))
-        
+    
+    load_whitelist()
+    
     log.info("detection.startup", tiers=["regex", "ner", "onnx_micro_model", "llama_fallback"])
     yield
     if redis_client:
@@ -225,6 +266,19 @@ async def detect(request: DetectRequest) -> DetectResponse:
         _empty_hash = hashlib.sha256(text_to_scan.encode("utf-8")).hexdigest()
         return DetectResponse(
             detection_id=_empty_hash,
+            risk_score=0,
+            action=ActionType.ALLOW,
+            detection_results=[],
+            detected_spans=[],
+            processing_time_ms=round((time.perf_counter() - start) * 1000, 2),
+        )
+
+    # ── Whitelist Check ─────────────────────────────────────────────────────
+    # Skip detection for prompts explicitly marked as "allowed" by users
+    if is_whitelisted(text_to_scan):
+        log.info("detection.whitelist_hit", hash=prompt_hash[:16])
+        return DetectResponse(
+            detection_id=prompt_hash,
             risk_score=0,
             action=ActionType.ALLOW,
             detection_results=[],
@@ -608,6 +662,24 @@ async def get_unprocessed_feedback(limit: int = 100) -> dict[str, Any]:
             "count": 0,
             "message": str(e)
         }
+
+
+@app.post("/whitelist/add")
+async def add_prompt_to_whitelist(request: WhitelistRequest) -> dict[str, Any]:
+    """
+    Add a prompt to the whitelist so it skips detection on future requests.
+    Useful for correcting false positives without retraining the model.
+    """
+    try:
+        add_to_whitelist(request.text)
+        return {
+            "status": "ok",
+            "message": "Prompt added to whitelist",
+            "hash": hashlib.sha256(request.text.encode()).hexdigest()[:16]
+        }
+    except Exception as e:
+        log.error("whitelist.add_failed", error=str(e))
+        return {"status": "error", "message": str(e)}
 
 
 @app.post("/ml/retrain")
