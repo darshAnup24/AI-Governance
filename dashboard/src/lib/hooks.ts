@@ -19,8 +19,9 @@ export function useAuditEvents(params?: { action?: string; limit?: number }) {
     queryFn: () =>
       api.get('/api/v1/audit-events', { params }).then(r => r.data.data ?? []),
     retry: 2,
-    staleTime: 2_000,
-    refetchInterval: 2_500,
+    staleTime: 60_000,
+    gcTime: 300_000,
+    refetchInterval: 5_000,
     refetchIntervalInBackground: true,
   })
 }
@@ -31,8 +32,9 @@ export function useAnalyticsTrend(days = 30) {
     queryFn: () =>
       api.get('/api/v1/analytics/trend', { params: { days } }).then(r => r.data.data),
     retry: 2,
-    staleTime: 5_000,
-    refetchInterval: 5_000,
+    staleTime: 60_000,
+    gcTime: 300_000,
+    refetchInterval: 10_000,
     refetchIntervalInBackground: true,
   })
 }
@@ -47,8 +49,9 @@ export function useDetectionBreakdown() {
         return Array.isArray(d) ? d : (d?.data ?? [])
       }),
     retry: 2,
-    staleTime: 5_000,
-    refetchInterval: 5_000,
+    staleTime: 60_000,
+    gcTime: 300_000,
+    refetchInterval: 10_000,
     refetchIntervalInBackground: true,
   })
 }
@@ -59,8 +62,9 @@ export function useShadowAIAlerts() {
     queryFn: () =>
       api.get('/api/v1/shadow-ai/detections').then(r => r.data.data ?? []),
     retry: 2,
-    staleTime: 5_000,
-    refetchInterval: 5_000,
+    staleTime: 60_000,
+    gcTime: 300_000,
+    refetchInterval: 10_000,
     refetchIntervalInBackground: true,
   })
 }
@@ -71,8 +75,9 @@ export function useDashboardStats() {
     queryFn: () =>
       govApi.get('/api/dashboard/stats').then(r => r.data),
     retry: 2,
-    staleTime: 5_000,
-    refetchInterval: 5_000,
+    staleTime: 60_000,
+    gcTime: 300_000,
+    refetchInterval: 10_000,
     refetchIntervalInBackground: true,
   })
 }

@@ -123,9 +123,17 @@ export default function DashboardPage() {
             {isError && <InlineError message="Some data failed to load." onRetry={() => { trendQ.refetch(); eventsQ.refetch() }} />}
 
             {/* Governance Snapshot */}
-            {statsQ.data && (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {[
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {statsQ.isPending ? (
+                    [1, 2, 3, 4].map(i => (
+                        <div key={i} className="card-hover border border-slate-800/80 bg-slate-900/60 skeleton h-20 rounded-lg" />
+                    ))
+                ) : statsQ.isError ? (
+                    <div className="col-span-2 lg:col-span-4 card border border-red-500/20 bg-red-500/5 text-center py-4">
+                        <p className="text-sm text-red-400">Governance stats unavailable — check connection to governance service</p>
+                    </div>
+                ) : statsQ.data ? (
+                    [
                         { label: 'AI Models', value: statsQ.data.totalModels ?? 0, tone: 'text-cyan-400' },
                         { label: 'Active Incidents', value: statsQ.data.activeIncidents ?? 0, tone: 'text-red-400' },
                         { label: 'Active Policies', value: statsQ.data.policiesActive ?? 0, tone: 'text-indigo-400' },
@@ -135,9 +143,9 @@ export default function DashboardPage() {
                             <p className="text-[10px] uppercase tracking-wider text-slate-500">{item.label}</p>
                             <p className={`mt-2 text-xl font-bold ${item.tone}`}>{item.value}</p>
                         </div>
-                    ))}
-                </div>
-            )}
+                    ))
+                ) : null}
+            </div>
 
             {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
