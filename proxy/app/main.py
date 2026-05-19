@@ -83,7 +83,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS — exact origins for dashboard (need credentials) + regex for AI sites + Chrome extensions
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -92,11 +92,18 @@ app.add_middleware(
         "http://dashboard:3000",
         "https://chatgpt.com",
         "https://claude.ai",
-        "https://*.chatgpt.com",
-        "https://*.anthropic.com"
+        "https://gemini.google.com",
+        "https://copilot.microsoft.com",
+        "https://www.bing.com",
+        "https://poe.com",
     ],
+    allow_origin_regex=(
+        r"https?://(www\.)?(chatgpt\.com|claude\.ai|anthropic\.com|gemini\.google\.com"
+        r"|copilot\.microsoft\.com|bing\.com|poe\.com|openai\.com)"
+        r"|chrome-extension://[a-z]{32}"
+    ),
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
