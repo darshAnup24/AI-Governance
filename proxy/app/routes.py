@@ -300,6 +300,7 @@ async def chat_completions(
                 status=403,
                 detail=f"Your prompt was blocked due to detected sensitive content (risk score: {risk_score}). "
                        f"Contact your security team if you believe this is an error.",
+                risk_score=risk_score,
             ).model_dump(),
         )
 
@@ -771,7 +772,7 @@ async def inspect_prompt(
         duration_ms=duration_ms,
     )
 
-    detection_id = detection_response.get("detection_id", "") if isinstance(detection_response, dict) else ""
+    detection_id = detection_result.get("detection_id", "") if isinstance(detection_result, dict) else ""
 
     return {
         "detection_id": detection_id,

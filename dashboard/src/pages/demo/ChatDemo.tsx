@@ -140,7 +140,7 @@ export default function ChatDemo() {
       if (resp.status === 403) {
         // Blocked by policy
         setMessages(prev => prev.map(m => m.id === userMsgId ? {
-          ...m, status: 'blocked', riskScore: 0, latencyMs,
+          ...m, status: 'blocked', riskScore: resp.data?.risk_score ?? 0, latencyMs,
           policyDetail: resp.data?.detail || 'Blocked by policy rule',
           categories: [],
         } : m))

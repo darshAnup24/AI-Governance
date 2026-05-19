@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     # ─── Governance Service ───────────────────────────────
     governance_api_url: str = "http://governance:4000"
     governance_service_token: str = "internal-service-token-change-me"
-    governance_policy_cache_ttl: int = 30  # seconds
+    governance_policy_cache_ttl: int = 5   # seconds — keep short so policy changes apply quickly
 
     # ─── Redis ────────────────────────────────────────────
     redis_url: str = "redis://redis:6379/0"

@@ -140,3 +140,4 @@ class ProblemDetail(BaseModel):
     status: int
     detail: str = ""
     instance: str = ""
+    risk_score: int = 0

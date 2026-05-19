@@ -22,7 +22,7 @@ import structlog
 
 log = structlog.get_logger()
 
-CACHE_TTL: int = 60
+CACHE_TTL: int = 15  # seconds — short TTL so policy changes clear stale decisions quickly
 CACHE_NS = "shield:dcache:"
 
 def _cache_key(prompt: str) -> str:
