@@ -244,7 +244,7 @@ export default function DetectionDemo() {
               </div>
               <span className="text-xs text-slate-600 font-mono">{prompt.length} chars</span>
             </div>
-            <textarea ref={textareaRef} value={prompt} onChange={e => setPrompt(e.target.value)}
+            <textarea ref={textareaRef} value={prompt} onChange={e => { setPrompt(e.target.value); setResult(null); setError(null) }}
               className="w-full h-48 bg-slate-950 border border-slate-800 rounded-lg p-4 text-sm text-slate-300 font-mono resize-none focus:outline-none focus:border-brand-500/50 placeholder-slate-700 transition-colors"
               placeholder="Paste any prompt here..." />
             <button onClick={handleInspect} disabled={loading || !prompt.trim()}
