@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "ShieldAI Corporate DLP Agent",
-  "version": "1.0",
-  "description": "Locally intercepts and blocks sensitive data before it reaches unauthorized AI models in the browser.",
+  "version": "2.0",
+  "description": "Intercepts, redacts and blocks sensitive data before it reaches AI models in the browser.",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "storage"
   ],
   "content_scripts": [
     {
@@ -13,7 +14,11 @@
         "*://chatgpt.com/*",
         "*://*.chatgpt.com/*",
         "*://claude.ai/*",
-        "*://*.anthropic.com/*"
+        "*://*.anthropic.com/*",
+        "*://gemini.google.com/*",
+        "*://copilot.microsoft.com/*",
+        "*://www.bing.com/chat*",
+        "*://poe.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_end"
