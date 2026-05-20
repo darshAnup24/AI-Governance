@@ -17,7 +17,7 @@ import PolicyDemo from './pages/demo/PolicyDemo'
 import ChatDemo from './pages/demo/ChatDemo'
 import AuditDemo from './pages/demo/AuditDemo'
 import ShadowAIDemo from './pages/demo/ShadowAIDemo'
-// ─── ShieldAI Governance Pages ────────────────────────────────────────────────
+// ─── Airlock Governance Pages ────────────────────────────────────────────────
 import Login from './pages/Login'
 import GovDashboard from './pages/governance/Dashboard'
 import Models from './pages/governance/Models'

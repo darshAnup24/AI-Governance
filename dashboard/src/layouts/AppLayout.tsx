@@ -83,7 +83,7 @@ export default function AppLayout() {
                         <Shield className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                        <h1 className="text-sm font-bold text-slate-100">ShieldAI</h1>
+                        <h1 className="text-sm font-bold text-slate-100">Airlock</h1>
                         <p className="text-xs text-slate-500">Governance v1.0</p>
                     </div>
                     <button className="ml-auto lg:hidden text-slate-400" onClick={() => setSidebarOpen(false)}>
@@ -213,7 +213,7 @@ export default function AppLayout() {
                     </button>
                     <div className="flex items-center gap-2">
                         <Shield className="w-5 h-5 text-brand-400" />
-                        <span className="text-sm font-semibold text-slate-100">ShieldAI</span>
+                        <span className="text-sm font-semibold text-slate-100">Airlock</span>
                     </div>
                     <button onClick={toggleTheme} className="text-slate-400 hover:text-slate-200">
                         {theme === 'dark' ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-blue-400" />}
