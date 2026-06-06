@@ -1,73 +1,59 @@
 # 🛡️ ShieldAI Governance Platform
 
-An enterprise-grade AI security and compliance platform that sits between corporate employees and LLM APIs (OpenAI, Anthropic, etc.), providing real-time content detection, policy enforcement, audit logging, shadow AI monitoring, and governance dashboards.
+ShieldAI is an enterprise AI governance and runtime security platform that sits between employees, internal AI applications, and upstream LLM providers. It provides real-time prompt inspection, policy enforcement, asynchronous audit capture, tenant-aware governance workflows, incident response, shadow AI monitoring, and a unified command-center dashboard.
 
 ---
 
 ## 🏗️ Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                              BROWSER / CLIENT                                           │
-│                                            (React Dashboard)                                            │
-│                                                                                                         │
-└─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-                                                    │
-                                                    │ HTTPS / JWT
-                                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│  ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐  │
-│  │                                    NGINX / REVERSE PROXY                                          │  │
-│  │                                            :443 → :3000                                           │  │
-│  └─────────────────────────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐  │
-│  │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │                             DASHBOARD SERVICE                                             │  │  │
-│  │  │                           (React + Vite + PWA)                                             │  │  │
-│  │  │                              Port 3000                                                     │  │  │
-│  │  │                                                                                             │  │  │
-│  │  │  Pages: Dashboard, Shadow AI, Incidents, Policies, Vendors, User Heatmap, Live Demo     │  │  │
-│  │  └─────────────────────────────────────────────────────────────────────────────────────────┘  │  │
-│  │                                                                                                         │
-│  │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │                           GOVERNANCE SERVICE                                                │  │  │
-│  │  │                        (Node.js + Express + Prisma)                                         │  │  │
-│  │  │                              Port 4000                                                     │  │  │
-│  │  │                                                                                             │  │  │
-│  │  │  API Endpoints: Users, Policies, Incidents, Vendors, Audit Logs, Dashboard, Heatmap      │  │  │
-│  │  └─────────────────────────────────────────────────────────────────────────────────────────┘  │  │
-│  │                                                                                                         │
-│  │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │                               PROXY SERVICE                                                 │  │  │
-│  │  │                          (Python + FastAPI)                                                 │  │  │
-│  │  │                              Port 8000                                                     │  │  │
-│  │  │                                                                                             │  │  │
-│  │  │  /v1/chat/completions → Auth → Rate Limit → Detection → Policy → Block/Redact/Allow     │  │  │
-│  │  └─────────────────────────────────────────────────────────────────────────────────────────┘  │  │
-│  │                                                                                                         │
-│  │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │                            DETECTION SERVICE                                               │  │  │
-│  │  │                          (Python + FastAPI)                                                 │  │  │
-│  │  │                              Port 8001                                                     │  │  │
-│  │  │                                                                                             │  │  │
-│  │  │  8 Detectors: Regex, NER (DeBERTa), ML (sklearn), ML (spaCy), Prompt Injection,         │  │  │
-│  │  │              Code Markers, Secret Context, Vuln Signals                                   │  │  │
-│  │  └─────────────────────────────────────────────────────────────────────────────────────────┘  │  │
-│  └─────────────────────────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                                         │
-└─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-                                                    │
-                                ┌───────────────┼───────────────┐
-                                ▼               ▼               ▼
-                    ┌─────────────────┐ ┌─────────────┐ ┌─────────────────┐
-                    │  PostgreSQL     │ │  Redis      │ │  External LLMs  │
-                    │  (Primary DB)   │ │  (Cache)    │ │  OpenAI         │
-                    │  Users, Policies│ │  Queue      │ │  Anthropic      │
-                    │  Incidents,     │ │  Rate Limit │ │  Azure          │
-                    │  Audit Events   │ │             │ │  Ollama (local) │
-                    └─────────────────┘ └─────────────┘ └─────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                      Dashboard / Governance UI                                         │
+│                             React command center (:3000) + legacy UI (:3002)                           │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                                   │
+                                                   │ JWT / Refresh / Tenant Context
+                                                   ▼
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                      Governance API (:4000)                                            │
+│              Organizations · Workspaces · Environments · RBAC · Policies · Incidents · Reports        │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                  │                                      │                                      │
+                  │ internal service auth                │ analytics / config                    │ auth + tenancy
+                  ▼                                      ▼                                      ▼
+┌──────────────────────────────┐          ┌──────────────────────────────┐          ┌──────────────────────────────┐
+│       Proxy Service          │          │      Detection Service       │          │          Demo API            │
+│        FastAPI (:8000)       │─────────▶│        FastAPI (:8001)       │          │         Express (:4001)      │
+│ Auth · Rate Limit · Policy   │          │ Multi-detector risk engine   │          │ Seeded lab and replay flows  │
+│ Enforcement · Live Streams   │          │ Async advisory enrichment    │          │ for isolated demos           │
+└──────────────┬───────────────┘          └──────────────────────────────┘          └──────────────┬───────────────┘
+               │
+               │ publish / consume
+               ▼
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 Redis Streams Event Backbone (:6379)                                   │
+│     audit_events · incident_events · telemetry_events · policy_events · detection_events + retry/DLQ  │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+               │                                      │                                      │
+               ▼                                      ▼                                      ▼
+┌──────────────────────────────┐          ┌──────────────────────────────┐          ┌──────────────────────────────┐
+│   PostgreSQL + TimescaleDB   │          │         ClickHouse           │          │  Prometheus / Grafana / OTEL │
+│   source of truth + audit    │          │ long-term analytics & rollup │          │ health, traces, queue metrics│
+└──────────────────────────────┘          └──────────────────────────────┘          └──────────────────────────────┘
 ```
+
+## ✨ What Changed In The Current Architecture
+
+- **Synchronous audit writes were removed from the request path.**
+  Proxy audit emission now publishes to durable Redis Streams and returns immediately; workers persist to PostgreSQL and ClickHouse asynchronously.
+- **The platform is now tenant-aware by design.**
+  Governance APIs and the dashboard operate with organization, workspace, and environment context instead of a flat single-tenant admin model.
+- **RBAC moved from coarse roles to scoped permissions.**
+  Owner, Admin, Security Admin, Compliance Officer, AI Engineer, Developer, SOC Analyst, Auditor, Viewer, and Incident Responder flows are now supported in the governance layer.
+- **The dashboard is now a unified command center.**
+  Monitoring, governance, risk, and admin workflows share one design system and one app shell, with the demo lab intentionally isolated but visually consistent.
+- **Operational maturity is part of the architecture.**
+  Queue metrics, degraded runtime modes, replay tooling, health checks, and demo seed data are built into the stack rather than treated as side utilities.
 
 ---
 
@@ -77,27 +63,27 @@ An enterprise-grade AI security and compliance platform that sits between corpor
 
 | Component | Responsibility | Tech Stack |
 |-----------|----------------|-----------|
-| **Dashboard** | UI for monitoring, policy management, incidents, vendors, heatmap | React + Vite + PWA |
-| **Proxy** | Request interception, auth, detection orchestration, policy enforcement, redaction, audit | Python + FastAPI |
-| **Detection Service** | Multi-detector pipeline, risk scoring, span annotation | Python + FastAPI + ML models |
-| **Governance Service** | Policy CRUD, incident management, user/org management, vendor registry, audit logs | Node.js + Express + Prisma |
-| **PostgreSQL** | Persistent storage for all governance, audit, and configuration data | PostgreSQL 15 |
-| **Redis** | Caching (detection results, policies), rate limiting, audit queue | Redis 7 |
+| **Dashboard** | Unified command center for monitoring, governance, risk, settings, and demo lab navigation | React + Vite + Tailwind |
+| **Proxy** | OpenAI-compatible gateway, request inspection, runtime modes, audit publishing, live telemetry | Python + FastAPI |
+| **Detection Service** | Multi-detector pipeline, risk scoring, advisory enrichment, detector resilience | Python + FastAPI + ML models |
+| **Governance Service** | Organizations, workspaces, environments, RBAC, incidents, providers, reports, onboarding | Node.js + Express + Prisma |
+| **Demo API** | Isolated live-demo backend with seeded timelines and lab endpoints | Node.js + Express |
+| **PostgreSQL / TimescaleDB** | Source of truth for governance, tenancy, audit, incidents, and session data | PostgreSQL 15 + TimescaleDB |
+| **Redis Streams** | Durable event bus, retries, DLQ, cache, rate limiting, worker coordination | Redis 7 |
+| **ClickHouse** | Analytical sink for event ingestion and operational rollups | ClickHouse |
+| **Observability** | Metrics, tracing, queue health, runtime health | Prometheus + Grafana + OpenTelemetry |
 | **Upstream LLMs** | Actual LLM inference (OpenAI, Anthropic, Azure, Ollama) | External APIs |
 
 ### Data Flow
 
-1. **User Request**: User sends prompt from Dashboard (Live Demo → Chat Gateway)
-2. **Proxy Auth**: POST /v1/chat/completions (Proxy:8000) → JWT auth → UserContext extracted
-3. **Rate Limit**: Check Redis for user/department RPM/TPM limits
-4. **Detection**: POST /detect (Detection:8001) → risk_score, detected_spans, action
-5. **Policy Fetch**: GET /api/internal/policies (Governance:4000) → policy rules (cached 30s)
-6. **Policy Evaluate**: PolicyEngine.evaluate() → overrides detection action if policy matches
-7. **Final Decision**: BLOCK / REDACT / ALLOW
-8. **Audit**: AuditEvent emitted to Redis → Postgres (audit_events table)
-9. **Forward**: POST to Upstream LLM (OpenAI / Anthropic / Ollama)
-10. **Response Inspection**: Detect/redact LLM output
-11. **Dashboard Poll**: Proxy Monitor, Shadow AI, User Heatmap, Incidents, Policies, Vendors
+1. **User Request**: A dashboard workflow, SDK client, or demo-lab session sends a prompt or governance action.
+2. **Identity Resolution**: Governance-backed JWT/session context resolves user, organization, workspace, and environment.
+3. **Proxy Enforcement**: The proxy authenticates, rate-limits, calls the detection service, and evaluates governance policies.
+4. **Decision**: The request is allowed, warned, redacted, or blocked.
+5. **Async Event Publish**: Audit, policy, incident, telemetry, and detection events are published to Redis Streams.
+6. **Immediate Return**: The user-facing response is returned without waiting for audit persistence.
+7. **Background Processing**: Workers consume the streams, apply retries/DLQ rules, and persist batches into PostgreSQL and ClickHouse.
+8. **Live Operations**: Dashboard runtime panels consume live telemetry, governance analytics, and seeded demo activity from the backend services.
 
 ---
 
@@ -120,21 +106,31 @@ cd AI-Governance
 cp .env.example .env
 
 # 3. Start all services
-docker compose up --build
+make setup
 
 # This starts:
-#   - Dashboard:  http://localhost:3000  (React admin UI)
-#   - Proxy:      http://localhost:8000  (FastAPI + Swagger at /docs)
-#   - Detection:  http://localhost:8001  (Detection engine)
-#   - Governance: http://localhost:4000  (Governance API)
-#   - PostgreSQL: localhost:5433
+#   - Dashboard:      http://localhost:3000  (unified command center)
+#   - Governance UI:  http://localhost:3002  (legacy governance UI)
+#   - Demo UI:        http://localhost:3003  (isolated lab UI)
+#   - Proxy:          http://localhost:8000  (FastAPI + Swagger at /docs)
+#   - Detection:      http://localhost:8001  (detection engine)
+#   - Governance:     http://localhost:4000  (governance API)
+#   - Demo API:       http://localhost:4001
+#   - PostgreSQL:     localhost:5434
 #   - Redis:      localhost:6379
-#   - Ollama:     localhost:11434
+#   - ClickHouse: localhost:8123
+#   - Prometheus: localhost:9090
+#   - Grafana:    localhost:3001
 ```
 
 ### Access the Dashboard
 
-Open `http://localhost:3000` in your browser. Dev mode accepts any email/password.
+Open `http://localhost:3000` in your browser.
+
+Seeded local demo account:
+
+- `sarah.chen@acme-financial.com`
+- `Airlock123!`
 
 ---
 
@@ -144,17 +140,18 @@ Open `http://localhost:3000` in your browser. Dev mode accepts any email/passwor
 
 | Page | Purpose | Key Features |
 |------|---------|--------------|
-| **Dashboard** | Executive overview | KPI cards, risk trend chart, recent incidents, department rankings |
-| **Shadow AI** | Unauthorized AI monitoring | Bar charts by tool, pie charts by category, geo detections, weekly trends |
-| **Incidents** | Security incident board | Kanban board (OPEN → IN REVIEW → RESOLVED → CLOSED), severity levels |
-| **Policies** | Policy management | CRUD rules, test sandbox, risk score slider |
-| **Vendors** | AI vendor registry | Risk assessment, radar charts, certifications tracking |
-| **User Heatmap** | Risk per employee × day | GitHub-style heatmap, risk color coding, user ranking |
-| **Compliance** | EU AI Act / SOC 2 / GDPR | Compliance dashboard, risk assessments, audit log exports |
+| **Dashboard** | Operational command center | Queue health, runtime mode, policy outcomes, incident signals |
+| **Shadow AI** | Unauthorized AI monitoring | Live detections, source trends, suspicious usage tracking |
+| **Incidents** | Investigation workflow | Severity, ownership, activity history, governance actions |
+| **Policies** | Policy management | Scoped rules, simulations, enforcement state |
+| **Reports / Audit Logs** | Audit export and evidence | Event timelines, report generation, investigation support |
+| **Governance** | AI inventory and posture | Models, vendors, datasets, assessments, advisor guidance |
+| **Compliance** | Framework readiness | EU AI Act / SOC 2 / GDPR posture and evidence summaries |
+| **Settings** | Tenant administration | SSO readiness, invites, sessions, runtime controls |
 
 ### Live Demo Center
 
-Located at `/live-demo/`, the Live Demo Center provides interactive demonstrations of all features:
+Located in the unified dashboard under `/live-demo/*` and also available through the dedicated demo UI on `:3003`, the Live Demo Center provides isolated, seeded demonstrations of core platform capabilities:
 
 | Demo Tab | What It Does |
 |----------|--------------|
@@ -283,14 +280,18 @@ AI-Governance/
 │   │   ├── routes/        # API routes (users, policies, incidents, etc.)
 │   │   └── prisma/         # Database schema
 │   └── Dockerfile
-├── dashboard/              # React admin dashboard
+├── dashboard/              # Unified React command center
 │   ├── src/
-│   │   ├── pages/          # Dashboard, Shadow AI, Incidents, Policies, etc.
-│   │   ├── pages/demo/     # Live Demo Center
-│   │   ├── layouts/        # AppLayout with sidebar
+│   │   ├── pages/          # Monitoring, governance, risk, admin, live demo
+│   │   ├── pages/demo/     # Isolated demo lab flows
+│   │   ├── layouts/        # Shared app shell and tenant-aware navigation
 │   │   └── components/     # Reusable components
 │   └── Dockerfile
+├── services/demo-api/      # Seeded demo backend for lab flows
+├── workers/                # Async audit / incident / telemetry workers
 ├── docker-compose.yml
+├── docs/ARCHITECTURE.md
+├── docs/ASYNC_AUDIT_PIPELINE.md
 ├── .env.example
 └── README.md
 ```
@@ -299,14 +300,14 @@ AI-Governance/
 
 ## 🔒 Security Features
 
-- **JWT Authentication** with JWKS validation (dev mode: any Bearer token accepted)
+- **JWT + rotating refresh sessions** with governance-backed tenancy context
 - **Rate Limiting** per-user and per-department (RPM + TPM)
-- **Role-Based Access Control** (ADMIN, MANAGER, VIEWER)
-- **Org-Level Isolation** (all queries scoped to org_id)
-- **Audit Logging** for all governance actions
+- **Permission-scoped RBAC** across organization, workspace, and environment boundaries
+- **Org / workspace / environment isolation** throughout governance workflows
+- **Asynchronous audit logging** with Redis Streams, retries, and DLQ replay
 - **SSRF Prevention** via URL allowlisting for upstream providers
 - **No Data Leakage** — Ollama runs 100% on-premise
-- **Row-Level Security** for multi-tenant data isolation
+- **Audit-grade access tracking** for auth, invites, role changes, and runtime actions
 
 ---
 
@@ -329,14 +330,24 @@ AI-Governance/
 
 ---
 
-## 🐛 Known Issues & Recent Fixes
+## 🧱 Recent Architecture Changes
 
-### User Heatmap Not Updating with Live Demo Events
-**Problem**: Proxy emitted audit events to Redis streams, but no consumer was running to write them to Postgres. User Heatmap reads from Postgres `audit_events` table, so it never updated with new demo events.
+### Async Audit And Event Foundation
+- Request-path audit persistence has been replaced by Redis Streams publishing.
+- Background workers now handle retries, DLQs, replay, and batched persistence.
+- Queue health and worker lag are exposed through Prometheus metrics.
 
-**Fix**: Modified proxy to write audit events directly to Postgres instead of Redis (bypasses consumer for demo environment). Added proper UUID conversion for dev token user_ids.
+### Enterprise IAM And Tenancy
+- Governance now models organizations, workspaces, environments, memberships, sessions, invitations, SSO settings, and scoped permissions.
+- The dashboard switches workspace and environment context directly from the app shell.
 
-**Status**: ✅ Fixed - audit events now written directly to Postgres, User Heatmap updates in real-time.
+### Unified Product Surface
+- The `dashboard` app is the primary operational UI across monitoring, governance, risk, and settings.
+- Demo flows use seeded data and an isolated demo backend while keeping a consistent visual system.
+
+### Setup And Local Reliability
+- `make setup` is the supported local bootstrap path.
+- Docker mounts, health checks, seed flows, and demo compatibility routes were fixed so the full stack starts cleanly.
 
 ---
 
@@ -349,7 +360,7 @@ AI-Governance/
 | **Detection Backend** | Python 3.11, FastAPI, sklearn, spaCy, ONNX, regex |
 | **Governance Backend** | Node.js 20, Express, Prisma ORM |
 | **Database** | PostgreSQL 15 |
-| **Cache** | Redis 7 |
+| **Cache / Event Bus** | Redis 7 + Redis Streams |
 | **Infrastructure** | Docker, Docker Compose (dev), Nginx (reverse proxy) |
 | **LLM Providers** | OpenAI, Anthropic, Azure OpenAI, Ollama (local) |
 | **Error Format** | RFC7807 + ShieldAI structured diagnostics |
