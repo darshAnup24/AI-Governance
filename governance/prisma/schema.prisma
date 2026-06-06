@@ -1,5 +1,5 @@
-// Prisma schema for ShieldAI Governance Platform
-// These tables are NEW and do not conflict with existing proxy/detection tables
+// Prisma schema for Airlock Governance Platform — Enterprise Multi-Tenant
+// Extends all existing models with workspace/environment isolation, SSO, compliance profiles, usage tracking, etc.
 
 generator client {
   provider = "prisma-client-js"
@@ -10,68 +10,82 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── Organization ──────────────────────────────────────────
+// ─── Enums ───────────────────────────────────────────────────────
 
-enum Plan {
+enum OrgPlan {
   FREE
-  PRO
+  STARTER
+  BUSINESS
   ENTERPRISE
 }
 
-model Organization {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  plan      Plan     @default(FREE)
-  settings  Json     @default("{}")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  users            User[]
-  aiModels         AIModel[]
-  complianceChecks ComplianceCheck[]
-  incidents        Incident[]
-  policyRules      PolicyRule[]
-  vendors          Vendor[]
-  datasets         Dataset[]
-  threatDetections ThreatDetection[]
-  advisorMessages  AdvisorMessage[]
-  auditEvents      AuditEvent[]
-  shadowAIAlerts   ShadowAIAlert[]
-  auditLogs        AuditLog[]
-
-  @@map("organizations")
+enum OrgIndustry {
+  TECHNOLOGY
+  HEALTHCARE
+  FINANCE
+  GOVERNMENT
+  RETAIL
+  EDUCATION
+  MANUFACTURING
+  OTHER
 }
-
-// ─── User ──────────────────────────────────────────────────
 
 enum UserRole {
+  OWNER
   ADMIN
-  MANAGER
+  SECURITY_ADMIN
+  COMPLIANCE_OFFICER
+  AI_ENGINEER
+  DEVELOPER
+  ANALYST
   VIEWER
+  AUDITOR
+  INCIDENT_RESPONDER
 }
 
-model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  name         String   @default("")
-  role         UserRole @default(VIEWER)
-  orgId        String   @map("org_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  organization    Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  advisorMessages AdvisorMessage[]
-  auditEvents     AuditEvent[]
-  auditLogs       AuditLog[]
-
-  @@index([orgId])
-  @@map("users")
+enum WorkspaceType {
+  PRODUCTION
+  STAGING
+  DEVELOPMENT
+  SANDBOX
+  LAB
 }
 
-// ─── AI Model Registry ────────────────────────────────────
+enum EnvironmentType {
+  PRODUCTION
+  STAGING
+  DEVELOPMENT
+  SANDBOX
+}
 
-enum RiskLevel {
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  ACKNOWLEDGED
+  INVESTIGATING
+  CONTAINED
+  RESOLVED_CLOSED
+  FALSE_POSITIVE
+}
+
+enum ProviderType {
+  OPENAI
+  ANTHROPIC
+  AZURE_OPENAI
+  GEMINI
+  OLLAMA
+  GROQ
+  BEDROCK
+  CUSTOM
+}
+
+enum ModelRiskLevel {
   MINIMAL
   LIMITED
   HIGH
@@ -85,33 +99,471 @@ enum ModelStatus {
   DEPRECATED
 }
 
-model AIModel {
+enum ComplianceFramework {
+  EU_AI_ACT
+  ISO_42001
+  NIST_AI_RMF
+  ISO_27001
+  SOC2
+  HIPAA
+  GDPR
+}
+
+enum ComplianceStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLIANT
+  NON_COMPLIANT
+  PARTIALLY_COMPLIANT
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum MFAMethod {
+  TOTP
+  SMS
+  EMAIL
+}
+
+enum SessionStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  LOGIN_FAILED
+  MFA_ENABLED
+  MFA_DISABLED
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  USER_ROLE_CHANGED
+  INVITATION_CREATED
+  INVITATION_ACCEPTED
+  INVITATION_REVOKED
+  ORGANIZATION_CREATED
+  ORGANIZATION_UPDATED
+  ORGANIZATION_DELETED
+  WORKSPACE_CREATED
+  WORKSPACE_UPDATED
+  WORKSPACE_DELETED
+  ENVIRONMENT_CREATED
+  ENVIRONMENT_UPDATED
+  ENVIRONMENT_DELETED
+  POLICY_CREATED
+  POLICY_UPDATED
+  POLICY_DELETED
+  POLICY_ENABLED
+  POLICY_DISABLED
+  INCIDENT_CREATED
+  INCIDENT_UPDATED
+  INCIDENT_ASSIGNED
+  INCIDENT_ESCALATED
+  INCIDENT_RESOLVED
+  MODEL_CREATED
+  MODEL_UPDATED
+  MODEL_DELETED
+  MODEL_DEPLOYED
+  PROVIDER_CONNECTED
+  PROVIDER_DISCONNECTED
+  PROVIDER_UPDATED
+  API_KEY_CREATED
+  API_KEY_REVOKED
+  API_KEY_USED
+  REPORT_GENERATED
+  REPORT_DOWNLOADED
+  SETTINGS_UPDATED
+  COMPLIANCE_SCAN_COMPLETED
+  AUDIT_LOG_EXPORTED
+  SSO_CONFIGURED
+  SSO_DISABLED
+}
+
+// ─── Legacy Enums (kept for backward compatibility) ──────────────
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum RiskLevel {
+  MINIMAL
+  LIMITED
+  HIGH
+  UNACCEPTABLE
+}
+
+enum ThreatStatus {
+  ACTIVE
+  MITIGATED
+  FALSE_POSITIVE
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+enum DataSensitivity {
+  PUBLIC
+  INTERNAL
+  CONFIDENTIAL
+  RESTRICTED
+}
+
+enum ModelVersionStatus {
+  ACTIVE
+  SHADOW
+  CANARY
+  RETIRED
+}
+
+enum ReportFormat {
+  PDF
+  CSV
+  JSON
+}
+
+// ─── Organization ────────────────────────────────────────────────
+
+model Organization {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  slug         String   @unique
+  plan         OrgPlan  @default(FREE)
+  industry     OrgIndustry @default(OTHER)
+  companySize  String?
+  domain       String?
+  logo         String?
+  region       String?
+  settings     Json     @default("{}")
+  features     Json     @default("{}")
+  billingEmail String?  @map("billing_email")
+  billingCycle String?  @map("billing_cycle")
+  trialEndsAt  DateTime? @map("trial_ends_at")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  users            User[]
+  workspaces       Workspace[]
+  invitations      Invitation[]
+  providers        Provider[]
+  complianceProfiles ComplianceProfile[]
+  ssoConfigurations  SSOConfiguration[]
+  usageRecords     ProviderUsage[]
+  aiModels         AIModel[]
+  complianceChecks ComplianceCheck[]
+  incidents        Incident[]
+  policyRules      PolicyRule[]
+  vendors          Vendor[]
+  datasets         Dataset[]
+  threatDetections ThreatDetection[]
+  advisorMessages  AdvisorMessage[]
+  auditEvents      AuditEvent[]
+  shadowAIAlerts   ShadowAIAlert[]
+  auditLogs        AuditLog[]
+  modelRoutingRules ModelRoutingRule[]
+  apiKeys          APIKey[]
+  reportHistories  ReportHistory[]
+
+  @@index([slug])
+  @@index([domain])
+  @@map("organizations")
+}
+
+// ─── Workspace ──────────────────────────────────────────────────
+
+model Workspace {
+  id          String        @id @default(uuid())
+  orgId       String        @map("org_id")
+  name        String
+  slug        String
+  description String        @default("")
+  type        WorkspaceType @default(PRODUCTION)
+  settings    Json          @default("{}")
+  isActive    Boolean       @default(true) @map("is_active")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  environments Environment[]
+  memberships  Membership[]
+  providers    Provider[]
+  apiKeys      APIKey[]
+  policies     PolicyRule[]
+  models       AIModel[]
+  incidents    Incident[]
+  complianceChecks ComplianceCheck[]
+  usageRecords ProviderUsage[]
+  invitations  Invitation[]
+
+  @@unique([orgId, slug])
+  @@index([orgId])
+  @@map("workspaces")
+}
+
+// ─── Environment ────────────────────────────────────────────────
+
+model Environment {
+  id          String          @id @default(uuid())
+  workspaceId String          @map("workspace_id")
+  name        String
+  slug        String
+  type        EnvironmentType @default(DEVELOPMENT)
+  settings    Json            @default("{}")
+  isActive    Boolean         @default(true) @map("is_active")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  apiKeys    APIKey[]
+  policies   PolicyRule[]
+  models     AIModel[]
+  incidents  Incident[]
+
+  @@unique([workspaceId, slug])
+  @@map("environments")
+}
+
+// ─── Membership ────────────────────────────────────────────────
+
+model Membership {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  workspaceId   String    @map("workspace_id")
+  environmentId String?   @map("environment_id")
+  role          UserRole  @default(VIEWER)
+  permissions   Json      @default("[]")
+  joinedAt      DateTime  @default(now()) @map("joined_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([userId])
+  @@index([workspaceId])
+  @@map("memberships")
+}
+
+// ─── User ──────────────────────────────────────────────────────
+
+model User {
+  id                    String     @id @default(uuid())
+  email                 String     @unique
+  passwordHash          String     @map("password_hash")
+  name                  String     @default("")
+  title                 String?
+  avatar                String?
+  role                  UserRole   @default(VIEWER)
+  orgId                 String     @map("org_id")
+  mfaSecret             String?    @map("mfa_secret")
+  mfaMethod             MFAMethod? @map("mfa_method")
+  mfaEnabled            Boolean    @default(false) @map("mfa_enabled")
+  mfaBackupCodes        Json       @default("[]") @map("mfa_backup_codes")
+  emailVerified         Boolean    @default(false) @map("email_verified")
+  emailVerificationToken String?   @map("email_verification_token")
+  passwordResetToken    String?    @map("password_reset_token")
+  passwordResetExpires  DateTime?  @map("password_reset_expires")
+  lastLoginAt           DateTime?  @map("last_login_at")
+  lastLoginIp           String?    @map("last_login_ip")
+  failedLoginAttempts   Int        @default(0) @map("failed_login_attempts")
+  lockedUntil           DateTime?  @map("locked_until")
+  isActive              Boolean    @default(true) @map("is_active")
+  preferences           Json       @default("{}")
+  createdAt             DateTime   @default(now()) @map("created_at")
+  updatedAt             DateTime   @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  memberships       Membership[]
+  sessions          Session[]
+  invitations       Invitation[]      @relation("InvitedByUser")
+  createdIncidents  Incident[]        @relation("IncidentAssignee")
+  escalatedIncidents Incident[]       @relation("IncidentEscalation")
+  incidentComments  IncidentComment[]
+  apiKeys           APIKey[]
+  advisorMessages   AdvisorMessage[]
+  auditEvents       AuditEvent[]
+  auditLogs         AuditLog[]
+
+  @@index([orgId])
+  @@map("users")
+}
+
+// ─── Session ──────────────────────────────────────────────────
+
+model Session {
+  id           String        @id @default(uuid())
+  userId       String        @map("user_id")
+  token        String        @unique
+  ipAddress    String?       @map("ip_address")
+  userAgent    String?       @map("user_agent")
+  deviceName   String?       @map("device_name")
+  status       SessionStatus @default(ACTIVE)
+  lastActiveAt DateTime      @default(now()) @map("last_active_at")
+  expiresAt    DateTime      @map("expires_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("sessions")
+}
+
+// ─── Invitation ──────────────────────────────────────────────
+
+model Invitation {
+  id          String           @id @default(uuid())
+  orgId       String           @map("org_id")
+  inviterId   String           @map("inviter_id")
+  email       String
+  role        UserRole         @default(VIEWER)
+  workspaceId String?          @map("workspace_id")
+  token       String           @unique
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime         @map("expires_at")
+  acceptedAt  DateTime?        @map("accepted_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  inviter      User          @relation("InvitedByUser", fields: [inviterId], references: [id], onDelete: Cascade)
+  workspace    Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([email])
+  @@index([token])
+  @@map("invitations")
+}
+
+// ─── Audit Log (immutable) ───────────────────────────────────
+
+model AuditLog {
   id        String      @id @default(uuid())
   orgId     String      @map("org_id")
-  name      String
-  provider  String
-  version   String      @default("1.0")
-  purpose   String      @default("")
-  riskLevel RiskLevel   @default(LIMITED) @map("risk_level")
-  status    ModelStatus @default(ACTIVE)
-  createdAt DateTime    @default(now()) @map("created_at")
-  updatedAt DateTime    @updatedAt @map("updated_at")
+  workspaceId String?   @map("workspace_id")
+  userId    String?     @map("user_id")
+  action    AuditAction
+  resource  String?
+  resourceId String?    @map("resource_id")
+  details   Json        @default("{}")
+  ipAddress String?     @map("ip_address")
+  userAgent String?     @map("user_agent")
+  severity  IncidentSeverity @default(LOW)
+  timestamp DateTime    @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, timestamp])
+  @@index([userId, timestamp])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+// ─── API Key ─────────────────────────────────────────────────
+
+model APIKey {
+  id            String    @id @default(uuid())
+  orgId         String    @map("org_id")
+  workspaceId   String?   @map("workspace_id")
+  environmentId String?   @map("environment_id")
+  userId        String    @map("user_id")
+  name          String
+  keyPrefix     String    @map("key_prefix")
+  keyHash       String    @unique @map("key_hash")
+  scopes        Json      @default("[\"proxy:chat\"]")
+  expiresAt     DateTime? @map("expires_at")
+  lastUsedAt    DateTime? @map("last_used_at")
+  rateLimitPerMin Int     @default(60) @map("rate_limit_per_min")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  revokedAt     DateTime? @map("revoked_at")
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workspace    Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  environment  Environment?  @relation(fields: [environmentId], references: [id], onDelete: SetNull)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("api_keys")
+}
+
+// ─── Provider ────────────────────────────────────────────────
+
+model Provider {
+  id               String       @id @default(uuid())
+  orgId            String       @map("org_id")
+  workspaceId      String?      @map("workspace_id")
+  name             String
+  type             ProviderType @default(OPENAI)
+  apiKeyEncrypted  String       @map("api_key_encrypted")
+  apiUrl           String?      @map("api_url")
+  models           Json         @default("[]")
+  isActive         Boolean      @default(true) @map("is_active")
+  healthStatus     String       @default("unknown") @map("health_status")
+  lastHealthCheckAt DateTime?   @map("last_health_check_at")
+  settings         Json         @default("{}")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workspace    Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  usageRecords ProviderUsage[]
+
+  @@index([orgId])
+  @@map("providers")
+}
+
+// ─── AI Model Registry ───────────────────────────────────────
+
+model AIModel {
+  id            String      @id @default(uuid())
+  orgId         String      @map("org_id")
+  workspaceId   String?     @map("workspace_id")
+  environmentId String?     @map("environment_id")
+  name          String
+  provider      String
+  version       String      @default("1.0")
+  purpose       String      @default("")
+  riskLevel     RiskLevel   @default(LIMITED) @map("risk_level")
+  status        ModelStatus @default(ACTIVE)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
 
   organization    Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workspace       Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  environment     Environment?     @relation(fields: [environmentId], references: [id], onDelete: SetNull)
   riskAssessments RiskAssessment[]
   complianceChecks ComplianceCheck[]
   incidents       Incident[]
+  versions        ModelVersion[]
+  usageRecords    ProviderUsage[]
 
   @@index([orgId])
+  @@index([orgId, workspaceId])
   @@map("ai_models")
 }
 
-// ─── Risk Assessment ──────────────────────────────────────
+// ─── Risk Assessment ─────────────────────────────────────────
 
 model RiskAssessment {
   id                String   @id @default(uuid())
   modelId           String   @map("model_id")
-  overallScore      Int      @map("overall_score") // 0-100
+  overallScore      Int      @map("overall_score")
   categoryBreakdown Json     @map("category_breakdown") @default("{}")
   findings          Json     @default("[]")
   recommendations   Json     @default("[]")
@@ -125,128 +577,227 @@ model RiskAssessment {
   @@map("risk_assessments")
 }
 
-// ─── Compliance ──────────────────────────────────────────
-
-enum ComplianceFramework {
-  EU_AI_ACT
-  ISO_42001
-  NIST_AI_RMF
-  ISO_27001
-}
-
-enum ComplianceStatus {
-  NOT_STARTED
-  IN_PROGRESS
-  COMPLIANT
-  NON_COMPLIANT
-  PARTIALLY_COMPLIANT
-}
+// ─── Compliance ──────────────────────────────────────────────
 
 model ComplianceCheck {
-  id        String              @id @default(uuid())
-  orgId     String              @map("org_id")
-  modelId   String?             @map("model_id")
-  framework ComplianceFramework
-  status    ComplianceStatus    @default(NOT_STARTED)
-  answers   Json                @default("[]")
-  score     Int                 @default(0) // 0-100
-  createdAt DateTime            @default(now()) @map("created_at")
-  updatedAt DateTime            @updatedAt @map("updated_at")
+  id              String              @id @default(uuid())
+  orgId           String              @map("org_id")
+  workspaceId     String?             @map("workspace_id")
+  modelId         String?             @map("model_id")
+  framework       ComplianceFramework
+  status          ComplianceStatus    @default(NOT_STARTED)
+  answers         Json                @default("[]")
+  score           Int                 @default(0)
+  nextReviewAt    DateTime?           @map("next_review_at")
+  reviewedBy      String?             @map("reviewed_by")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  model        AIModel?     @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workspace    Workspace?         @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  model        AIModel?           @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  evidence     ComplianceEvidence[]
 
   @@index([orgId])
+  @@index([orgId, workspaceId, framework])
   @@index([framework])
   @@map("compliance_checks")
 }
 
-// ─── Incidents ──────────────────────────────────────────
-
-enum IncidentSeverity {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
-}
-
-enum IncidentStatus {
-  OPEN
-  INVESTIGATING
-  RESOLVED
-}
+// ─── Incidents ───────────────────────────────────────────────
 
 model Incident {
-  id          String           @id @default(uuid())
-  orgId       String           @map("org_id")
-  modelId     String?          @map("model_id")
-  title       String
-  description String           @default("")
-  severity    IncidentSeverity @default(MEDIUM)
-  status      IncidentStatus   @default(OPEN)
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
-  resolvedAt  DateTime?        @map("resolved_at")
+  id              String           @id @default(uuid())
+  orgId           String           @map("org_id")
+  workspaceId     String?          @map("workspace_id")
+  environmentId   String?          @map("environment_id")
+  modelId         String?          @map("model_id")
+  title           String
+  description     String           @default("")
+  severity        IncidentSeverity @default(MEDIUM)
+  status          IncidentStatus   @default(OPEN)
+  assignedTo      String?          @map("assigned_to")
+  escalatedTo     String?          @map("escalated_to")
+  escalatedAt     DateTime?        @map("escalated_at")
+  acknowledgedAt  DateTime?        @map("acknowledged_at")
+  resolution      String?
+  rootCause       String?          @map("root_cause")
+  evidence        Json             @default("[]")
+  timeline        Json             @default("[]")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  resolvedAt      DateTime?        @map("resolved_at")
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  model        AIModel?     @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  organization    Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workspace       Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  environment     Environment?     @relation(fields: [environmentId], references: [id], onDelete: SetNull)
+  model           AIModel?         @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  assignee        User?            @relation("IncidentAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
+  escalation      User?            @relation("IncidentEscalation", fields: [escalatedTo], references: [id], onDelete: SetNull)
+  events          IncidentEvent[]
+  comments        IncidentComment[]
 
   @@index([orgId])
+  @@index([orgId, workspaceId])
   @@index([severity])
   @@index([status])
   @@map("incidents")
 }
 
-// ─── Policies ──────────────────────────────────────────
+// ─── Incident Comment ────────────────────────────────────────
+
+model IncidentComment {
+  id          String   @id @default(uuid())
+  incidentId  String   @map("incident_id")
+  userId      String   @map("user_id")
+  content     String
+  attachments Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
+  @@map("incident_comments")
+}
+
+// ─── Policies ────────────────────────────────────────────────
 
 model PolicyRule {
-  id          String   @id @default(uuid()) @map("rule_id")
-  orgId       String   @map("org_id")
-  name        String
-  description String   @default("")
-  conditions  Json     @default("[]")
-  action      String   @default("BLOCK")
-  scope       String   @default("all")
-  priority    Int      @default(100)
-  enabled     Boolean  @default(true)
-  exceptions  Json     @default("[]")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  deletedAt   DateTime? @map("deleted_at")
+  id            String    @id @default(uuid()) @map("rule_id")
+  orgId         String    @map("org_id")
+  workspaceId   String?   @map("workspace_id")
+  environmentId String?   @map("environment_id")
+  templateId    String?   @map("template_id")
+  name          String
+  description   String    @default("")
+  category      String    @default("custom")
+  version       Int       @default(1)
+  conditions    Json      @default("[]")
+  action        String    @default("BLOCK")
+  scope         String    @default("all")
+  priority      Int       @default(100)
+  enabled       Boolean   @default(true)
+  exceptions    Json      @default("[]")
+  stagedAt      DateTime? @map("staged_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workspace    Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  environment  Environment? @relation(fields: [environmentId], references: [id], onDelete: SetNull)
 
   @@index([orgId])
+  @@index([orgId, workspaceId, environmentId])
   @@map("policy_rules")
 }
 
-// ─── Vendors ──────────────────────────────────────────
+// ─── Policy Template ─────────────────────────────────────────
 
-model Vendor {
-  id              String   @id @default(uuid())
-  orgId           String   @map("org_id")
-  name            String
-  riskLevel       RiskLevel @default(LIMITED) @map("risk_level")
-  services        Json     @default("[]")
-  assessmentScore Int?     @map("assessment_score") // 0-100
-  lastAssessed    DateTime? @map("last_assessed")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+model PolicyTemplate {
+  id          String             @id @default(uuid())
+  name        String
+  description String
+  category    String
+  industry    OrgIndustry        @default(OTHER)
+  framework   ComplianceFramework?
+  conditions  Json               @default("[]")
+  action      String             @default("BLOCK")
+  priority    Int                @default(100)
+  isBuiltIn   Boolean            @default(false) @map("is_built_in")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  @@index([category, industry])
+  @@map("policy_templates")
+}
+
+// ─── Compliance Profile ─────────────────────────────────────
+
+model ComplianceProfile {
+  id           String             @id @default(uuid())
+  orgId        String             @map("org_id")
+  framework    ComplianceFramework
+  status       ComplianceStatus   @default(NOT_STARTED)
+  targetScore  Int                @default(80) @map("target_score")
+  currentScore Int                @default(0) @map("current_score")
+  lastScannedAt DateTime?         @map("last_scanned_at")
+  settings     Json               @default("{}")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, framework])
+  @@map("compliance_profiles")
+}
+
+// ─── Provider Usage ─────────────────────────────────────────
+
+model ProviderUsage {
+  id           String   @id @default(uuid())
+  orgId        String   @map("org_id")
+  workspaceId  String?  @map("workspace_id")
+  providerId   String?  @map("provider_id")
+  modelId      String?  @map("model_id")
+  modelName    String?  @map("model_name")
+  tokensIn     BigInt   @default(0) @map("tokens_in")
+  tokensOut    BigInt   @default(0) @map("tokens_out")
+  requestCount BigInt   @default(0) @map("request_count")
+  costInUsd    Float    @default(0) @map("cost_in_usd")
+  recordedAt   DateTime @default(now()) @map("recorded_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workspace    Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  provider     Provider?    @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  model        AIModel?     @relation(fields: [modelId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, recordedAt])
+  @@map("provider_usage")
+}
+
+// ─── SSO Configuration ──────────────────────────────────────
+
+model SSOConfiguration {
+  id                    String   @id @default(uuid())
+  orgId                 String   @unique @map("org_id")
+  provider              String
+  issuerUrl             String?  @map("issuer_url")
+  clientId              String?  @map("client_id")
+  clientSecretEncrypted String?  @map("client_secret_encrypted")
+  certificate           String?
+  isActive              Boolean  @default(false) @map("is_active")
+  settings              Json     @default("{}")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("sso_configurations")
+}
+
+// ─── Vendors ────────────────────────────────────────────────
+
+model Vendor {
+  id              String    @id @default(uuid())
+  orgId           String    @map("org_id")
+  name            String
+  riskLevel       RiskLevel @default(LIMITED) @map("risk_level")
+  services        Json      @default("[]")
+  assessmentScore Int?      @map("assessment_score")
+  lastAssessed    DateTime? @map("last_assessed")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  slas         VendorSLA[]
 
   @@index([orgId])
   @@map("vendors")
 }
 
-// ─── Datasets ──────────────────────────────────────────
-
-enum DataSensitivity {
-  PUBLIC
-  INTERNAL
-  CONFIDENTIAL
-  RESTRICTED
-}
+// ─── Datasets ───────────────────────────────────────────────
 
 model Dataset {
   id          String          @id @default(uuid())
@@ -264,22 +815,16 @@ model Dataset {
   @@map("datasets")
 }
 
-// ─── Threat Detection ──────────────────────────────────
-
-enum ThreatStatus {
-  ACTIVE
-  MITIGATED
-  FALSE_POSITIVE
-}
+// ─── Threat Detection ───────────────────────────────────────
 
 model ThreatDetection {
-  id          String      @id @default(uuid())
-  orgId       String      @map("org_id")
-  patternType String      @map("pattern_type")
+  id          String           @id @default(uuid())
+  orgId       String           @map("org_id")
+  patternType String           @map("pattern_type")
   severity    IncidentSeverity @default(MEDIUM)
-  detectedAt  DateTime    @default(now()) @map("detected_at")
-  details     Json        @default("{}")
-  status      ThreatStatus @default(ACTIVE)
+  detectedAt  DateTime         @default(now()) @map("detected_at")
+  details     Json             @default("{}")
+  status      ThreatStatus     @default(ACTIVE)
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
@@ -288,12 +833,7 @@ model ThreatDetection {
   @@map("threat_detections")
 }
 
-// ─── AI Advisor Chat ──────────────────────────────────
-
-enum MessageRole {
-  USER
-  ASSISTANT
-}
+// ─── AI Advisor Chat ────────────────────────────────────────
 
 model AdvisorMessage {
   id        String      @id @default(uuid())
@@ -312,45 +852,24 @@ model AdvisorMessage {
   @@map("advisor_messages")
 }
 
-// ─── Audit Log ──────────────────────────────────────────
-
-model AuditLog {
-  id        String   @id @default(uuid())
-  orgId     String   @map("org_id")
-  userId    String?  @map("user_id")
-  action    String   // CREATE, UPDATE, DELETE, SCAN, LOGIN, etc.
-  entity    String   // model, incident, policy, etc.
-  entityId  String?  @map("entity_id")
-  metadata  Json     @default("{}")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([orgId])
-  @@index([createdAt])
-  @@index([entity])
-  @@map("audit_logs")
-}
-
-// ─── Proxy Audit Events ────────────────────────────────────
+// ─── Proxy Audit Events ─────────────────────────────────────
 
 model AuditEvent {
-  id                  String    @id @default(uuid()) @map("event_id")
-  timestamp           DateTime  @default(now())
-  orgId               String    @map("org_id")
-  userId              String    @map("user_id")
-  sessionId           String    @default("") @map("session_id")
-  toolName            String    @default("") @map("tool_name")
-  llmProvider         String    @default("") @map("llm_provider")
-  promptHash          String    @default("") @map("prompt_hash")
-  detectionResults    Json      @default("{}") @map("detection_results")
-  riskScore           Int       @default(0) @map("risk_score")
-  actionTaken         String    @default("ALLOW") @map("action_taken")
-  policyRuleId        String?   @map("policy_rule_id")
-  redactedPrompt      String?   @map("redacted_prompt")
-  requestDurationMs   Float     @default(0) @map("request_duration_ms")
-  upstreamStatusCode  Int?      @map("upstream_status_code")
+  id                  String   @id @default(uuid()) @map("event_id")
+  timestamp           DateTime @default(now())
+  orgId               String   @map("org_id")
+  userId              String   @map("user_id")
+  sessionId           String   @default("") @map("session_id")
+  toolName            String   @default("") @map("tool_name")
+  llmProvider         String   @default("") @map("llm_provider")
+  promptHash          String   @default("") @map("prompt_hash")
+  detectionResults    Json     @default("{}") @map("detection_results")
+  riskScore           Int      @default(0) @map("risk_score")
+  actionTaken         String   @default("ALLOW") @map("action_taken")
+  policyRuleId        String?  @map("policy_rule_id")
+  redactedPrompt      String?  @map("redacted_prompt")
+  requestDurationMs   Float    @default(0) @map("request_duration_ms")
+  upstreamStatusCode  Int?     @map("upstream_status_code")
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -363,21 +882,142 @@ model AuditEvent {
   @@map("audit_events")
 }
 
-// ─── Shadow AI Alerts ──────────────────────────────────────
+// ─── Shadow AI Alerts ───────────────────────────────────────
 
 model ShadowAIAlert {
-  id           String   @id @default(uuid()) @map("alert_id")
-  userId       String   @map("user_id")
-  orgId        String?  @map("org_id")
-  toolName     String   @default("") @map("tool_name")
-  domain       String   @default("")
-  category     String   @default("")
-  isAuthorized Boolean  @default(false) @map("is_authorized")
-  timestamp    DateTime @default(now())
+  id           String    @id @default(uuid()) @map("alert_id")
+  userId       String    @map("user_id")
+  orgId        String?   @map("org_id")
+  toolName     String    @default("") @map("tool_name")
+  domain       String    @default("")
+  category     String    @default("")
+  isAuthorized Boolean   @default(false) @map("is_authorized")
+  timestamp    DateTime  @default(now())
 
   organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([timestamp])
   @@map("shadow_ai_alerts")
+}
+
+// ─── Policy Version History ─────────────────────────────────
+
+model PolicyVersion {
+  id        String   @id @default(uuid())
+  policyId  String   @map("policy_id")
+  version   Int
+  snapshot  Json
+  reason    String   @default("")
+  createdBy String   @default("") @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([policyId])
+  @@map("policy_versions")
+}
+
+// ─── Incident Timeline Events ───────────────────────────────
+
+model IncidentEvent {
+  id          String   @id @default(uuid())
+  incidentId  String   @map("incident_id")
+  eventType   String   @map("event_type")
+  payload     Json     @default("{}")
+  createdBy   String   @default("") @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
+  @@map("incident_events")
+}
+
+// ─── Model Routing Rules ────────────────────────────────────
+
+model ModelRoutingRule {
+  id          String   @id @default(uuid())
+  orgId       String   @map("org_id")
+  sourceModel String   @map("source_model")
+  targetModel String   @map("target_model")
+  weight      Int      @default(100)
+  conditions  Json     @default("{}")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("model_routing_rules")
+}
+
+// ─── Model Versions ─────────────────────────────────────────
+
+model ModelVersion {
+  id                String             @id @default(uuid())
+  modelId           String             @map("model_id")
+  version           String
+  status            ModelVersionStatus @default(ACTIVE)
+  trafficPercentage Float              @default(0) @map("traffic_percentage")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  model AIModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@index([modelId])
+  @@map("model_versions")
+}
+
+// ─── Vendor SLA Tracking ────────────────────────────────────
+
+model VendorSLA {
+  id          String   @id @default(uuid())
+  vendorId    String   @map("vendor_id")
+  metric      String
+  targetValue Float    @map("target_value")
+  actualValue Float    @map("actual_value")
+  periodStart DateTime @map("period_start")
+  periodEnd   DateTime @map("period_end")
+  breached    Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@map("vendor_slas")
+}
+
+// ─── Compliance Evidence ────────────────────────────────────
+
+model ComplianceEvidence {
+  id         String   @id @default(uuid())
+  checkId    String   @map("check_id")
+  fileName   String   @map("file_name")
+  fileUrl    String   @map("file_url")
+  fileType   String   @default("") @map("file_type")
+  uploadedBy String   @default("") @map("uploaded_by")
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
+
+  check ComplianceCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
+
+  @@index([checkId])
+  @@map("compliance_evidence")
+}
+
+// ─── Report History ─────────────────────────────────────────
+
+model ReportHistory {
+  id          String       @id @default(uuid())
+  orgId       String       @map("org_id")
+  reportType  String       @map("report_type")
+  format      ReportFormat @default(PDF)
+  fileUrl     String       @map("file_url")
+  parameters  Json         @default("{}")
+  generatedBy String       @default("") @map("generated_by")
+  generatedAt DateTime     @default(now()) @map("generated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("report_history")
 }

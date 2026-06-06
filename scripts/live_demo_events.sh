@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════
-# ShieldAI — Live Demo Event Generator
+# Airlock — Live Demo Event Generator
 # Run this during your presentation to trigger real-time events.
 # ═══════════════════════════════════════════════════════════════
 
@@ -12,7 +12,7 @@ CYAN='\033[1;36m'; GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; BO
 
 clear
 echo -e "${CYAN}${BOLD}╔════════════════════════════════════════════════════════════╗${RESET}"
-echo -e "${CYAN}${BOLD}║             ShieldAI Live Event Generator                  ║${RESET}"
+echo -e "${CYAN}${BOLD}║             Airlock Live Event Generator                  ║${RESET}"
 echo -e "${CYAN}${BOLD}╚════════════════════════════════════════════════════════════╝${RESET}"
 echo ""
 
@@ -63,7 +63,7 @@ while true; do
       echo -e "\n${YELLOW}Attempting login with wrong password...${RESET}"
       RESP=$(curl -s -X POST "$BASE_GOV/api/auth/login" \
         -H "Content-Type: application/json" \
-        -d '{"email":"demo@shieldai.dev","password":"WrongPassword!"}')
+        -d '{"email":"demo@airlock.dev","password":"WrongPassword!"}')
       echo -e "${RED}✗ Login failed! Response: $RESP${RESET}\n"
       ;;
     0)

@@ -17,11 +17,11 @@ class RegulatoryDetector:
 
     # GDPR violations
     GDPR_PATTERNS: ClassVar[list[tuple[re.Pattern[str], float, str]]] = [
-        (re.compile(r"\b(?:process(?:ing)?|collect(?:ing)?|stor(?:ing|e))\b.*\b(?:personal data|personal information|PII)\b.*\b(?:without|no)\s+(?:consent|permission|authorization)\b", re.I | re.S),
+        (re.compile(r"\b(?:process(?:ing)?|collect(?:ing)?|stor(?:ing|e))\b.*\b(?:personal data|personal information|PII)\b.*\b(?:without|no)\s+(?:\w+\s+)?(?:consent|permission|authorization)\b", re.I | re.S),
          0.90, "GDPR Art. 6 — Processing without lawful basis"),
         (re.compile(r"\b(?:share|transfer|send|transmit)\b.*\b(?:personal data|user data|customer data)\b.*\b(?:third[- ]party|external|partner|vendor)\b", re.I | re.S),
          0.75, "GDPR Art. 28 — Data processor obligations"),
-        (re.compile(r"\b(?:retain|store|keep)\b.*\b(?:indefinitely|forever|permanently)\b.*\b(?:data|records|information)\b", re.I | re.S),
+        (re.compile(r"\b(?:retain|store|keep)\b.*(?:(?:indefinitely|forever|permanently).*(?:data|records?|information)|(?:data|records?|information).*(?:indefinitely|forever|permanently))\b", re.I | re.S),
          0.80, "GDPR Art. 5(1)(e) — Storage limitation principle"),
         (re.compile(r"\b(?:track(?:ing)?|monitor(?:ing)?|profil(?:ing|e))\b.*\b(?:user|customer|employee|individual)\b.*\b(?:without|no)\s+(?:notice|inform|consent)\b", re.I | re.S),
          0.85, "GDPR Art. 22 — Automated individual decision-making"),
@@ -29,9 +29,9 @@ class RegulatoryDetector:
 
     # HIPAA patterns
     HIPAA_PATTERNS: ClassVar[list[tuple[re.Pattern[str], float, str]]] = [
-        (re.compile(r"\b(?:patient|medical)\s+(?:name|record|history|diagnosis|treatment|prescription)\b.*\b(?:share|disclose|reveal|expose|log)\b", re.I | re.S),
+        (re.compile(r"\b(?:patient|medical)\s+(?:name|record|history|diagnosis|treatment|prescription)s?\b.*\b(?:share|disclose|reveal|expose|log)\w*\b", re.I | re.S),
          0.85, "HIPAA §164.502 — PHI disclosure restrictions"),
-        (re.compile(r"\b(?:diagnos(?:is|ed)|prescri(?:be|ption|bed)|treat(?:ment|ed))\b.*\b(?:Mr\.|Mrs\.|Ms\.|Dr\.)\s+[A-Z][a-z]+", re.S),
+        (re.compile(r"\b(?:diagnos(?:is|ed)|prescri(?:be|ption|bed)|treat(?:ment|ed))\b.*\b(?:Mr\.|Mrs\.|Ms\.|Dr\.)\s+[A-Z][a-z]+", re.I | re.S),
          0.90, "HIPAA §164.514 — PHI with identifiable patient info"),
         (re.compile(r"\b(?:health|medical)\s+(?:insurance|plan|coverage|provider)\b.*\b(?:SSN|social security|date of birth|DOB|address)\b", re.I | re.S),
          0.88, "HIPAA §164.514 — PHI identifier combination"),
@@ -106,7 +106,7 @@ class RegulatoryDetector:
                         confidence=confidence,
                         matched_text=match.group()[:80],
                         detector=f"regulatory_{group_name}",
-                        context=text[ctx_start:ctx_end],
+                        context=f"{reference} | {text[ctx_start:ctx_end]}",
                     ))
 
         duration_ms = (time.perf_counter() - start) * 1000

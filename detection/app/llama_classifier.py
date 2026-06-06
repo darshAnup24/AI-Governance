@@ -1,6 +1,9 @@
 """
+[DEPRECATED - DO NOT USE IN SYNC PATH]
 Tier 3 — Llama classifier for ambiguous content.
 Uses local Ollama for on-premise classification with semantic caching.
+This module is NOT imported in main.py and should ONLY be used via the
+async Redis enrichment queue. Sync detection uses ONNX only.
 """
 
 from __future__ import annotations
@@ -72,7 +75,7 @@ class LlamaClassifier:
         "SAFE": (DetectionCategory.CONFIDENTIAL, 0.0),
     }
 
-    def __init__(self, ollama_url: str = "http://ollama:11434", model: str = "llama3.1:8b") -> None:
+    def __init__(self, ollama_url: str = "http://ollama:11434", model: str = "llama3.2:3b") -> None:
         self.ollama_url = ollama_url
         self.model = model
 

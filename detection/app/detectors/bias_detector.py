@@ -77,11 +77,11 @@ class BiasDetector:
                     spans.append(DetectedSpan(
                         start=match.start(),
                         end=match.end(),
-                        category=DetectionCategory.CONFIDENTIAL,
+                        category=DetectionCategory.BIAS,
                         confidence=confidence,
                         matched_text=match.group()[:80],
                         detector=f"bias_{group_name}",
-                        context=text[ctx_start:ctx_end],
+                        context=f"{recommendation} | {text[ctx_start:ctx_end]}",
                     ))
 
         duration_ms = (time.perf_counter() - start) * 1000

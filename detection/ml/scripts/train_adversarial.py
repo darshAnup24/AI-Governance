@@ -251,7 +251,7 @@ def augment_sample(text: str) -> list[tuple[str, int]]:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Adversarial augmentation for ShieldAI DistilBERT")
+    parser = argparse.ArgumentParser(description="Adversarial augmentation for Airlock DistilBERT")
     parser.add_argument("--samples", type=int, default=0,
                         help="Number of base sensitive samples to augment (0 = all)")
     parser.add_argument("--seed", type=int, default=42)

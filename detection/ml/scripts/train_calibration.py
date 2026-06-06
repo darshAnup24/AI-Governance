@@ -65,7 +65,7 @@ _MODEL_DIR.mkdir(parents=True, exist_ok=True)
 CALIBRATION_JSON = _MODEL_DIR / "calibration.json"
 MAIN_CSV         = _ROOT / "sensitivity_training_data.csv"
 HF_MODEL_PATH    = _ROOT / "models" / "fine_tuned_distilbert"
-ONNX_MODEL_PATH  = os.getenv("ONNX_MODEL_PATH", "/tmp/shield_classifier_finetuned.onnx")
+ONNX_MODEL_PATH  = os.getenv("ONNX_MODEL_PATH", "/tmp/airlock_classifier_finetuned.onnx")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ def _optimise_temperature(
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Temperature calibration for ShieldAI ONNX model")
+    parser = argparse.ArgumentParser(description="Temperature calibration for Airlock ONNX model")
     parser.add_argument("--eval-only", action="store_true",
                         help="Skip optimisation; just evaluate existing calibration.json")
     parser.add_argument("--cal-frac", type=float, default=0.15,

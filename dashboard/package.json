@@ -12,13 +12,16 @@
   "dependencies": {
     "@tanstack/react-query": "^5.99.0",
     "axios": "^1.7.9",
+    "class-variance-authority": "^0.7.1",
     "date-fns": "^4.1.0",
+    "framer-motion": "^12.40.0",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-heatmap-grid": "^0.9.1",
     "react-router-dom": "^6.28.0",
     "recharts": "^2.14.1",
+    "tailwind-merge": "^3.6.0",
     "vite-plugin-pwa": "^1.2.0"
   },
   "devDependencies": {

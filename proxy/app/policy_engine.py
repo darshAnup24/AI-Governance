@@ -11,42 +11,36 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+import uuid
+from datetime import datetime
 
 from proxy.app.models import ActionType, PolicyDecision, UserContext
 from proxy.app.auth import get_current_user
+from proxy.app.database import get_db
+from proxy.app.db_models import PolicyRule as DBPolicyRule, PolicyVersion as DBPolicyVersion
+from proxy.app.policy_cache import distributed_policy_cache
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/api/v1/policies", tags=["policies"])
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from proxy.app.database import get_db
-from proxy.app.db_models import PolicyRule as DBPolicyRule
-import uuid
-from datetime import datetime
-
-
-# ─── In-memory policy cache ──────────────────────────────────
-# Mapping from org_id (str) to list of policy dicts
+# ─── In-memory policy cache (backward compat, superseded by DistributedPolicyCache) ──
 _policy_cache: dict[str, list[dict[str, Any]]] = {}
 
-async def load_policies_for_org(org_id: str, db: AsyncSession) -> list[dict[str, Any]]:
-    """Load policy rules for an org from DB and update cache."""
-    # Safely convert org_id to UUID if it is a valid UUID string;
-    # otherwise fall back to a plain string comparison so that dev-mode
-    # org_ids like "org-001" don't crash with ValueError.
+async def _fetch_policies_from_db(org_id: str, db: AsyncSession) -> list[dict[str, Any]]:
+    """Load policy rules for an org from DB (L3 source)."""
     try:
         org_id_val = uuid.UUID(org_id) if isinstance(org_id, str) else org_id
         query = select(DBPolicyRule).filter(
             DBPolicyRule.org_id == org_id_val,
-            DBPolicyRule.deleted_at == None,  # noqa: E711
+            DBPolicyRule.deleted_at == None,
         ).order_by(DBPolicyRule.priority)
     except (ValueError, AttributeError):
-        # Non-UUID org_id (e.g. "org-001" in dev mode) — cast to text comparison
         from sqlalchemy import cast, String
         query = select(DBPolicyRule).filter(
             cast(DBPolicyRule.org_id, String) == str(org_id),
-            DBPolicyRule.deleted_at == None,  # noqa: E711
+            DBPolicyRule.deleted_at == None,
         ).order_by(DBPolicyRule.priority)
 
     result = await db.execute(query)
@@ -64,6 +58,14 @@ async def load_policies_for_org(org_id: str, db: AsyncSession) -> list[dict[str,
         })
     _policy_cache[str(org_id)] = rules
     return rules
+
+async def load_policies_for_org(org_id: str, db: AsyncSession, redis: Any = None) -> list[dict[str, Any]]:
+    """Load policy rules using distributed cache (L1 → L2 → L3/DB)."""
+    async def refresh_fn():
+        return await _fetch_policies_from_db(org_id, db)
+
+    key = f"policies:{org_id}"
+    return await distributed_policy_cache.get(key, redis, refresh_fn)
 
 
 
@@ -178,6 +180,7 @@ class PolicyEngine:
         """
         Evaluate request against policy rules.
         Rules sorted by priority (lower = higher priority); first match wins.
+        Supports: staged rollout (percentage-based), inheritance chain.
         """
         if rules is None:
             rules = sorted(
@@ -191,6 +194,18 @@ class PolicyEngine:
             )
 
         for rule in rules:
+            # Staged rollout: skip if rollout_percentage < 100 and user_id hash falls outside
+            rollout_pct = rule.get("rollout_percentage", 100)
+            if rollout_pct < 100:
+                user_hash = abs(hash(ctx.user_id)) % 100
+                if user_hash >= rollout_pct:
+                    continue
+
+            # Check rollout status
+            rollout_status = rule.get("rollout_status", "ACTIVE")
+            if rollout_status not in ("ACTIVE", "STAGED"):
+                continue
+
             conditions = rule.get("conditions", {})
             if _evaluate_conditions(conditions, ctx):
                 action = ActionType(rule["action"])
@@ -199,6 +214,8 @@ class PolicyEngine:
                     rule_id=rule["rule_id"],
                     rule_name=rule["name"],
                     action=action.value,
+                    rollout_status=rollout_status,
+                    rollout_pct=rollout_pct,
                 )
                 return PolicyDecision(
                     action=action,
@@ -217,6 +234,33 @@ class PolicyEngine:
 policy_engine = PolicyEngine()
 
 
+async def _create_policy_version(
+    db: AsyncSession,
+    rule: DBPolicyRule,
+    changed_by: str,
+    reason: str = "",
+) -> None:
+    """Create a snapshot version of a policy rule."""
+    version = DBPolicyVersion(
+        policy_id=rule.rule_id,
+        version=rule.version or 1,
+        snapshot={
+            "name": rule.name,
+            "description": rule.description,
+            "conditions": rule.conditions,
+            "action": rule.action,
+            "priority": rule.priority,
+            "enabled": rule.enabled,
+            "scope": rule.scope,
+            "rollout_percentage": rule.rollout_percentage,
+            "rollout_status": rule.rollout_status,
+        },
+        changed_by=changed_by,
+        reason=reason,
+    )
+    db.add(version)
+
+
 # ─── API Endpoints ────────────────────────────────────────
 
 class PolicyRuleCreate(BaseModel):
@@ -226,6 +270,9 @@ class PolicyRuleCreate(BaseModel):
     action: str
     priority: int = 100
     enabled: bool = True
+    rollout_percentage: int = 100
+    rollout_status: str = "ACTIVE"
+    parent_rule_id: str | None = None
 
 
 class PolicyRuleUpdate(BaseModel):
@@ -235,6 +282,8 @@ class PolicyRuleUpdate(BaseModel):
     action: str | None = None
     priority: int | None = None
     enabled: bool | None = None
+    rollout_percentage: int | None = None
+    rollout_status: str | None = None
 
 
 class PolicyTestRequest(BaseModel):
@@ -242,6 +291,19 @@ class PolicyTestRequest(BaseModel):
     detection_categories: list[str] = []
     department: str = ""
     role: str = ""
+    user_id: str = ""
+
+
+class PolicySimulateRequest(BaseModel):
+    sample_contexts: list[PolicyTestRequest] = []
+
+
+class PolicySimulateResponse(BaseModel):
+    total: int
+    matches: int
+    match_rate: float
+    action_distribution: dict[str, int]
+    matched_rule_ids: list[str]
 
 
 @router.get("")
@@ -250,7 +312,19 @@ async def list_policies(
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """List all policy rules for the organization."""
-    return await load_policies_for_org(user.org_id, db)
+    rules = await load_policies_for_org(user.org_id, db)
+    # Also return version count
+    for rule in rules:
+        try:
+            vq = select(DBPolicyVersion).filter(
+                DBPolicyVersion.policy_id == uuid.UUID(rule["rule_id"])
+            )
+            v_result = await db.execute(vq)
+            versions = v_result.scalars().all()
+            rule["version_count"] = len(versions)
+        except Exception:
+            rule["version_count"] = 0
+    return rules
 
 
 @router.post("")
@@ -265,16 +339,29 @@ async def create_policy(
     except (ValueError, AttributeError):
         org_id_val = user.org_id  # type: ignore[assignment]
 
+    parent_id = None
+    if body.parent_rule_id:
+        try:
+            parent_id = uuid.UUID(body.parent_rule_id)
+        except (ValueError, AttributeError):
+            pass
+
     rule = DBPolicyRule(
         org_id=org_id_val,
+        parent_rule_id=parent_id,
         name=body.name,
         description=body.description,
         conditions=body.conditions,
         action=body.action,
         priority=body.priority,
         enabled=body.enabled,
+        rollout_percentage=body.rollout_percentage,
+        rollout_status=body.rollout_status,
+        version=1,
     )
     db.add(rule)
+    await db.flush()
+    await _create_policy_version(db, rule, changed_by=user.user_id, reason="Initial creation")
     await db.commit()
     await load_policies_for_org(user.org_id, db)
     return {
@@ -285,7 +372,48 @@ async def create_policy(
         "action": rule.action,
         "priority": rule.priority,
         "enabled": rule.enabled,
+        "rollout_percentage": rule.rollout_percentage,
+        "rollout_status": rule.rollout_status,
+        "version": rule.version,
     }
+
+
+@router.post("/simulate")
+async def simulate_policy(
+    body: PolicySimulateRequest,
+    user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PolicySimulateResponse:
+    """Simulate policy rules against a batch of sample contexts."""
+    rules = await load_policies_for_org(user.org_id, db)
+    total = len(body.sample_contexts)
+    matches = 0
+    action_distribution: dict[str, int] = {}
+    matched_rule_ids: list[str] = []
+
+    for sample in body.sample_contexts:
+        ctx = RequestContext(
+            user_id=sample.user_id or "sim-user",
+            risk_score=sample.risk_score,
+            detection_categories=sample.detection_categories,
+            department=sample.department,
+            role=sample.role,
+            org_id=user.org_id,
+        )
+        decision = policy_engine.evaluate(ctx, rules=rules)
+        if decision.matched_rule_id:
+            matches += 1
+            if decision.matched_rule_id not in matched_rule_ids:
+                matched_rule_ids.append(decision.matched_rule_id)
+        action_distribution[decision.action.value] = action_distribution.get(decision.action.value, 0) + 1
+
+    return PolicySimulateResponse(
+        total=total,
+        matches=matches,
+        match_rate=round(matches / max(total, 1) * 100, 2),
+        action_distribution=action_distribution,
+        matched_rule_ids=matched_rule_ids,
+    )
 
 
 @router.post("/test")
@@ -313,7 +441,7 @@ async def update_policy(
     user: UserContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Update an existing policy rule."""
+    """Update an existing policy rule (auto-versioned)."""
     query = select(DBPolicyRule).filter(
         DBPolicyRule.rule_id == uuid.UUID(rule_id),
         DBPolicyRule.org_id == uuid.UUID(user.org_id),
@@ -324,6 +452,10 @@ async def update_policy(
     
     if not rule:
         raise HTTPException(status_code=404, detail="Policy rule not found")
+    
+    # Create version snapshot before mutating
+    await _create_policy_version(db, rule, changed_by=user.user_id, reason="Pre-update snapshot")
+    rule.version = (rule.version or 1) + 1
         
     if body.name is not None:
         rule.name = body.name
@@ -337,6 +469,10 @@ async def update_policy(
         rule.priority = body.priority
     if body.enabled is not None:
         rule.enabled = body.enabled
+    if body.rollout_percentage is not None:
+        rule.rollout_percentage = body.rollout_percentage
+    if body.rollout_status is not None:
+        rule.rollout_status = body.rollout_status
         
     await db.commit()
     await load_policies_for_org(user.org_id, db)
@@ -349,6 +485,9 @@ async def update_policy(
         "action": rule.action,
         "priority": rule.priority,
         "enabled": rule.enabled,
+        "rollout_percentage": rule.rollout_percentage,
+        "rollout_status": rule.rollout_status,
+        "version": rule.version,
     }
 
 
@@ -369,10 +508,93 @@ async def delete_policy(
     
     if not rule:
         raise HTTPException(status_code=404, detail="Policy rule not found")
-        
+    
+    await _create_policy_version(db, rule, changed_by=user.user_id, reason="Deleted")
     rule.deleted_at = datetime.utcnow()
     rule.enabled = False
     await db.commit()
     await load_policies_for_org(user.org_id, db)
     
     return {"status": "deleted", "rule_id": rule_id}
+
+
+@router.get("/{rule_id}/versions")
+async def list_policy_versions(
+    rule_id: str,
+    user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """List all versions of a policy rule."""
+    query = select(DBPolicyVersion).filter(
+        DBPolicyVersion.policy_id == uuid.UUID(rule_id)
+    ).order_by(DBPolicyVersion.version.desc())
+    result = await db.execute(query)
+    versions = result.scalars().all()
+    return [
+        {
+            "id": str(v.id),
+            "version": v.version,
+            "snapshot": v.snapshot,
+            "changed_by": v.changed_by,
+            "reason": v.reason,
+            "created_at": v.created_at.isoformat() if v.created_at else None,
+        }
+        for v in versions
+    ]
+
+
+@router.post("/{rule_id}/rollback/{version}")
+async def rollback_policy(
+    rule_id: str,
+    version: int,
+    user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Rollback a policy rule to a previous version."""
+    # Find the target version
+    vq = select(DBPolicyVersion).filter(
+        DBPolicyVersion.policy_id == uuid.UUID(rule_id),
+        DBPolicyVersion.version == version,
+    )
+    v_result = await db.execute(vq)
+    target_version = v_result.scalar_one_or_none()
+    
+    if not target_version:
+        raise HTTPException(status_code=404, detail=f"Version {version} not found")
+    
+    # Find the current rule
+    query = select(DBPolicyRule).filter(
+        DBPolicyRule.rule_id == uuid.UUID(rule_id),
+        DBPolicyRule.org_id == uuid.UUID(user.org_id),
+        DBPolicyRule.deleted_at == None
+    )
+    result = await db.execute(query)
+    rule = result.scalar_one_or_none()
+    
+    if not rule:
+        raise HTTPException(status_code=404, detail="Policy rule not found")
+    
+    # Save current state as version before rollback
+    await _create_policy_version(db, rule, changed_by=user.user_id, reason=f"Pre-rollback from v{version}")
+    
+    # Apply snapshot
+    snapshot = target_version.snapshot
+    rule.name = snapshot.get("name", rule.name)
+    rule.description = snapshot.get("description", rule.description)
+    rule.conditions = snapshot.get("conditions", rule.conditions)
+    rule.action = snapshot.get("action", rule.action)
+    rule.priority = snapshot.get("priority", rule.priority)
+    rule.enabled = snapshot.get("enabled", rule.enabled)
+    rule.rollout_percentage = snapshot.get("rollout_percentage", 100)
+    rule.rollout_status = snapshot.get("rollout_status", "ACTIVE")
+    rule.version = (rule.version or 1) + 1
+    
+    await db.commit()
+    await load_policies_for_org(user.org_id, db)
+    
+    return {
+        "status": "rolled_back",
+        "rule_id": rule_id,
+        "version": rule.version,
+        "restored_from_version": version,
+    }

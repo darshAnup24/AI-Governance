@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════
-# ShieldAI Governance Platform — Live Demo Script
+# Airlock Governance Platform — Live Demo Script
 # Usage: bash scripts/demo.sh
 # ═══════════════════════════════════════════════════════════════
 
@@ -46,7 +46,7 @@ wait_for() {
 # ─────────────────────────────────────────────────────────────
 echo -e "${BOLD}"
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║     ShieldAI AI Governance Firewall — Live Demo     ║"
+echo "║     Airlock AI Governance Firewall — Live Demo     ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo -e "${RESET}"
 
@@ -103,7 +103,7 @@ fi
 # ── 3. Governance Auth (Register + Login) ─────────────────────
 section "3. Governance Auth (Register + Login)"
 
-DEMO_EMAIL="demo@shieldai.dev"
+DEMO_EMAIL="demo@airlock.dev"
 DEMO_PASS="Demo1234!"
 
 # Register (idempotent — ignore 409 already exists)
@@ -317,7 +317,7 @@ echo ""
 echo -e "  ${GREEN}${BOLD}PASSED: $PASS${RESET}   ${RED}${BOLD}FAILED: $FAIL${RESET}"
 echo ""
 if [[ $FAIL -eq 0 ]]; then
-  echo -e "${GREEN}${BOLD}🎉 All checks passed! ShieldAI is fully operational.${RESET}"
+  echo -e "${GREEN}${BOLD}🎉 All checks passed! Airlock is fully operational.${RESET}"
 else
   echo -e "${YELLOW}⚠️  $FAIL check(s) failed — see output above for details.${RESET}"
 fi

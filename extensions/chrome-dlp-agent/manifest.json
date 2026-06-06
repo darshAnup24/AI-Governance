@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "ShieldAI Corporate DLP Agent",
+  "name": "Airlock Corporate DLP Agent",
   "version": "2.0",
   "description": "Intercepts, redacts and blocks sensitive data before it reaches AI models in the browser.",
   "permissions": [
@@ -28,6 +28,6 @@
     "http://localhost:8000/*"
   ],
   "action": {
-    "default_title": "ShieldAI Endpoint DLP"
+    "default_title": "Airlock Endpoint DLP"
   }
 }

@@ -43,14 +43,14 @@ export default function InstallPWA() {
   if (!visible || dismissed) return null
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-sm px-4 animate-slide-up">
-      <div className="card border border-brand-500/30 bg-slate-900/95 backdrop-blur-xl shadow-2xl shadow-brand-500/10 flex items-start gap-3">
-        <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-cyan-500 rounded-lg flex items-center justify-center flex-shrink-0">
-          <Download className="w-5 h-5 text-white" />
+    <div className="fixed bottom-6 left-1/2 z-[100] w-full max-w-sm -translate-x-1/2 px-4">
+      <div className="card flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)] shadow-sm">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--muted)]">
+          <Download className="h-4 w-4 text-[var(--foreground)]" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-slate-100">Install ShieldAI</p>
-          <p className="text-xs text-slate-400 mt-0.5">Add to your home screen for offline access</p>
+          <p className="text-sm font-semibold text-[var(--foreground)]">Install Airlock</p>
+          <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Add to your home screen for offline access</p>
           <div className="flex gap-2 mt-3">
             <button onClick={handleInstall} className="btn-primary text-xs py-1.5 px-3">
               Install
@@ -60,7 +60,7 @@ export default function InstallPWA() {
             </button>
           </div>
         </div>
-        <button onClick={handleDismiss} className="text-slate-600 hover:text-slate-400 flex-shrink-0">
+        <button onClick={handleDismiss} className="flex-shrink-0 text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]">
           <X className="w-4 h-4" />
         </button>
       </div>

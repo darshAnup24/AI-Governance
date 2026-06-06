@@ -1,5 +1,5 @@
 """
-Pattern-aware text chunker for ShieldAI detection pipeline.
+Pattern-aware text chunker for Airlock detection pipeline.
 =============================================================
 Fixes the sliding-window bisection problem: a fixed 100-char overlap cannot
 guarantee that a 64-char AWS key or a 500-char JWT is fully visible in at least

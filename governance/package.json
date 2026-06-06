@@ -1,7 +1,7 @@
 {
-    "name": "shieldai-governance",
+    "name": "airlock-governance",
     "version": "0.1.0",
-    "description": "ShieldAI Governance Backend — Node.js + Express + TypeScript + Prisma",
+    "description": "Airlock Governance Backend — Node.js + Express + TypeScript + Prisma",
     "main": "dist/index.js",
     "scripts": {
         "dev": "tsx watch src/index.ts",
@@ -11,15 +11,20 @@
         "db:push": "prisma db push",
         "db:migrate": "prisma migrate dev",
         "db:seed": "tsx prisma/seed.ts",
-        "db:studio": "prisma studio"
+        "db:seed:demo": "tsx prisma/seedDemoData.ts",
+        "db:studio": "prisma studio",
+        "worker": "tsx src/worker/enrichmentWorker.ts",
+        "worker:workflow": "tsx src/worker/workflowWorker.ts"
     },
     "dependencies": {
         "@prisma/client": "^5.22.0",
+        "argon2": "^0.41.1",
         "bcryptjs": "^2.4.3",
         "cors": "^2.8.5",
         "express": "^4.21.1",
         "express-rate-limit": "^7.4.1",
         "helmet": "^8.0.0",
+        "ioredis": "^5.11.0",
         "jsonwebtoken": "^9.0.2",
         "pdfkit": "^0.15.1",
         "uuid": "^10.0.0",

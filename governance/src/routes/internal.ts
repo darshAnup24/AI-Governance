@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { prisma } from "../index";
+import { serviceRegistry } from "../platform/serviceRegistry";
 
 export const internalRouter = Router();
 
@@ -26,11 +26,28 @@ internalRouter.get("/policies", serviceAuth, async (req: Request, res: Response)
             res.status(400).json({ error: "org_id query param required" });
             return;
         }
-        const policies = await prisma.policyRule.findMany({
-            where: { orgId, enabled: true },
-            orderBy: { priority: "asc" },
-        });
+        const policies = await serviceRegistry.policies.listForInternalFetch(orgId);
         res.json(policies);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+internalRouter.get("/services", serviceAuth, (_req: Request, res: Response) => {
+    res.json({
+        gateway: "governance",
+        services: serviceRegistry.describe(),
+    });
+});
+
+internalRouter.get("/workflow-jobs/:jobId", serviceAuth, async (req: Request, res: Response) => {
+    try {
+        const job = await serviceRegistry.reports.getJobStatus(req.params.jobId as string);
+        if (!job) {
+            res.status(404).json({ error: "Job not found" });
+            return;
+        }
+        res.json(job);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

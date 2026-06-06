@@ -3,6 +3,7 @@ import { Plus, Trash2, GripVertical, Play, ToggleLeft, ToggleRight, ChevronDown,
 import { usePolicies, useCreatePolicy, useUpdatePolicy, useDeletePolicy, useTogglePolicy } from '../../lib/hooks'
 import { SkeletonTable } from '../../components/Skeletons'
 import { InlineError } from '../../components/ErrorBoundary'
+import { PageHeader, PageShell, StatusPill } from '../../components/ui/page-shell'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ const ACTIONS: Action[] = ['ALLOW', 'LOG', 'WARN', 'REDACT', 'BLOCK']
 
 const EMPTY_FORM: PolicyForm = {
   name: '',
-  action: 'WARN',
+  action: 'BLOCK',
   logic: 'AND',
   priority: 100,
   conditions: [],
@@ -80,7 +81,7 @@ function RuleBuilder({
     setForm({ ...form, conditions: form.conditions.map(c => (c.id === id ? { ...c, ...patch } : c)) })
 
   return (
-    <div className="card border border-brand-500/20 bg-brand-500/3 space-y-5">
+    <div className="card border border-[var(--accent)]/20 bg-[var(--accent)]/3 space-y-5">
       {/* Name + Priority */}
       <div className="flex gap-3">
         <input
@@ -91,7 +92,7 @@ function RuleBuilder({
           onChange={e => setForm({ ...form, name: e.target.value })}
         />
         <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-500 whitespace-nowrap">Priority</label>
+          <label className="text-xs text-[var(--muted-foreground)] whitespace-nowrap">Priority</label>
           <input
             type="number"
             className="input w-20 text-center"
@@ -107,18 +108,18 @@ function RuleBuilder({
       <div>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-300">IF</span>
+            <span className="text-sm font-medium text-[var(--foreground)]">IF</span>
             <button
               onClick={() => setForm({ ...form, logic: form.logic === 'AND' ? 'OR' : 'AND' })}
               className={`px-2.5 py-0.5 rounded text-xs font-bold border transition-colors ${
                 form.logic === 'AND'
-                  ? 'bg-brand-500/20 text-brand-400 border-brand-500/40'
+                  ? 'bg-[var(--accent)]/20 text-[var(--accent)] border-[var(--accent)]/40'
                   : 'bg-purple-500/20 text-purple-400 border-purple-500/40'
               }`}
             >
               {form.logic}
             </button>
-            <span className="text-xs text-slate-500">of these conditions match:</span>
+            <span className="text-xs text-[var(--muted-foreground)]">of these conditions match:</span>
           </div>
           <button onClick={addCondition} className="btn-secondary text-xs flex items-center gap-1 py-1.5 px-3">
             <Plus className="w-3.5 h-3.5" /> Add Condition
@@ -126,10 +127,10 @@ function RuleBuilder({
         </div>
 
         {form.conditions.length === 0 && (
-          <div className="text-center py-8 text-slate-600 text-sm border border-dashed border-slate-700 rounded-lg">
+          <div className="text-center py-8 text-[var(--muted-foreground)]/70 text-sm border border-dashed border-[var(--border)] rounded-lg">
             No conditions yet — this policy will match ALL requests.
             <br />
-            <button onClick={addCondition} className="text-brand-400 hover:underline mt-1 text-xs">
+            <button onClick={addCondition} className="text-[var(--accent)] hover:underline mt-1 text-xs">
               Add your first condition →
             </button>
           </div>
@@ -137,14 +138,14 @@ function RuleBuilder({
 
         <div className="space-y-2">
           {form.conditions.map((cond, idx) => (
-            <div key={cond.id} className="flex items-center gap-2 p-2 rounded-lg bg-slate-800/60 group">
-              <GripVertical className="w-4 h-4 text-slate-700 cursor-grab flex-shrink-0" />
+            <div key={cond.id} className="flex items-center gap-2 p-2 rounded-lg bg-[var(--muted)]/60 group">
+              <GripVertical className="w-4 h-4 text-[var(--muted-foreground)]/40 cursor-grab flex-shrink-0" />
               {idx > 0 && (
-                <span className="text-[10px] text-slate-500 font-bold w-6 text-center flex-shrink-0">
+                <span className="text-[10px] text-[var(--muted-foreground)] font-bold w-6 text-center flex-shrink-0">
                   {form.logic}
                 </span>
               )}
-              {idx === 0 && <span className="text-[10px] text-slate-500 w-6 text-center flex-shrink-0">IF</span>}
+              {idx === 0 && <span className="text-[10px] text-[var(--muted-foreground)] w-6 text-center flex-shrink-0">IF</span>}
               <select
                 className="input text-xs py-1.5 flex-shrink-0"
                 value={cond.field}
@@ -165,7 +166,7 @@ function RuleBuilder({
                 onChange={e => updateCondition(cond.id, { value: e.target.value })}
                 placeholder="value"
               />
-              <button onClick={() => removeCondition(cond.id)} className="text-slate-700 hover:text-red-400 transition-colors flex-shrink-0">
+              <button onClick={() => removeCondition(cond.id)} className="text-[var(--muted-foreground)]/40 hover:text-red-400 transition-colors flex-shrink-0">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
@@ -174,22 +175,27 @@ function RuleBuilder({
       </div>
 
       {/* Action + Save */}
-      <div className="flex items-center justify-between gap-4 pt-2 border-t border-slate-800">
+      <div className="flex items-center justify-between gap-4 pt-2 border-t border-[var(--border)]">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-slate-300">THEN</span>
-          <div className="flex gap-1.5">
+          <span className="text-sm font-medium text-[var(--foreground)]">THEN</span>
+          <div className="flex gap-1.5 flex-wrap">
             {ACTIONS.map(a => (
               <button
                 key={a}
                 onClick={() => setForm({ ...form, action: a })}
                 className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                  form.action === a ? ACTION_COLORS[a] : 'bg-transparent text-slate-600 border-slate-700 hover:border-slate-600'
+                  form.action === a ? ACTION_COLORS[a] : 'bg-transparent text-[var(--muted-foreground)]/70 border-[var(--border)] hover:border-[var(--accent)]/30'
                 }`}
               >
                 {a}
               </button>
             ))}
           </div>
+          {(form.action === 'WARN' || form.action === 'LOG' || form.action === 'ALLOW') && (
+            <span className="text-[10px] text-yellow-500/70 flex items-center gap-1">
+              ⚠ Does not block — only BLOCK and REDACT stop the request
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={onCancel} className="btn-secondary text-sm py-1.5 px-4">Cancel</button>
@@ -216,38 +222,38 @@ function PolicyRow({ policy, onEdit }: { policy: any; onEdit: (p: any) => void }
   const toggleMutation = useTogglePolicy()
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden hover:border-slate-700 transition-colors">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--background)]/50 overflow-hidden hover:border-[var(--border)] transition-colors">
       <div className="flex items-center gap-3 p-3.5">
         <button
           onClick={() => toggleMutation.mutate({ id: policy.id, enabled: !policy.enabled })}
-          className={`flex-shrink-0 transition-colors ${policy.enabled ? 'text-brand-400' : 'text-slate-700'}`}
+          className={`flex-shrink-0 transition-colors ${policy.enabled ? 'text-[var(--accent)]' : 'text-[var(--muted-foreground)]/40'}`}
         >
           {policy.enabled ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
         </button>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-sm font-medium ${policy.enabled ? 'text-slate-200' : 'text-slate-500'}`}>
+            <span className={`text-sm font-medium ${policy.enabled ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}`}>
               {policy.name}
             </span>
             <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${ACTION_COLORS[policy.action as Action]}`}>
               {policy.action}
             </span>
-            <span className="text-xs text-slate-600">priority {policy.priority}</span>
-            <span className="text-xs text-slate-600">{policy.conditions?.length ?? 0} condition{policy.conditions?.length !== 1 ? 's' : ''}</span>
+            <span className="text-xs text-[var(--muted-foreground)]/70">priority {policy.priority}</span>
+            <span className="text-xs text-[var(--muted-foreground)]/70">{policy.conditions?.length ?? 0} condition{policy.conditions?.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button onClick={() => setExpanded(!expanded)} className="text-slate-600 hover:text-slate-400 p-1">
+          <button onClick={() => setExpanded(!expanded)} className="text-[var(--muted-foreground)]/70 hover:text-[var(--muted-foreground)] p-1">
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
-          <button onClick={() => onEdit(policy)} className="text-slate-600 hover:text-brand-400 p-1 transition-colors">
+          <button onClick={() => onEdit(policy)} className="text-[var(--muted-foreground)]/70 hover:text-[var(--accent)] p-1 transition-colors">
             <Play className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => { if (confirm(`Delete "${policy.name}"?`)) deleteMutation.mutate(policy.id) }}
-            className="text-slate-600 hover:text-red-400 p-1 transition-colors"
+            className="text-[var(--muted-foreground)]/70 hover:text-red-400 p-1 transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -256,18 +262,18 @@ function PolicyRow({ policy, onEdit }: { policy: any; onEdit: (p: any) => void }
 
       {/* Expanded condition view */}
       {expanded && policy.conditions?.length > 0 && (
-        <div className="px-4 pb-3 border-t border-slate-800 pt-3 space-y-1.5">
+        <div className="px-4 pb-3 border-t border-[var(--border)] pt-3 space-y-1.5">
           {policy.conditions.map((c: Condition, idx: number) => (
-            <div key={c.id || idx} className="flex items-center gap-2 text-xs text-slate-400 font-mono">
+            <div key={c.id || idx} className="flex items-center gap-2 text-xs text-[var(--muted-foreground)] font-mono">
               {idx > 0 && <span className="text-brand-500 font-bold">{policy.logic}</span>}
-              {idx === 0 && <span className="text-slate-600">IF</span>}
-              <span className="text-slate-300">{c.field}</span>
-              <span className="text-slate-600">{OPERATORS.find(o => o.value === c.operator)?.label ?? c.operator}</span>
-              <span className="text-brand-400">"{c.value}"</span>
+              {idx === 0 && <span className="text-[var(--muted-foreground)]/70">IF</span>}
+              <span className="text-[var(--foreground)]">{c.field}</span>
+              <span className="text-[var(--muted-foreground)]/70">{OPERATORS.find(o => o.value === c.operator)?.label ?? c.operator}</span>
+              <span className="text-[var(--accent)]">"{c.value}"</span>
             </div>
           ))}
-          <div className="flex items-center gap-2 text-xs text-slate-400 font-mono pt-1">
-            <span className="text-slate-600">THEN</span>
+          <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)] font-mono pt-1">
+            <span className="text-[var(--muted-foreground)]/70">THEN</span>
             <span className={`font-bold ${ACTION_COLORS[policy.action as Action].split(' ')[1]}`}>{policy.action}</span>
           </div>
         </div>
@@ -320,24 +326,18 @@ export default function PoliciesPage() {
   const saving = createMutation.isPending || updateMutation.isPending
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100">Policy Builder</h1>
-          <p className="text-slate-500 text-sm mt-0.5">
-            Visual rule builder — IF [condition] THEN [action]
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-semibold text-emerald-400">LIVE</span>
-          </div>
+    <PageShell>
+      <PageHeader
+        badge="Policy Orchestration"
+        title="Policy Builder"
+        description="Design, prioritize, and activate policy rules using the same visual grammar used across governance and monitoring surfaces."
+        status={<StatusPill label="Live Rules" tone="live" pulse />}
+        actions={
           <button id="new-policy-btn" onClick={handleNew} className="btn-primary flex items-center gap-2">
             <Plus className="w-4 h-4" /> New Policy
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {isError && <InlineError message="Using cached policy data — governance service may be offline." onRetry={() => refetch()} />}
 
@@ -356,9 +356,9 @@ export default function PoliciesPage() {
       ) : (
         <div className="space-y-2">
           {(policies ?? []).length === 0 && !showBuilder && (
-            <div className="card text-center py-12 text-slate-500">
+            <div className="card text-center py-12 text-[var(--muted-foreground)]">
               No policies yet.{' '}
-              <button onClick={handleNew} className="text-brand-400 hover:underline">Create your first policy →</button>
+              <button onClick={handleNew} className="text-[var(--accent)] hover:underline">Create your first policy →</button>
             </div>
           )}
           {(policies ?? []).map((p: any) => (
@@ -366,6 +366,6 @@ export default function PoliciesPage() {
           ))}
         </div>
       )}
-    </div>
+    </PageShell>
   )
 }

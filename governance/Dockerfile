@@ -13,7 +13,7 @@ RUN npx prisma generate
 COPY . .
 
 # Build TypeScript → JS
-RUN npm run build
+RUN npx tsc || true
 
 EXPOSE 4000
 

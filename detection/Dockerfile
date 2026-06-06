@@ -14,6 +14,9 @@ RUN poetry config virtualenvs.create false && \
     poetry install --no-interaction --no-ansi --only main 2>/dev/null || \
     poetry install --no-interaction --no-ansi
 
+# Install dns-sinkhole optional dependency
+RUN pip install --no-cache-dir dnslib
+
 # Download spaCy model required by NER detector
 RUN python -m spacy download en_core_web_sm
 

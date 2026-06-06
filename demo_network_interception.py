@@ -6,12 +6,14 @@ print("\n" + "="*50)
 print("🛡️  SIMULATING CORPORATE NETWORK / DNS INTERCEPTION")
 print("="*50)
 
+
 # -------------------------------------------------------------------------
 # 1. THE SIMULATION: 
 # This class acts exactly like a Corporate DNS server / VPN.
 # When the employee's computer tries to lookup 'api.openai.com', 
 # the network secretly routes it to the AI Governance Proxy (127.0.0.1:8000).
 # -------------------------------------------------------------------------
+
 class CorporateNetworkInterceptor(httpx.HTTPTransport):
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         # If traffic is heading to OpenAI, hijack it!

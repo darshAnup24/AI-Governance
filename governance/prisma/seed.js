@@ -7,14 +7,14 @@ const client_1 = require("@prisma/client");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const prisma = new client_1.PrismaClient();
 async function main() {
-    console.log("🌱 Seeding ShieldAI database...\n");
+    console.log("🌱 Seeding Airlock database...\n");
     // ─── Organization ─────────────────────────────────────────
     const org = await prisma.organization.upsert({
         where: { name: "Acme Corp" },
         update: {},
         create: {
             name: "Acme Corp",
-            plan: "PRO",
+            plan: "BUSINESS",
             settings: {
                 industry: "Technology",
                 region: "EU",
@@ -24,7 +24,7 @@ async function main() {
     });
     console.log(`✅ Organization: ${org.name} (${org.plan})`);
     // ─── Users ─────────────────────────────────────────────────
-    const passwordHash = await bcryptjs_1.default.hash("ShieldAI123!", 12);
+    const passwordHash = await bcryptjs_1.default.hash("Airlock123!", 12);
     const users = [
         { email: "admin@acme.com", name: "Alice Admin", role: "ADMIN" },
         { email: "manager@acme.com", name: "Mike Manager", role: "MANAGER" },
@@ -179,7 +179,7 @@ async function main() {
         await prisma.dataset.create({ data: { ...d, orgId: org.id } });
     }
     console.log(`✅ Datasets: ${datasets.length}`);
-    console.log("\n🎉 Seed complete! Login with: admin@acme.com / ShieldAI123!");
+    console.log("\n🎉 Seed complete! Login with: admin@acme.com / Airlock123!");
 }
 main()
     .then(() => prisma.$disconnect())

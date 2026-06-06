@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# ShieldAI ML Pipeline Runner
+# Airlock ML Pipeline Runner
 # ============================================================
 # Usage:
 #   ./detection/ml/run_pipeline.sh           — full pipeline
@@ -27,7 +27,7 @@ else
 fi
 
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║        ShieldAI ML Pipeline                         ║"
+echo "║        Airlock ML Pipeline                         ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
 echo "  Python: $PYTHON"

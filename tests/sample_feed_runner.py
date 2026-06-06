@@ -1,5 +1,5 @@
 """
-ShieldAI Sample Feed Runner
+Airlock Sample Feed Runner
 ============================
 Systematically feeds realistic samples through the Tier-0 preprocessor and
 Tier-1 regex detector, reports pass/fail per case, and writes a gap summary
@@ -336,7 +336,7 @@ def main():
 
     lines = []
     lines.append("=" * 72)
-    lines.append(f"  ShieldAI Sample Feed Report  —  {len(results)} cases")
+    lines.append(f"  Airlock Sample Feed Report  —  {len(results)} cases")
     lines.append(f"  PASSED: {len(passed)}   FAILED: {len(failed)}")
     lines.append("=" * 72)
 

@@ -2,14 +2,14 @@
 Sprint 4 — Active DNS Sinkhole for Shadow AI
 =============================================
 Unlike VerifyWise (which just logs shadow AI events from DNS logs),
-ShieldAI actively intercepts DNS queries for unauthorized AI domains and
-redirects them through the ShieldAI proxy — transparently wrapping usage
+Airlock actively intercepts DNS queries for unauthorized AI domains and
+redirects them through the Airlock proxy — transparently wrapping usage
 in corporate governance policies WITHOUT requiring browser extensions.
 
 Architecture:
   - Runs a lightweight DNS server (dnslib) on UDP port 5353 (internally)
   - Authoritative only for AI tool domains listed in ai_domains.yaml
-  - For unauthorized domains: returns the ShieldAI proxy IP
+  - For unauthorized domains: returns the Airlock proxy IP
   - For authorized domains: forwards to upstream DNS (pass-through)
   - Every sinkholed query generates a ShadowAI alert pushed to the proxy
 
@@ -21,7 +21,7 @@ How it integrates:
 Configuration (env vars):
   DNS_UPSTREAM          Upstream DNS resolver (default: 8.8.8.8)
   DNS_PORT              Port to listen on (default: 5353)
-  DNS_SINKHOLE_IP       IP to return for sinkholed domains (ShieldAI proxy IP)
+  DNS_SINKHOLE_IP       IP to return for sinkholed domains (Airlock proxy IP)
   PROXY_ALERT_URL       URL to POST shadow AI alerts to (default: http://proxy:8000)
   SINKHOLE_PASSTHROUGH  Set to "true" to disable blocking and only log (safe mode)
 """
@@ -127,7 +127,7 @@ class DNSSinkholeProtocol(asyncio.DatagramProtocol):
                 asyncio.create_task(_post_shadow_alert(qname, client_ip, tool, cat))
 
                 if not PASSTHROUGH_MODE:
-                    # Return ShieldAI proxy IP — traffic goes through governance
+                    # Return Airlock proxy IP — traffic goes through governance
                     import dnslib
                     reply.add_answer(
                         dnslib.RR(

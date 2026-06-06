@@ -1,10 +1,14 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../index";
+import { publishEnrichmentJob } from "../engine/redisEnrichment";
 
 export const vendorsRouter = Router();
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://ollama:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.1:8b";
+
+function getModel(): string {
+  return process.env.PRIMARY_ADVISOR_MODEL || "llama3.2:3b";
+}
 
 // GET /api/vendors
 vendorsRouter.get("/", async (req: Request, res: Response) => {
@@ -52,7 +56,7 @@ vendorsRouter.put("/:id", async (req: Request, res: Response) => {
     }
 });
 
-// POST /api/vendors/:id/assess — Ollama vendor risk assessment
+// POST /api/vendors/:id/assess — Async vendor risk assessment via enrichment queue
 vendorsRouter.post("/:id/assess", async (req: Request, res: Response) => {
     try {
         const vendor = await prisma.vendor.findFirst({
@@ -63,38 +67,14 @@ vendorsRouter.post("/:id/assess", async (req: Request, res: Response) => {
             return;
         }
 
-        const prompt = `You are an AI vendor risk analyst. Assess the following AI vendor:
-Name: ${vendor.name}
-Services: ${JSON.stringify(vendor.services)}
-Current Risk Level: ${vendor.riskLevel}
+        const jobId = await publishEnrichmentJob("vendor_assessment", {
+            vendorId: vendor.id,
+            vendorName: vendor.name,
+            services: vendor.services,
+            riskLevel: vendor.riskLevel,
+        }, req.user!.orgId);
 
-Provide:
-1. Risk score (0-100)
-2. Key risk factors
-3. Mitigation recommendations
-4. Contractual safeguards needed
-5. Data handling concerns`;
-
-        const ollamaRes = await fetch(`${OLLAMA_URL}/api/generate`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false }),
-        });
-
-        if (!ollamaRes.ok) {
-            res.status(502).json({ error: "Ollama unavailable" });
-            return;
-        }
-
-        const result = (await ollamaRes.json()) as any;
-
-        // Update vendor with assessment
-        await prisma.vendor.update({
-            where: { id: vendor.id },
-            data: { assessmentScore: 65, lastAssessed: new Date() },
-        });
-
-        res.json({ assessment: result.response, model: OLLAMA_MODEL });
+        res.status(202).json({ jobId, status: "queued" });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

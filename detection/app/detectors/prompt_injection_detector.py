@@ -23,7 +23,7 @@ class PromptInjectionDetector:
 
     # System prompt override attempts
     SYSTEM_OVERRIDE: ClassVar[list[tuple[re.Pattern[str], float]]] = [
-        (re.compile(r"\b(?:ignore|disregard|forget|override|bypass)\s+(?:all\s+)?(?:previous|prior|above|earlier|your)\s+(?:instructions?|prompts?|rules?|guidelines?|constraints?)\b", re.I), 0.95),
+        (re.compile(r"\b(?:ignore|disregard|forget|override|bypass)\s+(?:all\s+)?(?:(?:previous|prior|above|earlier|your)\s+)?(?:instructions?|prompts?|rules?|guidelines?|constraints?)\b", re.I), 0.95),
         (re.compile(r"\b(?:do not|don't)\s+follow\s+(?:your|the|any)\s+(?:instructions?|rules?|guidelines?|system prompt)\b", re.I), 0.95),
         (re.compile(r"\b(?:new instructions?|updated instructions?|revised instructions?)\s*[:]\s", re.I), 0.90),
         (re.compile(r"\b(?:system\s*:\s*|<\|?system\|?>|<<SYS>>|\[INST\])", re.I), 0.92),

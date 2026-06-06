@@ -1,5 +1,5 @@
 """
-ShieldAI Accuracy & Performance Evaluation Harness
+Airlock Accuracy & Performance Evaluation Harness
 ==================================================
 Runs the full detection pipeline (all available detectors) over the labeled
 sample feed and reports classification metrics:
@@ -316,7 +316,7 @@ def print_report(
 
     print()
     print("═" * 78)
-    print("  ShieldAI Detection Pipeline — Accuracy & Performance Evaluation")
+    print("  Airlock Detection Pipeline — Accuracy & Performance Evaluation")
     print(f"  Cases: {len(results)} • Detectors: {', '.join(detector_names)}")
     print("═" * 78)
 

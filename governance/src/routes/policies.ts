@@ -1,15 +1,12 @@
 import { Router, Request, Response } from "express";
-import { prisma } from "../index";
+import { serviceRegistry } from "../platform/serviceRegistry";
 
 export const policiesRouter = Router();
 
 // GET /api/policies
 policiesRouter.get("/", async (req: Request, res: Response) => {
     try {
-        const policies = await prisma.policyRule.findMany({
-            where: { orgId: req.user!.orgId },
-            orderBy: { createdAt: "desc" },
-        });
+        const policies = await serviceRegistry.policies.listForOrg(req.user!.orgId);
         res.json(policies);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -27,21 +24,47 @@ policiesRouter.post("/", async (req: Request, res: Response) => {
         const priority = req.body.priority || 100;
         const enabled = req.body.enabled !== undefined ? req.body.enabled : true;
 
-        const policy = await prisma.policyRule.create({
-            data: {
-                orgId: req.user!.orgId,
-                name,
-                description,
-                conditions,
-                action,
-                priority,
-                enabled,
-            },
+        const policy = await serviceRegistry.policies.createPolicy({
+            orgId: req.user!.orgId,
+            workspaceId: req.workspaceId || null,
+            environmentId: req.environmentId || null,
+            name,
+            description,
+            conditions,
+            action,
+            priority,
+            enabled,
+            actorUserId: req.user!.userId,
         });
         res.json(policy);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
+});
+
+// POST /api/policies/bulk — Create multiple policies from templates
+policiesRouter.post('/bulk', async (req: Request, res: Response) => {
+    try {
+        const { policies, workspaceId } = req.body;
+        if (!Array.isArray(policies) || policies.length === 0) {
+            res.status(400).json({ error: 'policies array is required' });
+            return;
+        }
+
+        if (policies.length > 100) {
+            res.status(400).json({ error: 'Maximum 100 policies per batch' });
+            return;
+        }
+
+        const created = await serviceRegistry.policies.bulkCreate(
+            req.user!.orgId,
+            req.user!.userId,
+            policies,
+            workspaceId || null,
+        );
+
+        res.status(201).json({ created: created.count });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // PUT /api/policies/:id
@@ -62,11 +85,11 @@ policiesRouter.put("/:id", async (req: Request, res: Response) => {
         if (priority !== undefined) data.priority = priority;
         if (enabled !== undefined) data.enabled = enabled;
 
-        await prisma.policyRule.updateMany({
-            where: { id: req.params.id as string, orgId: req.user!.orgId },
+        const updated = await serviceRegistry.policies.updatePolicy(
+            req.params.id as string,
+            req.user!.orgId,
             data,
-        });
-        const updated = await prisma.policyRule.findFirst({ where: { id: req.params.id as string } });
+        );
         res.json(updated);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -76,10 +99,11 @@ policiesRouter.put("/:id", async (req: Request, res: Response) => {
 // DELETE /api/policies/:id
 policiesRouter.delete("/:id", async (req: Request, res: Response) => {
     try {
-        await prisma.policyRule.deleteMany({
-            where: { id: req.params.id as string, orgId: req.user!.orgId },
-        });
-        res.json({ deleted: true });
+        const result = await serviceRegistry.policies.deletePolicy(
+            req.params.id as string,
+            req.user!.orgId,
+        );
+        res.json(result);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

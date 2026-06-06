@@ -22,7 +22,7 @@ export function SkeletonTable({ rows = 5 }: { rows?: number }) {
   return (
     <div className="space-y-2">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/30">
+        <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-[var(--muted)]/30">
           <SkeletonBlock className="h-4 w-20" />
           <SkeletonBlock className="h-4 flex-1" />
           <SkeletonBlock className="h-4 w-16" />

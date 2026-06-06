@@ -1,4 +1,4 @@
-# ShieldAI Model Evaluation Report
+# Airlock Model Evaluation Report
 Generated at: 2026-04-19 13:08:03
 ## Test Set Metrics
 Categories: `SAFE` · `PII` · `CREDENTIALS` · `PROMPT_INJECTION` · `HALLUCINATION` · `BIAS` · `REGULATORY`

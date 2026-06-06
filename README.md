@@ -352,8 +352,54 @@ AI-Governance/
 | **Cache** | Redis 7 |
 | **Infrastructure** | Docker, Docker Compose (dev), Nginx (reverse proxy) |
 | **LLM Providers** | OpenAI, Anthropic, Azure OpenAI, Ollama (local) |
+| **Error Format** | RFC7807 + ShieldAI structured diagnostics |
+| **SDK** | Python SDK (`shieldai-sdk`) with OpenAI-compatible API |
 
 ---
+
+## 🔍 ShieldAI Rich Error Feedback
+
+When ShieldAI blocks a request, it returns a structured RFC7807 error with full diagnostics:
+
+```json
+{
+  "type": "https://shieldai.dev/errors/SECRET_DETECTED",
+  "title": "API Key or Secret Detected",
+  "status": 403,
+  "detail": "An API key or secret was detected.",
+  "trace_id": "req_abc123",
+  "risk_score": 97,
+  "shieldai": {
+    "code": "SECRET_DETECTED",
+    "category": "API_KEY",
+    "tier": "tier_1_regex",
+    "confidence": 0.97,
+    "span": {"start": 45, "end": 65, "type": "API_KEY",
+             "matched_text": "AKIA****EXAMPLE", "context": "...", "checksum_valid": true},
+    "policy": {"rule_id": "rule_001", "rule_name": "Block AWS Keys",
+               "action": "BLOCK", "priority": 1, "matched_condition": "..."},
+    "remediation": {"suggestion": "Remove the key. Use env vars instead.",
+                    "docs_url": "https://shieldai.dev/docs/remediation/secrets",
+                    "similar_safe_examples": ["How do I configure AWS SDK?"]},
+    "detection_breakdown": {
+      "tier_1_regex": {"score": 0.97, "action": "BLOCK", "matched": true, "latency_ms": 0.5},
+      "tier_2_ner": {"score": 0.0, "action": "ALLOW", "matched": false, "latency_ms": 15.2},
+      "tier_3_ml": {"score": 0.12, "action": "ALLOW", "matched": false, "latency_ms": 25.1}
+    }
+  }
+}
+```
+
+**Features:**
+- **13 error codes** — machine-readable codes per detection category
+- **4-tier breakdown** — per-detector confidence, action, latency
+- **Span diagnostics** — redacted matched text with position, context
+- **Policy attribution** — which rule matched, matched condition
+- **Remediation guidance** — category-specific fix suggestions + docs links
+- **Safe mode** — production-safe with redacted spans, no breakdown
+- **Verbose mode** — full diagnostics for development debugging
+
+See [docs/error-system.md](docs/error-system.md) for full documentation. The Python SDK `shieldai-sdk` is in [`sdk/`](sdk/).
 
 ## 📄 License
 

@@ -1,5 +1,5 @@
 """
-ShieldAI Model Evaluation
+Airlock Model Evaluation
 ==========================
 Evaluates trained models on the held-out test set.
 
@@ -122,7 +122,7 @@ def plot_confusion_matrices(y_true, y_pred_bin, prefix: str = "eval") -> None:
         if len(ALL_CATS) < len(axes):
             axes[-1].set_visible(False)
 
-        plt.suptitle(f"ShieldAI {prefix} — Confusion Matrices (Test Set)", fontsize=14, fontweight="bold")
+        plt.suptitle(f"Airlock {prefix} — Confusion Matrices (Test Set)", fontsize=14, fontweight="bold")
         plt.tight_layout()
         out = EVAL_DIR / f"{prefix}_confusion_matrices.png"
         plt.savefig(out, dpi=150, bbox_inches="tight")
@@ -154,7 +154,7 @@ def plot_f1_bar(metrics: dict, prefix: str = "eval") -> None:
         ax.axhline(0.8, color="#6366f1", linestyle="--", linewidth=1, label="Target F1=0.80")
         ax.set_ylim(0, 1.1)
         ax.set_ylabel("F1 Score", fontsize=11)
-        ax.set_title(f"ShieldAI {prefix} — F1 per Category (Test Set)", fontsize=13, fontweight="bold")
+        ax.set_title(f"Airlock {prefix} — F1 per Category (Test Set)", fontsize=13, fontweight="bold")
         ax.legend(fontsize=9)
         plt.xticks(rotation=20, fontsize=9)
         plt.tight_layout()
@@ -190,7 +190,7 @@ def print_metrics_table(metrics: dict, model_name: str) -> None:
 def write_markdown_report(sklearn_metrics: dict | None, spacy_metrics: dict | None) -> None:
     """Write a human-readable markdown evaluation report."""
     lines = [
-        "# ShieldAI Model Evaluation Report\n",
+        "# Airlock Model Evaluation Report\n",
         f"Generated at: {time.strftime('%Y-%m-%d %H:%M:%S')}\n",
         "## Test Set Metrics\n",
         f"Categories: `{'` · `'.join(ALL_CATS)}`\n",
@@ -332,12 +332,12 @@ def evaluate_spacy(test: list[dict]) -> dict | None:
 
 def main() -> None:
     import argparse
-    parser = argparse.ArgumentParser(description="ShieldAI Model Evaluator")
+    parser = argparse.ArgumentParser(description="Airlock Model Evaluator")
     parser.add_argument("--model-type", choices=["spacy", "sklearn", "both"], default="both")
     args = parser.parse_args()
 
     print("╔══════════════════════════════════════════════════════╗")
-    print("║       ShieldAI Model Evaluator — v1.0               ║")
+    print("║       Airlock Model Evaluator — v1.0               ║")
     print("╚══════════════════════════════════════════════════════╝\n")
 
     test_path = PROC_DIR / "test.jsonl"

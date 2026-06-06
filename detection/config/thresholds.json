@@ -34,9 +34,10 @@
   },
   "PII": {
     "category": "PII",
-    "current_threshold": 0.61,
-    "previous_threshold": 0.53,
+    "current_threshold": 0.69,
+    "previous_threshold": 0.61,
     "adjustment_history": [
+      0.08,
       0.08,
       0.08
     ],
@@ -44,7 +45,7 @@
     "false_positive_rate": 0.0,
     "false_negative_rate": 0.0,
     "sample_count": 0,
-    "last_updated": "2026-05-14T14:15:23.676400"
+    "last_updated": "2026-06-03T02:00:00.644830"
   },
   "HALLUCINATION": {
     "category": "HALLUCINATION",

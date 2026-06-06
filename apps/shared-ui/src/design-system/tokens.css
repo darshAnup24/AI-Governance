@@ -1,0 +1,63 @@
+:root {
+  --background: #FAFAFA;
+  --foreground: #0F172A;
+  --muted: #F1F5F9;
+  --muted-foreground: #64748B;
+  --accent: #0052FF;
+  --accent-secondary: #4D7CFF;
+  --accent-foreground: #FFFFFF;
+  --border: #E2E8F0;
+  --card: #FFFFFF;
+  --ring: #0052FF;
+
+  --font-display: 'Calistoga', Georgia, serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+}
+
+/* Dot pattern texture for inverted sections */
+.bg-dot-pattern {
+  background-image: radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Gradient text utility */
+.gradient-text {
+  background: linear-gradient(to right, var(--accent), var(--accent-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Gradient border technique */
+.gradient-border {
+  border-radius: var(--radius-md);
+  background: linear-gradient(to right, var(--accent), var(--accent-secondary));
+  padding: 2px;
+}
+
+.gradient-border > * {
+  border-radius: calc(var(--radius-md) - 2px);
+  background: var(--card);
+}
+
+/* Gradient icon background */
+.gradient-icon-bg {
+  background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+}
+
+/* Ambient glow */
+.bg-radial-glow {
+  background: radial-gradient(ellipse at center, rgba(0,82,255,0.06), transparent 70%);
+}
+
+/* Custom scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}

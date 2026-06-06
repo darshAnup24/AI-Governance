@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     upstream_azure_openai_url: str = "https://your-resource.openai.azure.com"
     detection_service_url: str = "http://detection:8001"
     detection_timeout_ms: int = 5000
+    runtime_security_mode: str = "STANDARD"
+    stream_heartbeat_interval_ms: int = 5000
+    stream_replay_limit: int = 25
 
     # ─── Auth ─────────────────────────────────────────────
     jwks_url: str = "https://your-idp.com/.well-known/jwks.json"
@@ -49,10 +52,26 @@ class Settings(BaseSettings):
 
     # ─── Redis ────────────────────────────────────────────
     redis_url: str = "redis://redis:6379/0"
+    use_async_audit_pipeline: bool = True
+    audit_stream_key: str = "audit_events"
+    audit_retry_stream_key: str = "audit_events_retry"
+    audit_dead_letter_stream_key: str = "audit_events_dlq"
+    audit_consumer_group: str = "audit-writers"
+    audit_stream_maxlen: int = 100_000
+    audit_dead_letter_maxlen: int = 10_000
+    audit_retry_max_attempts: int = 3
+    audit_batch_size: int = 100
+    audit_poll_timeout_ms: int = 500
+    audit_claim_idle_ms: int = 30_000
+    audit_fallback_file: str = "/var/log/airlock/audit_fallback.jsonl"
 
-    # ─── Ollama ───────────────────────────────────────────
+    # ─── Ollama (lightweight, async-only) ───────────────────
     ollama_url: str = "http://ollama:11434"
-    ollama_model: str = "llama3.1:8b"
+    primary_advisor_model: str = "llama3.2:3b"
+    fallback_model: str = "tinyllama"
+    use_onnx_detection: bool = True
+    use_ollama_in_sync_path: bool = False
+    use_ollama_async_only: bool = True
 
     # ─── Rate Limits ──────────────────────────────────────
     rate_limit_user_rpm: int = 100

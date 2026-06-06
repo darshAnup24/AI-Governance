@@ -13,7 +13,7 @@ On first startup, the model is downloaded from HuggingFace and exported to ONNX.
 The exported model is cached to disk at ONNX_MODEL_PATH for subsequent runs.
 
 Environment variables:
-  ONNX_MODEL_PATH   Path to save/load the ONNX model (default: /tmp/shield_classifier.onnx)
+  ONNX_MODEL_PATH   Path to save/load the ONNX model (default: /tmp/airlock_classifier.onnx)
   ONNX_ENABLED      Set to "false" to fall back to old Llama classifier (default: true)
 """
 
@@ -29,14 +29,14 @@ import structlog
 
 log = structlog.get_logger()
 
-ONNX_MODEL_PATH = os.getenv("ONNX_MODEL_PATH", "/tmp/shield_classifier_finetuned.onnx")
+ONNX_MODEL_PATH = os.getenv("ONNX_MODEL_PATH", "/tmp/airlock_classifier_finetuned.onnx")
 ONNX_ENABLED    = os.getenv("ONNX_ENABLED", "true").lower() == "true"
 HF_MODEL_NAME   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../models/fine_tuned_distilbert")
 
 # TinyBERT ensemble (4M params, structural-validation head)
 # huawei-noah/TinyBERT_General_4L_312D — runs in ~5-8ms on CPU
 # Set TINYBERT_ENABLED=false to disable the ensemble.
-TINYBERT_ONNX_PATH = os.getenv("TINYBERT_ONNX_PATH", "/tmp/shield_tinybert.onnx")
+TINYBERT_ONNX_PATH = os.getenv("TINYBERT_ONNX_PATH", "/tmp/airlock_tinybert.onnx")
 TINYBERT_HF_NAME   = os.getenv("TINYBERT_HF_NAME",   "huawei-noah/TinyBERT_General_4L_312D")
 TINYBERT_ENABLED   = os.getenv("TINYBERT_ENABLED", "true").lower() == "true"
 
@@ -282,6 +282,33 @@ def _clean_noise(text: str) -> str:
     return text.strip()
 
 
+# ─── Heuristic detection regexes (module-level for performance) ───────────────
+# FIXED (BUG-011): Compiling these regexes inside _heuristic_score() on every
+# call caused repeated re.compile() overhead. Moved to module level.
+
+_DIRECT_FRAMING_RE = re.compile(
+    r'(?i)(?:pretend|ignore\s+(?:previous|above|prior|all)\s+(?:instructions?|prompts?|rules?)|'
+    r'act\s+as|roleplay|you\s+are\s+now|forget\s+(?:everything|your\s+training)|'
+    r'jailbreak|DAN\s+mode|developer\s+mode|unrestricted\s+mode)',
+)
+_INDIRECT_FRAMING_RE = re.compile(
+    r'(?i)(?:(?:this\s+is|just\s+a)\s+(?:fictional|hypothetical|educational|tutorial|example|test|demo)|'
+    r"i(?:'m|\s+am)\s+writing\s+a\s+(?:book|story|tutorial|guide|blog)|'"
+    r'(?:in\s+a\s+(?:story|novel|game|scenario|simulation))|'
+    r'for\s+(?:educational|research|academic|testing)\s+purposes|'
+    r'imagine\s+(?:if|that|you|a\s+world))',
+)
+_ESCALATION_RE = re.compile(
+    r'(?i)(?:override\s+(?:safety|policy|filter|restriction)|'
+    r'bypass\s+(?:content|safety|the)|'
+    r'ignore\s+(?:safety|guidelines|ethical)|'
+    r'must\s+comply|you\s+must\s+answer|no\s+restrictions)',
+)
+_SENSITIVE_KEYWORD_RE = re.compile(
+    r'(?i)(?:password|secret|api.key|private.key|credentials?|token|ssn|social.security)',
+)
+
+
 def _heuristic_score(text: str) -> float:
     """
     Manual heuristic rules that directly compensate for the ONNX model's two
@@ -311,39 +338,15 @@ def _heuristic_score(text: str) -> float:
     if re.search(r'gh[pso]_[a-zA-Z0-9]{36}', text):           # GitHub PAT
         score += 0.5
 
-    # ── Framing-attack detection ──────────────────────────────────────────────
-    # Direct framing: "pretend", "ignore", "act as", "roleplay"
-    _DIRECT_FRAMING = re.compile(
-        r'(?i)(?:pretend|ignore\s+(?:previous|above|prior|all)\s+(?:instructions?|prompts?|rules?)|'
-        r'act\s+as|roleplay|you\s+are\s+now|forget\s+(?:everything|your\s+training)|'
-        r'jailbreak|DAN\s+mode|developer\s+mode|unrestricted\s+mode)',
-    )
-    # Indirect / nested framing: tutorial, story, fiction wrappers
-    _INDIRECT_FRAMING = re.compile(
-        r'(?i)(?:(?:this\s+is|just\s+a)\s+(?:fictional|hypothetical|educational|tutorial|example|test|demo)|'
-        r"i(?:'m|\s+am)\s+writing\s+a\s+(?:book|story|tutorial|guide|blog)|'"
-        r'(?:in\s+a\s+(?:story|novel|game|scenario|simulation))|'
-        r'for\s+(?:educational|research|academic|testing)\s+purposes|'
-        r'imagine\s+(?:if|that|you|a\s+world))',
-    )
-    # Escalation signals: attempts to override safety
-    _ESCALATION = re.compile(
-        r'(?i)(?:override\s+(?:safety|policy|filter|restriction)|'
-        r'bypass\s+(?:content|safety|the)|'
-        r'ignore\s+(?:safety|guidelines|ethical)|'
-        r'must\s+comply|you\s+must\s+answer|no\s+restrictions)',
-    )
-
-    if _DIRECT_FRAMING.search(text):
+    # ── Framing-attack detection — use pre-compiled module-level regexes ──────
+    if _DIRECT_FRAMING_RE.search(text):
         score += 0.45
-    if _INDIRECT_FRAMING.search(text):
+    if _INDIRECT_FRAMING_RE.search(text):
         score += 0.25
-    if _ESCALATION.search(text):
+    if _ESCALATION_RE.search(text):
         score += 0.35
     # Compound: indirect framing + sensitive keyword → very likely an attack
-    if _INDIRECT_FRAMING.search(text) and re.search(
-        r'(?i)(?:password|secret|api.key|private.key|credentials?|token|ssn|social.security)', text
-    ):
+    if _INDIRECT_FRAMING_RE.search(text) and _SENSITIVE_KEYWORD_RE.search(text):
         score += 0.30  # extra boost for the combo
 
     return score

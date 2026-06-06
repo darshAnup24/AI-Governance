@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Search, X, ChevronLeft, ChevronRight, Flag, Download } from 'lucide-react'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts'
 import { useAuditEvents } from '../lib/hooks'
+import { PageHeader, PageShell, StatusPill, SurfaceSection } from '../components/ui/page-shell'
 
 interface Incident {
     id: string
@@ -27,7 +28,7 @@ function scoreColor(score: number): string {
     if (score >= 80) return 'text-red-400'
     if (score >= 60) return 'text-orange-400'
     if (score >= 30) return 'text-yellow-400'
-    return 'text-slate-400'
+    return 'text-[var(--muted-foreground)]'
 }
 
 export default function IncidentsPage() {
@@ -69,22 +70,19 @@ export default function IncidentsPage() {
     })
 
     return (
-        <div className="space-y-6 animate-fade-in">
-<div className="flex items-center justify-between">
-            <div>
-                <h1 className="text-2xl font-bold text-slate-100">Incidents</h1>
-                <p className="text-slate-500 mt-1">Explore flagged events and detection details</p>
-            </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs font-semibold text-emerald-400">LIVE</span>
-            </div>
-            </div>
+        <PageShell>
+            <PageHeader
+                badge="Incident Review"
+                title="Flagged events and detection details"
+                description="Review prompt-level enforcement signals with the same operational framing used throughout the platform."
+                status={<StatusPill label="Live Feed" tone="live" pulse />}
+            />
 
             {/* Filter bar */}
-            <div className="card flex flex-wrap gap-3 items-center">
+            <SurfaceSection className="toolbar">
+            <div className="flex flex-wrap gap-3 items-center">
                 <div className="relative flex-1 min-w-[200px]">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--muted-foreground)]" />
                     <input
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
@@ -99,6 +97,7 @@ export default function IncidentsPage() {
                     <option value="WARNED">Warned</option>
                 </select>
             </div>
+            </SurfaceSection>
 
             {isError && (
                 <div className="card border border-red-500/20 bg-red-500/5 text-sm text-red-300">
@@ -113,7 +112,7 @@ export default function IncidentsPage() {
             <div className="card overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead>
-                        <tr className="text-left text-slate-500 border-b border-slate-800">
+                        <tr className="text-left text-[var(--muted-foreground)] border-b border-[var(--border)]">
                             <th className="pb-3 font-medium">Timestamp</th>
                             <th className="pb-3 font-medium">User</th>
                             <th className="pb-3 font-medium">Dept</th>
@@ -127,21 +126,21 @@ export default function IncidentsPage() {
                         {!isPending && filtered.map((inc: Incident) => (
                             <tr
                                 key={inc.id}
-                                className="border-b border-slate-800/30 hover:bg-slate-800/20 cursor-pointer transition-colors"
+                                className="border-b border-[var(--border)]/30 hover:bg-[var(--muted)]/20 cursor-pointer transition-colors"
                                 onClick={() => setSelectedIncident(inc)}
                             >
-                                <td className="py-3 text-slate-400 font-mono text-xs">{inc.timestamp}</td>
-                                <td className="py-3 text-slate-200">{inc.user}</td>
-                                <td className="py-3 text-slate-400">{inc.department}</td>
+                                <td className="py-3 text-[var(--muted-foreground)] font-mono text-xs">{inc.timestamp}</td>
+                                <td className="py-3 text-[var(--foreground)]">{inc.user}</td>
+                                <td className="py-3 text-[var(--muted-foreground)]">{inc.department}</td>
                                 <td className="py-3 text-center">
                                     <span className={`font-bold tabular-nums ${scoreColor(inc.riskScore)}`}>{inc.riskScore}</span>
                                 </td>
-                                <td className="py-3 text-slate-200">{inc.category}</td>
+                                <td className="py-3 text-[var(--foreground)]">{inc.category}</td>
                                 <td className="py-3 text-center">
                                     <span className={actionBadge[inc.action]}>{inc.action}</span>
                                 </td>
                                 <td className="py-3 text-right">
-                                    <button className="text-brand-400 hover:text-brand-300 text-xs">View →</button>
+                                    <button className="text-[var(--accent)] hover:text-brand-300 text-xs">View →</button>
                                 </td>
                             </tr>
                         ))}
@@ -149,17 +148,17 @@ export default function IncidentsPage() {
                 </table>
 
                 {!isPending && filtered.length === 0 && (
-                    <div className="flex items-center justify-center py-12 text-slate-500">
+                    <div className="flex items-center justify-center py-12 text-[var(--muted-foreground)]">
                         <p>No incidents match your filters</p>
                     </div>
                 )}
 
                 {/* Pagination */}
-                <div className="flex items-center justify-between pt-4 border-t border-slate-800 mt-4">
-                    <span className="text-sm text-slate-500">{filtered.length} incidents</span>
+                <div className="flex items-center justify-between pt-4 border-t border-[var(--border)] mt-4">
+                    <span className="text-sm text-[var(--muted-foreground)]">{filtered.length} incidents</span>
                     <div className="flex items-center gap-2">
                         <button className="btn-secondary py-1.5 px-3 text-xs" disabled><ChevronLeft className="w-3 h-3" /></button>
-                        <span className="text-sm text-slate-400">Page 1</span>
+                        <span className="text-sm text-[var(--muted-foreground)]">Page 1</span>
                         <button className="btn-secondary py-1.5 px-3 text-xs"><ChevronRight className="w-3 h-3" /></button>
                     </div>
                 </div>
@@ -169,57 +168,57 @@ export default function IncidentsPage() {
             {selectedIncident && (
                 <>
                     <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setSelectedIncident(null)} />
-                    <div className="fixed top-0 right-0 h-full w-full max-w-lg bg-slate-900 border-l border-slate-800 z-50 overflow-y-auto animate-slide-right">
+                    <div className="fixed top-0 right-0 h-full w-full max-w-lg bg-[var(--background)] border-l border-[var(--border)] z-50 overflow-y-auto animate-slide-right">
                         <div className="p-6 space-y-6">
                             {/* Header */}
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <h3 className="text-lg font-semibold text-slate-100">Incident Details</h3>
-                                    <p className="text-xs text-slate-500 font-mono mt-1">#{selectedIncident.promptHash}</p>
+                                    <h3 className="text-lg font-semibold text-[var(--foreground)]">Incident Details</h3>
+                                    <p className="text-xs text-[var(--muted-foreground)] font-mono mt-1">#{selectedIncident.promptHash}</p>
                                 </div>
-                                <button onClick={() => setSelectedIncident(null)} className="text-slate-400 hover:text-slate-200">
+                                <button onClick={() => setSelectedIncident(null)} className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
 
                             {/* Summary */}
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-slate-800/50 rounded-lg p-3">
-                                    <p className="text-xs text-slate-500">Risk Score</p>
+                                <div className="bg-[var(--muted)]/50 rounded-lg p-3">
+                                    <p className="text-xs text-[var(--muted-foreground)]">Risk Score</p>
                                     <p className={`text-2xl font-bold ${scoreColor(selectedIncident.riskScore)}`}>{selectedIncident.riskScore}</p>
                                 </div>
-                                <div className="bg-slate-800/50 rounded-lg p-3">
-                                    <p className="text-xs text-slate-500">Action</p>
+                                <div className="bg-[var(--muted)]/50 rounded-lg p-3">
+                                    <p className="text-xs text-[var(--muted-foreground)]">Action</p>
                                     <p className="mt-1"><span className={actionBadge[selectedIncident.action]}>{selectedIncident.action}</span></p>
                                 </div>
-                                <div className="bg-slate-800/50 rounded-lg p-3">
-                                    <p className="text-xs text-slate-500">User</p>
-                                    <p className="text-sm text-slate-200 font-medium">{selectedIncident.user}</p>
+                                <div className="bg-[var(--muted)]/50 rounded-lg p-3">
+                                    <p className="text-xs text-[var(--muted-foreground)]">User</p>
+                                    <p className="text-sm text-[var(--foreground)] font-medium">{selectedIncident.user}</p>
                                 </div>
-                                <div className="bg-slate-800/50 rounded-lg p-3">
-                                    <p className="text-xs text-slate-500">Department</p>
-                                    <p className="text-sm text-slate-200 font-medium">{selectedIncident.department}</p>
+                                <div className="bg-[var(--muted)]/50 rounded-lg p-3">
+                                    <p className="text-xs text-[var(--muted-foreground)]">Department</p>
+                                    <p className="text-sm text-[var(--foreground)] font-medium">{selectedIncident.department}</p>
                                 </div>
                             </div>
 
                             {/* Detection Breakdown */}
                             <div>
-                                <h4 className="text-sm font-semibold text-slate-200 mb-3">Detection Breakdown</h4>
+                                <h4 className="text-sm font-semibold text-[var(--foreground)] mb-3">Detection Breakdown</h4>
                                 <div className="space-y-2">
                                     {selectedIncident.detections.map((d, i) => (
-                                        <div key={i} className="flex items-center justify-between bg-slate-800/30 rounded-lg px-4 py-3">
+                                        <div key={i} className="flex items-center justify-between bg-[var(--muted)]/30 rounded-lg px-4 py-3">
                                             <div>
-                                                <p className="text-sm text-slate-200 font-medium capitalize">{d.detector} Detector</p>
-                                                <p className="text-xs text-slate-500">{d.category}</p>
+                                                <p className="text-sm text-[var(--foreground)] font-medium capitalize">{d.detector} Detector</p>
+                                                <p className="text-xs text-[var(--muted-foreground)]">{d.category}</p>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <div className="w-20 h-2 bg-slate-700 rounded-full overflow-hidden">
+                                                <div className="w-20 h-2 bg-[var(--muted)] rounded-full overflow-hidden">
                                                     <div
                                                         className={`h-full rounded-full ${d.confidence >= 0.8 ? 'bg-red-500' : d.confidence >= 0.6 ? 'bg-orange-500' : 'bg-yellow-500'}`}
                                                         style={{ width: `${d.confidence * 100}%` }}
                                                     />
                                                 </div>
-                                                <span className="text-xs text-slate-400 tabular-nums w-10 text-right">{(d.confidence * 100).toFixed(0)}%</span>
+                                                <span className="text-xs text-[var(--muted-foreground)] tabular-nums w-10 text-right">{(d.confidence * 100).toFixed(0)}%</span>
                                             </div>
                                         </div>
                                     ))}
@@ -228,7 +227,7 @@ export default function IncidentsPage() {
 
                             {/* Radar Chart */}
                             <div>
-                                <h4 className="text-sm font-semibold text-slate-200 mb-3">Risk Profile</h4>
+                                <h4 className="text-sm font-semibold text-[var(--foreground)] mb-3">Risk Profile</h4>
                                 <ResponsiveContainer width="100%" height={200}>
                                     <RadarChart data={[
                                         { subject: 'API Keys', score: selectedIncident.detections.some(d => d.category === 'API_KEY') ? 90 : 10 },
@@ -257,6 +256,6 @@ export default function IncidentsPage() {
                     </div>
                 </>
             )}
-        </div>
+        </PageShell>
     )
 }

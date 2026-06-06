@@ -235,7 +235,7 @@ def fast_path_route(
     text_hash = hashlib.sha256(text.encode()).hexdigest()
     if cache is not None:
         try:
-            cached = cache.get(f"shield:verdict:{text_hash}")
+            cached = cache.get(f"airlock:verdict:{text_hash}")
             if cached:
                 verdict_str = cached.decode() if isinstance(cached, bytes) else str(cached)
                 v.update({
@@ -292,7 +292,7 @@ def length_defense(
     Cap text at *max_len* with verifiable, auditable truncation.
 
     When the text exceeds *max_len*, the middle is replaced by an explicit
-    ``[N_CHARS_SKIPPED_BY_SHIELD]`` marker so downstream scanners and auditors
+    ``[N_CHARS_SKIPPED_BY_AIRLOCK]`` marker so downstream scanners and auditors
     can distinguish truncated from non-truncated input and verify that no edge
     data was silently dropped.
 
@@ -319,7 +319,7 @@ def length_defense(
     first = text[:edge_len]
     last = text[-edge_len:]
     skipped = original_len - 2 * edge_len
-    middle_marker = f"[{skipped}_CHARS_SKIPPED_BY_SHIELD]"
+    middle_marker = f"[{skipped}_CHARS_SKIPPED_BY_AIRLOCK]"
 
     v.update({
         "truncated": True,

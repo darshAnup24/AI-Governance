@@ -1,5 +1,5 @@
 """
-ShieldAI ML Classifier — Detection Integration Layer
+Airlock ML Classifier — Detection Integration Layer
 =====================================================
 Loads trained sklearn + spaCy models and exposes a unified
 `MLClassifier.detect(text)` → DetectionResult interface that
@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import pickle
+import re
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -268,6 +269,10 @@ class MLClassifier:
 
     # ── Main detect() ─────────────────────────────────────────────────────────
 
+    # Role-prefix pattern added by proxy's extract_prompt_text — strip before ML inference
+    # e.g. "[user]: hi" → "hi", "[system]: You are..." → "You are..."
+    _ROLE_PREFIX_RE = re.compile(r"^\[(?:user|system|assistant)\]:\s*", re.IGNORECASE | re.MULTILINE)
+
     def detect(self, text: str) -> DetectionResult:
         """
         Run ML classification and return DetectionResult.
@@ -276,12 +281,28 @@ class MLClassifier:
         start = time.perf_counter()
         self._load_models()
 
+        # ── Guard 1: Strip role prefixes injected by proxy ──────────────────
+        # The proxy's extract_prompt_text() prepends "[user]: ", "[system]: " etc.
+        # These tokens confuse the spaCy textcat model, causing false positives.
+        clean_text = self._ROLE_PREFIX_RE.sub("", text).strip()
+
+        # ── Guard 2: Skip ML for very short prompts ──────────────────────────
+        # Texts under 20 chars (e.g. "hi", "ok", "hello") have no meaningful
+        # signal for ML classifiers — they return unreliable high-confidence scores.
+        if len(clean_text) < 20:
+            return DetectionResult(
+                detector_name="ml_classifier",
+                spans=[],
+                risk_score=0,
+                processing_time_ms=round((time.perf_counter() - start) * 1000, 2),
+            )
+
         sklearn_scores: dict[str, float] = {}
         spacy_scores: dict[str, float] = {}
 
         # Chunk once and share between both predictors — previously chunking
         # ran twice when both models were loaded.
-        chunks = smart_chunk(text) if (self._sklearn_loaded or self._spacy_loaded) else []
+        chunks = smart_chunk(clean_text) if (self._sklearn_loaded or self._spacy_loaded) else []
 
         if self._sklearn_loaded:
             sklearn_scores = self._sklearn_predict(chunks)
@@ -318,7 +339,7 @@ class MLClassifier:
             det_cat = CATEGORY_MAP.get(cat, DetectionCategory.CONFIDENTIAL)
             spans.append(DetectedSpan(
                 start=0,
-                end=len(text),
+                end=len(clean_text),
                 category=det_cat,
                 confidence=round(confidence, 4),
                 matched_text=f"[ML:{cat} {confidence:.0%}]",

@@ -4,6 +4,7 @@ import { useModels, useMutation, useQueryClient } from '../../lib/hooks'
 import govApi from '../../lib/govApi'
 import { SkeletonTable } from '../../components/Skeletons'
 import { InlineError } from '../../components/ErrorBoundary'
+import { PageHeader, PageShell, StatusPill, SurfaceSection } from '../../components/ui/page-shell'
 
 // ── Types ───────────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ const RISK_BAR: Record<string, string> = {
   MINIMAL: 'bg-emerald-500', LIMITED: 'bg-yellow-500', HIGH: 'bg-orange-500', UNACCEPTABLE: 'bg-red-500',
 }
 const STATUS_COLORS: Record<string, string> = {
-  ACTIVE: 'text-emerald-400', UNDER_REVIEW: 'text-yellow-400', DEPRECATED: 'text-slate-500',
+  ACTIVE: 'text-emerald-400', UNDER_REVIEW: 'text-yellow-400', DEPRECATED: 'text-[var(--muted-foreground)]',
 }
 
 
@@ -35,9 +36,9 @@ const STATUS_COLORS: Record<string, string> = {
 function ScoreBar({ score, riskLevel }: { score: number; riskLevel: string }) {
   return (
     <div className="flex items-center gap-2 w-32">
-      <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-[var(--muted)] rounded-full overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-500 ${RISK_BAR[riskLevel] || 'bg-slate-600'}`}
+          className={`h-full rounded-full transition-all duration-500 ${RISK_BAR[riskLevel] || 'bg-[var(--muted-foreground)]/50'}`}
           style={{ width: `${score}%` }}
         />
       </div>
@@ -67,20 +68,20 @@ function ModelRow({ model }: { model: AIModel }) {
 
   return (
     <>
-      <tr className="border-b border-slate-800/50 hover:bg-slate-800/20 transition-colors">
+      <tr className="border-b border-[var(--border)] hover:bg-[var(--muted)]/20 transition-colors">
         <td className="py-3 pl-1">
           <div className="flex items-center gap-2">
-            <button onClick={() => setExpanded(!expanded)} className="text-slate-600 hover:text-slate-400 transition-colors">
+            <button onClick={() => setExpanded(!expanded)} className="text-[var(--muted-foreground)]/70 hover:text-[var(--muted-foreground)] transition-colors">
               {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
             <div>
-              <span className="text-slate-200 font-medium text-sm">{model.name}</span>
-              <span className="text-xs text-slate-600 ml-2">v{model.version}</span>
+              <span className="text-[var(--foreground)] font-medium text-sm">{model.name}</span>
+              <span className="text-xs text-[var(--muted-foreground)]/70 ml-2">v{model.version}</span>
             </div>
           </div>
         </td>
-        <td className="py-3 text-slate-400 text-sm">{model.provider}</td>
-        <td className="py-3 text-slate-400 text-xs max-w-[180px] truncate">{model.purpose}</td>
+        <td className="py-3 text-[var(--muted-foreground)] text-sm">{model.provider}</td>
+        <td className="py-3 text-[var(--muted-foreground)] text-xs max-w-[180px] truncate">{model.purpose}</td>
         <td className="py-3">
           <span className={`px-2 py-0.5 rounded text-xs font-medium border ${RISK_COLORS[model.riskLevel] || ''}`}>
             {model.riskLevel}
@@ -90,7 +91,7 @@ function ModelRow({ model }: { model: AIModel }) {
           <ScoreBar score={score} riskLevel={model.riskLevel} />
         </td>
         <td className="py-3">
-          <span className={`text-xs font-medium ${STATUS_COLORS[model.status] || 'text-slate-400'}`}>
+          <span className={`text-xs font-medium ${STATUS_COLORS[model.status] || 'text-[var(--muted-foreground)]'}`}>
             {model.status.replace('_', ' ')}
           </span>
         </td>
@@ -108,7 +109,7 @@ function ModelRow({ model }: { model: AIModel }) {
             </button>
             <button
               onClick={() => { if (confirm(`Delete ${model.name}?`)) deleteMutation.mutate(model.id) }}
-              className="text-slate-600 hover:text-red-400 transition-colors"
+              className="text-[var(--muted-foreground)]/70 hover:text-red-400 transition-colors"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -118,19 +119,19 @@ function ModelRow({ model }: { model: AIModel }) {
 
       {/* Expanded detail */}
       {expanded && (
-        <tr className="border-b border-slate-800/30">
+        <tr className="border-b border-[var(--border)]">
           <td colSpan={7} className="pb-3 pt-1 px-6">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-3 rounded-lg bg-slate-800/30 text-xs">
-                <p className="text-slate-500 mb-1">Added</p>
-                <p className="text-slate-300">{new Date(model.createdAt).toLocaleDateString()}</p>
+              <div className="p-3 rounded-lg bg-[var(--muted)]/30 text-xs">
+                <p className="text-[var(--muted-foreground)] mb-1">Added</p>
+                <p className="text-[var(--foreground)]">{new Date(model.createdAt).toLocaleDateString()}</p>
               </div>
-              <div className="p-3 rounded-lg bg-slate-800/30 text-xs">
-                <p className="text-slate-500 mb-1">Risk Assessments</p>
-                <p className="text-slate-300">{model.riskAssessments?.length ?? 0} on record</p>
+              <div className="p-3 rounded-lg bg-[var(--muted)]/30 text-xs">
+                <p className="text-[var(--muted-foreground)] mb-1">Risk Assessments</p>
+                <p className="text-[var(--foreground)]">{model.riskAssessments?.length ?? 0} on record</p>
               </div>
-              <div className="p-3 rounded-lg bg-slate-800/30 text-xs">
-                <p className="text-slate-500 mb-1">Last Score</p>
+              <div className="p-3 rounded-lg bg-[var(--muted)]/30 text-xs">
+                <p className="text-[var(--muted-foreground)] mb-1">Last Score</p>
                 <p className={`font-bold ${score >= 70 ? 'text-red-400' : score >= 40 ? 'text-yellow-400' : 'text-emerald-400'}`}>
                   {score} / 100
                 </p>
@@ -177,25 +178,18 @@ export default function Models() {
   }))
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100">AI Model Registry</h1>
-          <p className="text-slate-500 text-sm mt-0.5">
-            {(models ?? []).length} models tracked · Manage and assess your AI inventory
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-semibold text-emerald-400">LIVE</span>
-          </div>
+    <PageShell>
+      <PageHeader
+        badge="Model Registry"
+        title="Track and assess your AI inventory"
+        description={`${(models ?? []).length} models tracked across providers, workspaces, and risk postures.`}
+        status={<StatusPill label="Registry Live" tone="live" pulse />}
+        actions={
           <button id="add-model-btn" onClick={() => setShowAdd(!showAdd)} className="btn-primary flex items-center gap-2">
             <Plus className="w-4 h-4" /> Add Model
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {isError && <InlineError message="Using cached model registry." onRetry={() => refetch()} />}
 
@@ -208,7 +202,7 @@ export default function Models() {
             className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
               filterRisk === level
                 ? RISK_COLORS[level]
-                : 'bg-transparent text-slate-500 border-slate-700 hover:border-slate-600'
+                : 'bg-transparent text-[var(--muted-foreground)] border-[var(--border)] hover:border-[var(--accent)]/30'
             }`}
           >
             <span>{level}</span>
@@ -220,7 +214,7 @@ export default function Models() {
           className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
             filterRisk === 'ALL'
               ? 'bg-brand-500/10 text-brand-400 border-brand-500/30'
-              : 'text-slate-500 border-slate-700 hover:border-slate-600'
+              : 'text-[var(--muted-foreground)] border-[var(--border)] hover:border-[var(--accent)]/30'
           }`}
         >
           All ({(models ?? []).length})
@@ -237,8 +231,11 @@ export default function Models() {
 
       {/* Add form */}
       {showAdd && (
-        <div className="card border border-brand-500/20">
-          <h3 className="text-sm font-semibold text-brand-400 mb-3">Register new AI model</h3>
+        <SurfaceSection
+          title="Register New AI Model"
+          description="Use the same form language and density as the rest of the governance platform."
+          className="border-[var(--accent)]/20"
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <input className="input" placeholder="Model Name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
             <input className="input" placeholder="Provider" value={form.provider} onChange={e => setForm({ ...form, provider: e.target.value })} />
@@ -260,7 +257,7 @@ export default function Models() {
               </button>
             </div>
           </div>
-        </div>
+        </SurfaceSection>
       )}
 
       {/* Table */}
@@ -270,15 +267,15 @@ export default function Models() {
         <div className="card overflow-x-auto">
           <table className="w-full text-sm min-w-[700px]">
             <thead>
-              <tr className="border-b border-slate-800">
+              <tr className="border-b border-[var(--border)]">
                 {['Model', 'Provider', 'Purpose', 'Risk Level', 'Score', 'Status', ''].map(h => (
-                  <th key={h} className="text-left py-3 text-xs text-slate-500 font-semibold uppercase tracking-wider">{h}</th>
+                  <th key={h} className="text-left py-3 text-xs text-[var(--muted-foreground)] font-semibold uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={7} className="py-10 text-center text-slate-600">No models match the current filter.</td></tr>
+                <tr><td colSpan={7} className="py-10 text-center text-[var(--muted-foreground)]/70">No models match the current filter.</td></tr>
               ) : (
                 filtered.map((m: AIModel) => <ModelRow key={m.id} model={m} />)
               )}
@@ -290,10 +287,10 @@ export default function Models() {
       {/* EU AI Act callout */}
       <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-500/5 border border-blue-500/20 text-sm">
         <ExternalLink className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
-        <p className="text-slate-400">
+        <p className="text-[var(--muted-foreground)]">
           <strong className="text-blue-400">EU AI Act Tip:</strong> Any model classified as HIGH or UNACCEPTABLE risk requires a conformity assessment before deployment. Use the <em>Scan</em> button to trigger an automated assessment.
         </p>
       </div>
-    </div>
+    </PageShell>
   )
 }

@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Plus, RefreshCw, BarChart3, Globe, Shield, AlertTriangle, CheckCircle2, Loader2, ExternalLink } from 'lucide-react'
-import { useVendors, useMutation, useQueryClient } from '../../lib/hooks'
+import { useVendors, useVendorSLASummary, useMutation, useQueryClient } from '../../lib/hooks'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, PolarRadiusAxis } from 'recharts'
 import govApi from '../../lib/govApi'
 import { SkeletonTable } from '../../components/Skeletons'
 import { InlineError } from '../../components/ErrorBoundary'
+import { PageHeader, PageShell, StatusPill, SurfaceSection } from '../../components/ui/page-shell'
 
 // ── Types / Data ──────────────────────────────────────────────────────────────
 
@@ -24,37 +25,38 @@ const RISK_BAR: Record<string, string> = {
   MINIMAL: 'bg-emerald-500', LIMITED: 'bg-yellow-500', HIGH: 'bg-orange-500', UNACCEPTABLE: 'bg-red-500',
 }
 
-// Radar chart data for vendor comparison
-function buildRadarData(score: number) {
-  const n = score
-  return [
-    { axis: 'Security', value: Math.min(100, 100 - n + Math.random() * 20) },
-    { axis: 'Compliance', value: Math.min(100, 100 - n * 0.7 + Math.random() * 15) },
-    { axis: 'Privacy', value: Math.min(100, 100 - n * 0.8 + Math.random() * 10) },
-    { axis: 'Transparency', value: Math.min(100, 100 - n * 0.5 + Math.random() * 20) },
-    { axis: 'Resilience', value: Math.min(100, 100 - n * 0.6 + Math.random() * 15) },
-  ].map(d => ({ ...d, value: Math.round(Math.max(10, d.value)) }))
-}
-
 // ── Vendor Detail Drawer ──────────────────────────────────────────────────────
 
 function VendorDrawer({ vendor, onClose }: { vendor: Vendor; onClose: () => void }) {
-  const radarData = buildRadarData(vendor.assessmentScore ?? 0)
+  const { data: slaSummary } = useVendorSLASummary(vendor.id)
   const score = vendor.assessmentScore ?? 0
 
+  const radarData = slaSummary?.slas?.length > 0
+    ? slaSummary.slas.map((s: any) => ({
+        axis: s.metric.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+        value: s.breached ? Math.max(10, 100 - (s.actualValue / Math.max(s.targetValue, 1)) * 100) : Math.min(100, (s.targetValue / Math.max(s.actualValue, 1)) * 100),
+      }))
+    : [
+        { axis: 'Security', value: Math.min(100, score + 10) },
+        { axis: 'Compliance', value: Math.min(100, score + 5) },
+        { axis: 'Privacy', value: Math.min(100, score + 15) },
+        { axis: 'Transparency', value: Math.min(100, score + 20) },
+        { axis: 'Resilience', value: Math.min(100, score + 8) },
+      ]
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={onClose}>
       <div
-        className="w-full max-w-md bg-slate-900 border-l border-slate-800 h-full overflow-y-auto p-6 space-y-5 shadow-2xl"
+        className="h-full w-full max-w-md overflow-y-auto border-l border-[var(--border)] bg-[var(--background)] p-6 shadow-sm"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-100">{vendor.name}</h2>
-            <p className="text-xs text-slate-500 mt-0.5">{vendor.website}</p>
+            <h2 className="text-lg font-bold text-[var(--foreground)]">{vendor.name}</h2>
+            <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{vendor.website}</p>
           </div>
-          <button onClick={onClose} className="text-slate-600 hover:text-slate-400 text-xl">×</button>
+          <button onClick={onClose} className="text-[var(--muted-foreground)]/70 hover:text-[var(--muted-foreground)] text-xl">×</button>
         </div>
 
         {/* Score gauge */}
@@ -69,24 +71,24 @@ function VendorDrawer({ vendor, onClose }: { vendor: Vendor; onClose: () => void
             <span className="text-3xl font-bold">{score}</span>
             <span className="text-sm opacity-70 mb-1">/ 100</span>
           </div>
-          <div className="w-full h-2 bg-slate-800 rounded-full mt-2">
+          <div className="w-full h-2 bg-[var(--muted)] rounded-full mt-2">
             <div className={`h-2 rounded-full ${RISK_BAR[vendor.riskLevel]}`} style={{ width: `${score}%` }} />
           </div>
         </div>
 
         {/* Certifications */}
         <div>
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Certifications</h3>
+          <h3 className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-2">Certifications</h3>
           <div className="flex gap-2 flex-wrap">
-            <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border ${vendor.soc2 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-slate-600 border-slate-800'}`}>
+            <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border ${vendor.soc2 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-[var(--muted-foreground)]/70 border-[var(--border)]'}`}>
               {vendor.soc2 ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
               SOC 2
             </span>
-            <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border ${vendor.gdprDpa ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-slate-600 border-slate-800'}`}>
+            <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border ${vendor.gdprDpa ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-[var(--muted-foreground)]/70 border-[var(--border)]'}`}>
               {vendor.gdprDpa ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
               GDPR DPA
             </span>
-            <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border text-slate-600 border-slate-800">
+            <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border text-[var(--muted-foreground)]/70 border-[var(--border)]">
               <Globe className="w-3 h-3" /> ISO 27001 (pending)
             </span>
           </div>
@@ -94,7 +96,7 @@ function VendorDrawer({ vendor, onClose }: { vendor: Vendor; onClose: () => void
 
         {/* Radar chart */}
         <div>
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Risk Profile</h3>
+          <h3 className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-3">Risk Profile</h3>
           <ResponsiveContainer width="100%" height={200}>
             <RadarChart data={radarData} margin={{ top: 0, right: 10, left: 10, bottom: 0 }}>
               <PolarGrid stroke="#1e293b" />
@@ -105,18 +107,34 @@ function VendorDrawer({ vendor, onClose }: { vendor: Vendor; onClose: () => void
           </ResponsiveContainer>
         </div>
 
+        {/* SLA Summary */}
+        {slaSummary && slaSummary.totalSLAs > 0 && (
+          <div>
+            <h3 className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-2">SLA Health</h3>
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-[var(--muted)]/50">
+              <div className={`text-2xl font-bold ${slaSummary.healthScore >= 80 ? 'text-emerald-400' : slaSummary.healthScore >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                {slaSummary.healthScore}%
+              </div>
+              <div className="text-xs text-[var(--muted-foreground)]">
+                <p>{slaSummary.totalSLAs} metrics tracked</p>
+                <p className="text-red-400">{slaSummary.breachedSLAs} breached</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Services */}
         <div>
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Services Used</h3>
+          <h3 className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-2">Services Used</h3>
           <div className="flex gap-1.5 flex-wrap">
             {vendor.services.map(s => (
-              <span key={s} className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700">{s}</span>
+              <span key={s} className="text-xs px-2 py-1 rounded bg-[var(--muted)] text-[var(--foreground)] border border-[var(--border)]">{s}</span>
             ))}
           </div>
         </div>
 
         {/* Last assessed */}
-        <p className="text-xs text-slate-600">Last assessed: {vendor.lastAssessed ?? 'Never'}</p>
+        <p className="text-xs text-[var(--muted-foreground)]/70">Last assessed: {vendor.lastAssessed ?? 'Never'}</p>
       </div>
     </div>
   )
@@ -133,13 +151,13 @@ function VendorCard({ vendor, onView, onAssess, assessing }: {
   const score = vendor.assessmentScore ?? 0
 
   return (
-    <div className="card hover:border-slate-700 transition-colors group">
+      <div className="card transition-colors">
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-slate-200 group-hover:text-white transition-colors">{vendor.name}</h3>
+          <h3 className="text-sm font-semibold text-[var(--foreground)]">{vendor.name}</h3>
           {vendor.website && (
-            <p className="text-xs text-slate-600 mt-0.5 flex items-center gap-1">
+            <p className="text-xs text-[var(--muted-foreground)]/70 mt-0.5 flex items-center gap-1">
               <Globe className="w-3 h-3" />{vendor.website}
             </p>
           )}
@@ -152,17 +170,17 @@ function VendorCard({ vendor, onView, onAssess, assessing }: {
       {/* Services */}
       <div className="flex gap-1 flex-wrap mb-3">
         {vendor.services.map(s => (
-          <span key={s} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">{s}</span>
+          <span key={s} className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--muted)] text-[var(--muted-foreground)] border border-[var(--border)]">{s}</span>
         ))}
       </div>
 
       {/* Score bar */}
       <div className="mb-1">
         <div className="flex justify-between text-xs mb-1">
-          <span className="text-slate-500">Risk Score</span>
+          <span className="text-[var(--muted-foreground)]">Risk Score</span>
           <span className={`font-mono font-bold ${score >= 70 ? 'text-red-400' : score >= 40 ? 'text-yellow-400' : 'text-emerald-400'}`}>{score}</span>
         </div>
-        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+        <div className="w-full h-1.5 bg-[var(--muted)] rounded-full overflow-hidden">
           <div className={`h-full rounded-full transition-all duration-500 ${RISK_BAR[vendor.riskLevel]}`} style={{ width: `${score}%` }} />
         </div>
       </div>
@@ -171,11 +189,11 @@ function VendorCard({ vendor, onView, onAssess, assessing }: {
       <div className="flex gap-1.5 mt-2 mb-3">
         {vendor.soc2 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">SOC 2</span>}
         {vendor.gdprDpa && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">GDPR DPA</span>}
-        {!vendor.soc2 && !vendor.gdprDpa && <span className="text-[10px] text-slate-700">No certifications</span>}
+        {!vendor.soc2 && !vendor.gdprDpa && <span className="text-[10px] text-[var(--muted-foreground)]/40">No certifications</span>}
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2 border-t border-slate-800 pt-3">
+      <div className="flex gap-2 border-t border-[var(--border)] pt-3">
         <button onClick={onView} className="btn-secondary text-xs py-1.5 flex-1 flex items-center justify-center gap-1.5">
           <ExternalLink className="w-3.5 h-3.5" /> Details
         </button>
@@ -221,24 +239,23 @@ export default function Vendors() {
   }))
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100">Vendor Management</h1>
-          <p className="text-slate-500 text-sm mt-0.5">
-            Third-party AI vendors — risk scores, certifications, and compliance status
-          </p>
-        </div>
-        <div className="flex gap-2">
+    <PageShell>
+      <PageHeader
+        badge="Third-Party Governance"
+        title="Vendor Management"
+        description="Track AI vendors, certifications, and assessment posture with the same shared surfaces used for incidents, policies, and reports."
+        status={<StatusPill label="Live Vendor Risk" tone="live" />}
+        actions={
+          <>
           <button onClick={() => refetch()} className="btn-secondary flex items-center gap-1.5 text-sm py-1.5">
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
           <button onClick={() => setShowAdd(!showAdd)} className="btn-primary flex items-center gap-2">
             <Plus className="w-4 h-4" /> Add Vendor
           </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {isError && <InlineError message="Failed to load vendors." onRetry={() => refetch()} />}
 
@@ -254,8 +271,8 @@ export default function Vendors() {
 
       {/* Add form */}
       {showAdd && (
-        <div className="card border border-brand-500/20">
-          <h3 className="text-sm font-semibold text-brand-400 mb-3 flex items-center gap-2">
+        <SurfaceSection title="Register new vendor" className="border border-[var(--accent)]/20">
+          <h3 className="text-sm font-semibold text-[var(--accent)] mb-3 flex items-center gap-2">
             <Shield className="w-4 h-4" /> Register new vendor
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -279,7 +296,7 @@ export default function Vendors() {
               </button>
             </div>
           </div>
-        </div>
+        </SurfaceSection>
       )}
 
       {/* Vendor cards grid */}
@@ -288,8 +305,8 @@ export default function Vendors() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {(vendors ?? []).length === 0 && !showAdd && (
-            <div className="col-span-full card text-center py-12 text-slate-500">
-              No vendors yet. <button onClick={() => setShowAdd(true)} className="text-brand-400 hover:underline">Add your first vendor →</button>
+            <div className="col-span-full card text-center py-12 text-[var(--muted-foreground)]">
+              No vendors yet. <button onClick={() => setShowAdd(true)} className="text-[var(--accent)] hover:underline">Add your first vendor →</button>
             </div>
           )}
           {(vendors ?? []).map((v: Vendor) => (
@@ -306,6 +323,6 @@ export default function Vendors() {
 
       {/* Side drawer */}
       {selected && <VendorDrawer vendor={selected} onClose={() => setSelected(null)} />}
-    </div>
+    </PageShell>
   )
 }

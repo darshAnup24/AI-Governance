@@ -1,10 +1,14 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../index";
+import { publishEnrichmentJob } from "../engine/redisEnrichment";
 
 export const risksRouter = Router();
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://ollama:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.1:8b";
+
+function getModel(): string {
+  return process.env.PRIMARY_ADVISOR_MODEL || "llama3.2:3b";
+}
 
 // GET /api/risks
 risksRouter.get("/", async (req: Request, res: Response) => {
@@ -34,7 +38,7 @@ risksRouter.get("/:modelId", async (req: Request, res: Response) => {
     }
 });
 
-// POST /api/risks/analyze — Ollama-powered risk analysis
+// POST /api/risks/analyze — Async risk analysis via enrichment queue
 risksRouter.post("/analyze", async (req: Request, res: Response) => {
     try {
         const { text, modelName } = req.body;
@@ -43,31 +47,12 @@ risksRouter.post("/analyze", async (req: Request, res: Response) => {
             return;
         }
 
-        const prompt = `You are an AI risk analyst for enterprise AI governance.
-Analyze the following text for potential risks. Consider: data privacy, bias, hallucination,
-security vulnerabilities, regulatory compliance (EU AI Act, GDPR, HIPAA).
+        const jobId = await publishEnrichmentJob("risk_analysis", {
+            text: text.slice(0, 2000),
+            modelName: modelName || "unknown",
+        }, req.user!.orgId);
 
-Text: "${text.slice(0, 2000)}"
-
-Provide a JSON response with:
-- overall_risk_score (0-100)
-- risk_categories: [{category, score, explanation}]
-- recommendations: [string]
-- eu_ai_act_level: MINIMAL|LIMITED|HIGH|UNACCEPTABLE`;
-
-        const ollamaRes = await fetch(`${OLLAMA_URL}/api/generate`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false }),
-        });
-
-        if (!ollamaRes.ok) {
-            res.status(502).json({ error: "Ollama unavailable" });
-            return;
-        }
-
-        const result = (await ollamaRes.json()) as any;
-        res.json({ analysis: result.response, model: OLLAMA_MODEL });
+        res.status(202).json({ jobId, status: "queued" });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

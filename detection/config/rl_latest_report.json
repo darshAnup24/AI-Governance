@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-05-14T14:15:23.676080",
+  "timestamp": "2026-06-03T02:00:00.644454",
   "status": "success",
   "dry_run": false,
   "stages": {
@@ -24,12 +24,12 @@
     },
     "thresholds": {
       "status": "success",
-      "timestamp": "2026-05-14T14:15:23.676811",
+      "timestamp": "2026-06-03T02:00:00.645320",
       "feedback_count": 1,
       "updates": {
         "PII": {
-          "old_threshold": 0.53,
-          "new_threshold": 0.61,
+          "old_threshold": 0.61,
+          "new_threshold": 0.69,
           "adjustment": 0.08,
           "reason": "High false positive rate (100.0%)",
           "metrics": {
@@ -46,13 +46,13 @@
     "CREDENTIALS": 0.45,
     "PROMPT_INJECTION": 0.45,
     "REGULATORY": 0.45,
-    "PII": 0.61,
+    "PII": 0.69,
     "HALLUCINATION": 0.45,
     "BIAS": 0.45,
     "SAFE": 0.45
   },
   "metrics_summary": {
-    "timestamp": "2026-05-14T14:15:23.677099",
+    "timestamp": "2026-06-03T02:00:00.645665",
     "thresholds": {
       "CREDENTIALS": {
         "current": 0.45,
@@ -82,13 +82,13 @@
         "last_updated": "2026-05-14T14:13:30.044505"
       },
       "PII": {
-        "current": 0.61,
-        "previous": 0.53,
+        "current": 0.69,
+        "previous": 0.61,
         "change": 0.07999999999999996,
-        "adjustment_count": 2,
+        "adjustment_count": 3,
         "avg_adjustment": 0.08,
         "recent_rewards": [],
-        "last_updated": "2026-05-14T14:15:23.676400"
+        "last_updated": "2026-06-03T02:00:00.644830"
       },
       "HALLUCINATION": {
         "current": 0.45,

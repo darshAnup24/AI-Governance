@@ -63,12 +63,13 @@ class JWTAuth:
             email = "dev@company.com"
 
         return UserContext(
-            user_id="9f618df9-c2a6-40fd-ae05-0221b58c9b28",  # Matches seeded user for heatmap demo
+            user_id="cc9a61be-b6bd-444e-af35-363a25ed175c",  # Matches seeded admin@acme.com user
             email=email,
             department="engineering",
             role="user",
             permissions=["read", "write"],
             org_id=settings.dev_org_id,
+            workspace_id="",
         )
 
     async def __call__(
@@ -108,6 +109,7 @@ class JWTAuth:
                         role=payload.get("role", "user"),
                         permissions=payload.get("permissions", []),
                         org_id=payload.get("org_id", ""),
+                        workspace_id=payload.get("workspace_id", ""),
                     )
                 except JWTError:
                     continue
@@ -174,21 +176,23 @@ class RateLimiter:
         dept_tpm_key = f"ratelimit:tpm:dept:{user.department}"
 
         try:
-            pipe = redis.pipeline(transaction=True)
+            # FIXED (BUG-007): Must use `async with redis.pipeline()` to ensure
+            # connection cleanup. Plain redis.pipeline() without context manager
+            # can leak connections under load in redis-py 5.x.
+            async with redis.pipeline(transaction=True) as pipe:
+                # Clean old entries and add new one for user RPM
+                pipe.zremrangebyscore(user_rpm_key, 0, window_start)
+                pipe.zadd(user_rpm_key, {f"{now}": now})
+                pipe.zcard(user_rpm_key)
+                pipe.expire(user_rpm_key, self._window_seconds + 10)
 
-            # Clean old entries and add new one for user RPM
-            pipe.zremrangebyscore(user_rpm_key, 0, window_start)
-            pipe.zadd(user_rpm_key, {f"{now}": now})
-            pipe.zcard(user_rpm_key)
-            pipe.expire(user_rpm_key, self._window_seconds + 10)
+                # Department RPM
+                pipe.zremrangebyscore(dept_rpm_key, 0, window_start)
+                pipe.zadd(dept_rpm_key, {f"{now}:{user.user_id}": now})
+                pipe.zcard(dept_rpm_key)
+                pipe.expire(dept_rpm_key, self._window_seconds + 10)
 
-            # Department RPM
-            pipe.zremrangebyscore(dept_rpm_key, 0, window_start)
-            pipe.zadd(dept_rpm_key, {f"{now}:{user.user_id}": now})
-            pipe.zcard(dept_rpm_key)
-            pipe.expire(dept_rpm_key, self._window_seconds + 10)
-
-            results = await pipe.execute()
+                results = await pipe.execute()
 
             user_rpm_count = results[2]
             dept_rpm_count = results[6]
@@ -211,12 +215,12 @@ class RateLimiter:
 
             # Track token usage if tokens provided
             if token_count > 0:
-                pipe2 = redis.pipeline(transaction=True)
-                pipe2.incrbyfloat(user_tpm_key, token_count)
-                pipe2.expire(user_tpm_key, self._window_seconds + 10)
-                pipe2.incrbyfloat(dept_tpm_key, token_count)
-                pipe2.expire(dept_tpm_key, self._window_seconds + 10)
-                tpm_results = await pipe2.execute()
+                async with redis.pipeline(transaction=True) as pipe2:
+                    pipe2.incrbyfloat(user_tpm_key, token_count)
+                    pipe2.expire(user_tpm_key, self._window_seconds + 10)
+                    pipe2.incrbyfloat(dept_tpm_key, token_count)
+                    pipe2.expire(dept_tpm_key, self._window_seconds + 10)
+                    tpm_results = await pipe2.execute()
 
                 user_tpm = int(float(tpm_results[0]))
                 dept_tpm = int(float(tpm_results[2]))
@@ -237,6 +241,7 @@ class RateLimiter:
         except Exception as e:
             # Rate limiting should never block requests on Redis failure
             log.warning("rate_limit_check_failed", error=str(e))
+
 
 
 rate_limiter = RateLimiter()

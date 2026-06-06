@@ -4,6 +4,7 @@ import { useIncidents, useQueryClient, useMutation } from '../../lib/hooks'
 import { SkeletonTable } from '../../components/Skeletons'
 import { InlineError } from '../../components/ErrorBoundary'
 import govApi from '../../lib/govApi'
+import { PageHeader, PageShell, StatusPill, SurfaceSection } from '../../components/ui/page-shell'
 
 // ── Types / Constants ─────────────────────────────────────────────────────────
 
@@ -65,16 +66,16 @@ function IncidentCard({ inc, onMove, moving }: {
   moving: boolean
 }) {
   return (
-    <div className={`p-3 rounded-xl border-l-4 ${SEV_COLORS[inc.severity]} border border-slate-700/30 hover:border-slate-600/30 transition-colors`}>
+    <div className={`p-3 rounded-xl border-l-4 ${SEV_COLORS[inc.severity]} border border-[var(--border)]/30 hover:border-[var(--accent)]/30 transition-colors`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-1">
             {SEV_ICON[inc.severity]}
-            <p className="text-sm font-medium text-slate-200 leading-tight">{inc.title}</p>
+            <p className="text-sm font-medium text-[var(--foreground)] leading-tight">{inc.title}</p>
           </div>
-          <p className="text-xs text-slate-500 line-clamp-2 ml-5">{inc.description}</p>
+          <p className="text-xs text-[var(--muted-foreground)] line-clamp-2 ml-5">{inc.description}</p>
         </div>
-        <GripVertical className="w-3.5 h-3.5 text-slate-700 flex-shrink-0 cursor-grab" />
+        <GripVertical className="w-3.5 h-3.5 text-[var(--muted-foreground)]/40 flex-shrink-0 cursor-grab" />
       </div>
 
       <div className="flex items-center justify-between mt-3 ml-5">
@@ -82,9 +83,9 @@ function IncidentCard({ inc, onMove, moving }: {
           <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${SEV_BADGE[inc.severity]}`}>
             {inc.severity}
           </span>
-          {inc.model && <span className="text-[10px] text-slate-600 truncate max-w-[90px]">{inc.model.name}</span>}
+          {inc.model && <span className="text-[10px] text-[var(--muted-foreground)]/70 truncate max-w-[90px]">{inc.model.name}</span>}
         </div>
-        <span className="text-[10px] text-slate-600">{daysAgo(inc.createdAt)}</span>
+        <span className="text-[10px] text-[var(--muted-foreground)]/70">{daysAgo(inc.createdAt)}</span>
       </div>
 
       {/* Move buttons */}
@@ -152,31 +153,24 @@ export default function IncidentsPage() {
   const totalOpen = (incidents ?? []).filter((i: Incident) => i.status !== 'RESOLVED').length
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100">Incidents</h1>
-          <p className="text-slate-500 text-sm mt-0.5">
-            {totalOpen} open · Kanban board with optimistic status transitions
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-semibold text-emerald-400">LIVE</span>
-          </div>
+    <PageShell>
+      <PageHeader
+        badge="Response Workflow"
+        title="Incidents"
+        description={`${totalOpen} open incidents across the active response queue, with optimistic workflow transitions and triage visibility.`}
+        status={<StatusPill label="Live Queue" tone="live" pulse />}
+        actions={
           <button onClick={() => setShowAdd(!showAdd)} className="btn-primary flex items-center gap-2">
             <Plus className="w-4 h-4" /> Report Incident
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {isError && <InlineError message="Using cached incidents." onRetry={() => refetch()} />}
 
       {/* Add form */}
       {showAdd && (
-        <div className="card border border-brand-500/20">
-          <h3 className="text-sm font-semibold text-brand-400 mb-3">New Incident Report</h3>
+        <SurfaceSection title="New Incident Report" className="border border-brand-500/20">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <input
               className="input"
@@ -207,7 +201,7 @@ export default function IncidentsPage() {
               </button>
             </div>
           </div>
-        </div>
+        </SurfaceSection>
       )}
 
       {/* Kanban */}
@@ -225,9 +219,9 @@ export default function IncidentsPage() {
                     <div className={`w-2 h-2 rounded-full ${
                       col === 'OPEN' ? 'bg-red-400' : col === 'INVESTIGATING' ? 'bg-yellow-400' : 'bg-emerald-400'
                     }`} />
-                    <h2 className="text-sm font-semibold text-slate-300">{COL_LABELS[col]}</h2>
+                    <h2 className="text-sm font-semibold text-[var(--foreground)]">{COL_LABELS[col]}</h2>
                   </div>
-                  <span className="text-xs bg-slate-800 border border-slate-700 text-slate-500 px-2 py-0.5 rounded-full">
+                  <span className="text-xs bg-[var(--muted)] border border-[var(--border)] text-[var(--muted-foreground)] px-2 py-0.5 rounded-full">
                     {colIncidents.length}
                   </span>
                 </div>
@@ -235,7 +229,7 @@ export default function IncidentsPage() {
                 {/* Column body */}
                 <div className={`min-h-[240px] p-3 rounded-xl border ${COL_COLORS[col]} space-y-2.5`}>
                   {colIncidents.length === 0 && (
-                    <div className="flex items-center justify-center h-20 text-xs text-slate-700">
+                    <div className="flex items-center justify-center h-20 text-xs text-[var(--muted-foreground)]/40">
                       No incidents
                     </div>
                   )}
@@ -253,6 +247,6 @@ export default function IncidentsPage() {
           })}
         </div>
       )}
-    </div>
+    </PageShell>
   )
 }

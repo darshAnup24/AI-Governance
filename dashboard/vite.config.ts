@@ -1,10 +1,17 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-
-
+import path from 'path'
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      '@airlock/shared-ui': path.resolve(__dirname, '../apps/shared-ui/src'),
+      '@airlock/shared-ui/design-system': path.resolve(__dirname, '../apps/shared-ui/src/design-system'),
+    },
+    dedupe: ['react', 'react-dom', 'react-router-dom'],
+  },
   plugins: [
     react(),
     VitePWA({
@@ -44,8 +51,8 @@ export default defineConfig({
         ],
       },
       manifest: {
-        name: 'ShieldAI Governance',
-        short_name: 'ShieldAI',
+        name: 'Airlock Governance',
+        short_name: 'Airlock',
         description: 'Enterprise AI governance — real-time prompt monitoring, compliance, and threat detection',
         start_url: '/governance',
         display: 'standalone',

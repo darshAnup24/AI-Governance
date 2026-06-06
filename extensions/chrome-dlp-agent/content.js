@@ -1,7 +1,7 @@
-// content.js — ShieldAI Corporate DLP Agent v2.0
+// content.js — Airlock Corporate DLP Agent v2.0
 // Inline redaction: SSN/PII spans replaced with [REDACTED]; only hard-blocks for BLOCK action.
 
-console.log("🛡️ ShieldAI DLP Agent v2.0 injected.");
+console.log("🛡️ Airlock DLP Agent v2.0 injected.");
 
 const PROXY_URL = "http://localhost:8000";
 let isAnalyzing = false;
@@ -9,11 +9,11 @@ let isAnalyzing = false;
 // ─── Banner UI ──────────────────────────────────────────────────────────────
 
 function showBanner(message, type = "warn") {
-  const existing = document.getElementById("shieldai-banner");
+  const existing = document.getElementById("airlock-banner");
   if (existing) existing.remove();
 
   const banner = document.createElement("div");
-  banner.id = "shieldai-banner";
+  banner.id = "airlock-banner";
   banner.style.cssText = `
     position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
     z-index: 999999; padding: 10px 20px; border-radius: 10px;
@@ -69,7 +69,7 @@ async function scanAndProcess(text, inputBox, sendCallback) {
 
     if (action === "BLOCK") {
       // Hard block — do not send at all
-      setInputText(inputBox, "[BLOCKED BY SHIELDAI DLP]");
+      setInputText(inputBox, "[BLOCKED BY AIRLOCK DLP]");
       inputBox.style.color = "red";
       showBanner(
         `<b>Blocked:</b> ${categories} · Risk Score: ${result.risk_score}/100 — Message not sent.`,
@@ -97,7 +97,7 @@ async function scanAndProcess(text, inputBox, sendCallback) {
     }
 
   } catch (err) {
-    console.error("🛡️ ShieldAI DLP error:", err);
+    console.error("🛡️ Airlock DLP error:", err);
     // Fail open: restore text and send
     inputBox.style.color = "";
     setInputText(inputBox, text);
@@ -155,7 +155,7 @@ function interceptSubmit(e, sendCallback) {
   if (isAnalyzing) return;
   isAnalyzing = true;
 
-  setInputText(inputBox, "🛡️ ShieldAI scanning…");
+  setInputText(inputBox, "🛡️ Airlock scanning…");
   inputBox.style.color = "orange";
 
   scanAndProcess(text, inputBox, sendCallback);

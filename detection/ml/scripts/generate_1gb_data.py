@@ -1,5 +1,5 @@
 """
-Synthetic 1GB Dataset Generator for ShieldAI
+Synthetic 1GB Dataset Generator for Airlock
 ============================================
 Generates up to 1GB of synthetic labeled text to fulfill
 large-scale dataset requirements. Mixes base templates with

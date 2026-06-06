@@ -1,6 +1,6 @@
 """
 Locust load test for the AI Governance Firewall proxy.
-Simulates realistic enterprise traffic patterns.
+Simulates realistic enterprise traffic patterns with streaming, governance APIs, and error flows.
 """
 
 from locust import HttpUser, task, between, tag
@@ -28,7 +28,7 @@ PII_PROMPT = {
 CODE_PROMPT = {
     "model": "gpt-4",
     "messages": [
-        {"role": "user", "content": "Review this internal function and suggest improvements:\n\ndef calculate_revenue(transactions, region='US'):\n    # CONFIDENTIAL: Internal billing logic v2.3\n    base_rate = 0.029\n    enterprise_discount = 0.15\n    for tx in transactions:\n        if tx.amount > 10000:\n            tx.fee = tx.amount * (base_rate - enterprise_discount)\n    return sum(tx.fee for tx in transactions)"},
+        {"role": "user", "content": "Review this internal function: def calculate_revenue(txns): return sum(txn.amount * 0.029 for txn in txns)"},
     ],
     "max_tokens": 500,
 }
@@ -36,9 +36,18 @@ CODE_PROMPT = {
 APIKEY_PROMPT = {
     "model": "gpt-4",
     "messages": [
-        {"role": "user", "content": "I'm getting an error with my API call. Here's my code:\nimport openai\nopenai.api_key = 'sk-FAKE1234567890abcdef1234567890abcdef1234567890ab'\nresponse = openai.chat.completions.create(model='gpt-4', messages=[{'role':'user','content':'hello'}])"},
+        {"role": "user", "content": "Use API key sk-FAKE1234567890abcdef1234567890abcdef1234567890ab to connect."},
     ],
     "max_tokens": 500,
+}
+
+STREAM_PROMPT = {
+    "model": "gpt-4",
+    "messages": [
+        {"role": "user", "content": "Write a 500-word essay on AI governance."},
+    ],
+    "stream": True,
+    "max_tokens": 1000,
 }
 
 
@@ -49,41 +58,77 @@ class ProxyUser(HttpUser):
     host = "http://localhost:8000"
 
     def on_start(self):
-        """Set up auth headers for the user."""
         self.client.headers.update({
             "Authorization": "Bearer dev-token-test",
             "Content-Type": "application/json",
             "X-LLM-Provider": "openai",
         })
 
-    @task(60)
+    @task(35)
     @tag("clean")
     def clean_prompt(self):
-        """60% of traffic: clean, safe prompts (ALLOW)."""
         self.client.post("/v1/chat/completions", json=CLEAN_PROMPT, name="clean_prompt")
 
-    @task(25)
+    @task(15)
     @tag("pii")
     def pii_prompt(self):
-        """25% of traffic: prompts with PII (WARN)."""
         self.client.post("/v1/chat/completions", json=PII_PROMPT, name="pii_prompt")
 
     @task(10)
     @tag("code")
     def code_prompt(self):
-        """10% of traffic: prompts with source code (REDACT)."""
         self.client.post("/v1/chat/completions", json=CODE_PROMPT, name="code_prompt")
 
     @task(5)
     @tag("apikey")
     def apikey_prompt(self):
-        """5% of traffic: prompts with API keys (BLOCK)."""
         with self.client.post("/v1/chat/completions", json=APIKEY_PROMPT, name="apikey_prompt", catch_response=True) as resp:
             if resp.status_code == 403:
-                resp.success()  # 403 is expected for blocked prompts
+                resp.success()
+
+    @task(10)
+    @tag("stream")
+    def stream_request(self):
+        """Simulate streaming requests (check for SSE response)."""
+        with self.client.post("/v1/chat/completions", json=STREAM_PROMPT, name="stream_request", stream=True, catch_response=True) as resp:
+            if resp.status_code == 200:
+                resp.success()
+
+    @task(10)
+    @tag("inspect")
+    def inspect_endpoint(self):
+        """Test the inspect/demo endpoint."""
+        self.client.post("/api/v1/inspect", json={
+            "text": "What is the capital of France?",
+            "department": "Engineering",
+            "role": "engineer",
+        }, name="inspect_endpoint")
+
+    @task(5)
+    @tag("governance")
+    def stats_endpoint(self):
+        """Test governance stats API."""
+        self.client.get("/api/v1/stats", name="governance_stats")
+
+    @task(5)
+    @tag("governance")
+    def analytics_trend(self):
+        """Test analytics trend API."""
+        self.client.get("/api/v1/analytics/trend?days=7", name="analytics_trend")
+
+    @task(3)
+    @tag("governance")
+    def governance_risk_overview(self):
+        """Test expanded governance risk overview."""
+        self.client.get("/api/v1/governance/risk-overview?days=7", name="governance_risk_overview")
+
+    @task(2)
+    @tag("governance")
+    def governance_top_users(self):
+        """Test top users API."""
+        self.client.get("/api/v1/governance/top-users?days=7&limit=5", name="governance_top_users")
 
     @task(1)
     @tag("health")
     def health_check(self):
-        """Occasional health checks."""
         self.client.get("/health")

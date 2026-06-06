@@ -2,7 +2,6 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import { PrismaClient } from "@prisma/client";
 import { authRouter } from "./routes/auth";
 import { dashboardRouter } from "./routes/dashboard";
 import { modelsRouter } from "./routes/models";
@@ -18,10 +17,17 @@ import { reportsRouter } from "./routes/reports";
 import { auditRouter } from "./routes/audit";
 import { usersRouter } from "./routes/users";
 import { internalRouter } from "./routes/internal";
-import { authMiddleware } from "./middleware/auth";
+import { apiKeysRouter } from "./routes/apiKeys";
+import { organizationsRouter } from "./routes/organizations";
+import { invitationsRouter } from "./routes/invitations";
+import { providersRouter } from "./routes/providers";
+import { settingsRouter } from "./routes/settings";
+import { connectRedis } from "./engine/redisEnrichment";
+import { authMiddleware, requireGovernanceScope } from "./middleware/auth";
 import { auditMiddleware } from "./middleware/auditLogger";
-
-export const prisma = new PrismaClient();
+import { workspaceContextMiddleware, validateWorkspaceAccess } from "./middleware/workspace";
+import { prisma } from "./platform/prisma";
+export { prisma };
 
 const app = express();
 const PORT = process.env.GOVERNANCE_PORT || 4000;
@@ -29,7 +35,7 @@ const PORT = process.env.GOVERNANCE_PORT || 4000;
 // ─── Global Middleware ───────────────────────────────────
 app.use(helmet());
 app.use(cors({ 
-    origin: ["http://localhost:3000", "http://127.0.0.1:3000", "http://0.0.0.0:3000"], 
+    origin: (process.env.CORS_ORIGIN || "http://localhost:3000,http://localhost:3002").split(","), 
     credentials: true 
 }));
 app.use(express.json({ limit: "10mb" }));
@@ -49,24 +55,30 @@ app.get("/health", (_req, res) => {
 
 // ─── Public Routes ───────────────────────────────────────
 app.use("/api/auth", authRouter);
+app.use("/api/governance/auth", authRouter);
 
 // ─── Internal Service Routes (service token, no user JWT) ────────────────────
 app.use("/api/internal", internalRouter);
 
 // ─── Protected Routes ────────────────────────────────────
-app.use("/api/dashboard", authMiddleware, auditMiddleware, dashboardRouter);
-app.use("/api/models", authMiddleware, auditMiddleware, modelsRouter);
-app.use("/api/risks", authMiddleware, auditMiddleware, risksRouter);
-app.use("/api/compliance", authMiddleware, auditMiddleware, complianceRouter);
-app.use("/api/incidents", authMiddleware, auditMiddleware, incidentsRouter);
-app.use("/api/policies", authMiddleware, auditMiddleware, policiesRouter);
-app.use("/api/vendors", authMiddleware, auditMiddleware, vendorsRouter);
-app.use("/api/datasets", authMiddleware, auditMiddleware, datasetsRouter);
-app.use("/api/threats", authMiddleware, auditMiddleware, threatsRouter);
-app.use("/api/advisor", authMiddleware, advisorRouter);
-app.use("/api/reports", authMiddleware, auditMiddleware, reportsRouter);
-app.use("/api/audit-logs", authMiddleware, auditRouter);
-app.use("/api/users", authMiddleware, usersRouter);
+app.use("/api/dashboard", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, auditMiddleware, dashboardRouter);
+app.use("/api/models", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, auditMiddleware, modelsRouter);
+app.use("/api/risks", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, auditMiddleware, risksRouter);
+app.use("/api/compliance", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, auditMiddleware, complianceRouter);
+app.use("/api/incidents", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, auditMiddleware, incidentsRouter);
+app.use("/api/policies", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, auditMiddleware, policiesRouter);
+app.use("/api/vendors", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, auditMiddleware, vendorsRouter);
+app.use("/api/datasets", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, auditMiddleware, datasetsRouter);
+app.use("/api/threats", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, auditMiddleware, threatsRouter);
+app.use("/api/advisor", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, advisorRouter);
+app.use("/api/reports", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, auditMiddleware, reportsRouter);
+app.use("/api/audit-logs", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, auditRouter);
+app.use("/api/users", authMiddleware, requireGovernanceScope, auditMiddleware, usersRouter);
+app.use("/api/api-keys", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, auditMiddleware, apiKeysRouter);
+app.use("/api/organization", authMiddleware, requireGovernanceScope, organizationsRouter);
+app.use("/api/invitations", authMiddleware, requireGovernanceScope, auditMiddleware, invitationsRouter);
+app.use("/api/providers", authMiddleware, requireGovernanceScope, providersRouter);
+app.use("/api/settings", authMiddleware, requireGovernanceScope, settingsRouter);
 
 // ─── Error Handler ───────────────────────────────────────
 app.use(
@@ -84,8 +96,13 @@ app.use(
 );
 
 // ─── Start ───────────────────────────────────────────────
-app.listen(PORT, () => {
-    console.log(`🛡️  ShieldAI Governance API running on port ${PORT}`);
-});
+(async () => {
+    await Promise.all([
+      connectRedis().catch((err: Error) => console.warn("[startup] Redis connect failed:", err.message)),
+    ]);
+    app.listen(PORT, () => {
+        console.log(`🛡️  Airlock Governance API running on port ${PORT}`);
+    });
+})();
 
 export default app;

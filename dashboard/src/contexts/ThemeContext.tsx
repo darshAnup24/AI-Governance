@@ -11,7 +11,7 @@ const ThemeContext = createContext<ThemeContextValue>({ theme: 'dark', toggle: (
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('shieldai_theme') as Theme | null
+    const saved = localStorage.getItem('airlock_theme') as Theme | null
     if (saved) return saved
     // respect system preference
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
@@ -26,7 +26,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       root.classList.remove('dark')
       root.classList.add('light')
     }
-    localStorage.setItem('shieldai_theme', theme)
+    localStorage.setItem('airlock_theme', theme)
   }, [theme])
 
   const toggle = () => setTheme(t => (t === 'dark' ? 'light' : 'dark'))

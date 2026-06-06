@@ -19,15 +19,23 @@ services:
       - GOVERNANCE_SERVICE_TOKEN=internal-service-token-change-me
       - DATABASE_URL=postgresql+asyncpg://aigw:aigw_password@postgres:5432/ai_governance
       - REDIS_URL=redis://redis:6379/0
+      - CLICKHOUSE_URL=http://clickhouse:8123
       - OLLAMA_URL=http://ollama:11434
+      - JWT_SECRET=airlock-dev-secret-change-me
       - DEV_JWT_SECRET=dev-secret-change-in-production
-      - DEV_ORG_ID=7c1f97c6-de64-4b50-b7a8-482755773d24
+      - DEV_ORG_ID=c57e3fb1-505e-4248-8bd5-fea69ffb565d
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_SERVICE_NAME=airlock-proxy
+      - GOVERNANCE_API_URL=http://governance:4000
+      - DEMO_API_URL=http://demo-api:4001
     command: /entrypoint.sh
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      clickhouse:
+        condition: service_started
       governance:
         condition: service_started
     healthcheck:
@@ -54,6 +62,8 @@ services:
       - LOG_LEVEL=DEBUG
       - REDIS_URL=redis://redis:6379/0
       - OLLAMA_URL=http://ollama:11434
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_SERVICE_NAME=airlock-detection
     command: uvicorn detection.app.main:app --host 0.0.0.0 --port 8001 --reload
     depends_on:
       redis:
@@ -81,13 +91,19 @@ services:
       - GOVERNANCE_PORT=4000
       - DATABASE_URL=postgresql://aigw:aigw_password@postgres:5432/ai_governance
       - REDIS_URL=redis://redis:6379/0
+      - CLICKHOUSE_URL=http://clickhouse:8123
       - DETECTION_SERVICE_URL=http://detection:8001
       - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL=llama3.1:8b
-      - OLLAMA_FALLBACK_MODEL=mistral:7b
-      - JWT_SECRET=shieldai-dev-secret-change-me
+      - PRIMARY_ADVISOR_MODEL=llama3.2:3b
+      - FALLBACK_MODEL=tinyllama
+      - USE_ONNX_DETECTION=true
+      - USE_OLLAMA_IN_SYNC_PATH=false
+      - USE_OLLAMA_ASYNC_ONLY=true
+      - JWT_SECRET=airlock-dev-secret-change-me
       - INTERNAL_SERVICE_TOKEN=internal-service-token-change-me
-      - CORS_ORIGIN=http://localhost:3000
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:3002
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_SERVICE_NAME=airlock-governance
     depends_on:
       postgres:
         condition: service_healthy
@@ -133,7 +149,7 @@ services:
   postgres:
     image: timescale/timescaledb:2.17.2-pg15
     ports:
-      - "5433:5432"
+      - "5434:5432"
     environment:
       - POSTGRES_USER=aigw
       - POSTGRES_PASSWORD=aigw_password
@@ -143,6 +159,27 @@ services:
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aigw -d ai_governance"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - ai-gateway-net
+
+  # ─── ClickHouse Analytics Database ─────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./scripts/clickhouse-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8123/ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -165,29 +202,166 @@ services:
     networks:
       - ai-gateway-net
 
-  # ─── Ollama (LLM inference — fallback only, Sprint 2 uses ONNX) ──────────
-  # Requires NVIDIA Container Toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+  # ─── Ollama (LLM inference) ────────────────────────────
   ollama:
     image: ollama/ollama:latest
-    # Note: Using native Ollama on host (port 11434), so not exposing container port
-    # Internal docker services can still reach it via http://ollama:11434
     volumes:
       - ollama_data:/root/.ollama
     networks:
       - ai-gateway-net
 
-  # ─── Sprint 4: DNS Sinkhole (Active Shadow AI Interception) ─────────────
+  # ─── AlertManager ─────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9093/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - ai-gateway-net
+
+  # ─── Prometheus ────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./scripts/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - ai-gateway-net
+
+  # ─── Grafana ───────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=airlock
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - ./scripts/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./scripts/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./scripts/grafana/contact-points.yml:/etc/grafana/provisioning/contact-points.yml
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - alertmanager
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - ai-gateway-net
+
+  # ─── OpenTelemetry Collector ───────────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.104.0
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8888:8888"
+    volumes:
+      - ./infra/otel-collector/config.yml:/etc/otel-collector-config.yml
+    command: ["--config=/etc/otel-collector-config.yml"]
+    depends_on:
+      - clickhouse
+    networks:
+      - ai-gateway-net
+
+  # ─── Demo API (Sandbox Backend) ────────────────────────
+  demo-api:
+    build:
+      context: ./services/demo-api
+      dockerfile: Dockerfile
+    ports:
+      - "4001:4001"
+    environment:
+      - DEMO_API_PORT=4001
+      - DEMO_JWT_SECRET=demo-secret-change-in-production
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_SERVICE_NAME=airlock-demo-api
+    depends_on:
+      - proxy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - ai-gateway-net
+
+  # ─── Governance UI (Enterprise Frontend) ────────────────
+  governance-ui:
+    build:
+      context: ./apps
+      dockerfile: governance-ui/Dockerfile
+    ports:
+      - "3002:3000"
+    environment:
+      - VITE_GOVERNANCE_API_URL=/api/governance
+      - VITE_DEMO_API_URL=/api/demo
+      - VITE_GATEWAY_URL=/api
+    depends_on:
+      - proxy
+      - governance
+    networks:
+      - ai-gateway-net
+
+  # ─── Demo UI (Lab/Sandbox Frontend) ─────────────────────
+  demo-ui:
+    build:
+      context: ./apps
+      dockerfile: demo-ui/Dockerfile
+    ports:
+      - "3003:3001"
+    environment:
+      - VITE_GOVERNANCE_API_URL=/api/governance
+      - VITE_DEMO_API_URL=/api/demo
+      - VITE_GATEWAY_URL=/api
+    depends_on:
+      - proxy
+      - demo-api
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001"]
+      interval: 15s
+      timeout: 5s
+    networks:
+      - ai-gateway-net
+
+  # ─── DNS Sinkhole ──────────────────────────────────────
   dns-sinkhole:
     build:
       context: .
       dockerfile: detection/Dockerfile
     command: python -m detection.app.dns_sinkhole
-    # Note: DNS sinkhole runs internally only, doesn't expose to host
-    # Host DNS is handled by native systemd-resolve on port 5353
     environment:
       - DNS_UPSTREAM=8.8.8.8
       - DNS_PORT=5353
-      - DNS_SINKHOLE_IP=${SHIELD_PROXY_IP:-127.0.0.1}
+      - DNS_SINKHOLE_IP=${AIRLOCK_PROXY_IP:-127.0.0.1}
       - PROXY_ALERT_URL=http://proxy:8000
       - SINKHOLE_PASSTHROUGH=${SINKHOLE_PASSTHROUGH:-false}
     volumes:
@@ -203,6 +377,10 @@ volumes:
   postgres_data:
   redis_data:
   ollama_data:
+  clickhouse_data:
+  prometheus_data:
+  alertmanager_data:
+  grafana_data:
 
 networks:
   ai-gateway-net:

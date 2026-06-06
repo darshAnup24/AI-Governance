@@ -1,8 +1,9 @@
 import { NavLink, Outlet, Navigate, useLocation } from 'react-router-dom'
-import { Scan, Shield, MessageSquare, ScrollText, Zap, Activity, Server, Database, Wifi } from 'lucide-react'
+import { Scan, Shield, MessageSquare, ScrollText, Activity, Server, Database, Wifi } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import api from '../../lib/api'
 import govApi from '../../lib/govApi'
+import { PageHeader, PageShell, StatusPill, SurfaceSection } from '../../components/ui/page-shell'
 
 const TABS = [
   {
@@ -81,58 +82,49 @@ export default function DemoLayout() {
   }
 
   return (
-    <div className="space-y-5 animate-fade-in">
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/20">
-            <Zap className="w-5 h-5 text-white" />
+    <PageShell>
+      <PageHeader
+        badge="Demo Lab"
+        title="Interactive end-to-end Airlock scenarios"
+        description="Use the same design language as the governance platform while keeping every demo flow clearly isolated from production contexts."
+        status={<StatusPill label="Sandboxed Scope" tone="warning" pulse />}
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            {services.map(({ label, icon: Icon, ok }) => (
+              <div
+                key={label}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${
+                  ok === null
+                    ? 'border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]'
+                    : ok
+                      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-500'
+                      : 'border-red-500/20 bg-red-500/10 text-red-500'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{label}</span>
+              </div>
+            ))}
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-100">Live Demo Center</h1>
-            <p className="text-slate-500 text-sm">Interactive end-to-end demos of every ShieldAI capability</p>
-          </div>
-        </div>
+        }
+      />
 
-        {/* Service health pills */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {services.map(({ label, icon: Icon, ok }) => (
-            <div
-              key={label}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors
-                ${ok === null ? 'bg-slate-800 border-slate-700 text-slate-500'
-                  : ok ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                       : 'bg-red-500/10 border-red-500/20 text-red-400'}`}
+      <SurfaceSection className="p-3">
+        <div className="tab-strip">
+          {TABS.map(({ path, label, icon: Icon }) => (
+            <NavLink
+              key={path}
+              to={path}
+              className={({ isActive }) => `tab-chip ${isActive ? 'tab-chip-active' : ''}`}
             >
-              <Icon className="w-3 h-3" />
-              <span>{label}</span>
-              <span className={`w-1.5 h-1.5 rounded-full ${ok === null ? 'bg-slate-600' : ok ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
-            </div>
+              <Icon className="h-4 w-4" />
+              {label}
+            </NavLink>
           ))}
         </div>
-      </div>
+      </SurfaceSection>
 
-      {/* ── Tab bar ── */}
-      <div className="flex gap-0 border-b border-slate-800">
-        {TABS.map(({ path, label, icon: Icon }) => (
-          <NavLink
-            key={path}
-            to={path}
-            className={({ isActive }) =>
-              `flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 -mb-px transition-all whitespace-nowrap
-               ${isActive
-                 ? 'border-brand-500 text-brand-300 bg-brand-500/5'
-                 : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600 hover:bg-slate-800/30'}`
-            }
-          >
-            <Icon className="w-4 h-4" />
-            {label}
-          </NavLink>
-        ))}
-      </div>
-
-      {/* ── Sub-page content ── */}
       <Outlet />
-    </div>
+    </PageShell>
   )
 }

@@ -41,7 +41,7 @@ from proxy.app.redaction_verifier import verify_redaction
 log = structlog.get_logger()
 
 SESSION_TTL = 3600  # 1 hour
-NS = "shield:redact:"
+NS = "airlock:redact:"
 
 
 class StatefulRedactor:

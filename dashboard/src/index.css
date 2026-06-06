@@ -1,189 +1,289 @@
-/* ── Google Font — must be first ───────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --primary: #171717;
+  --primary-foreground: #fafafa;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #171717;
+  --muted: #f5f5f5;
+  --muted-foreground: #737373;
+  --accent: #f5f5f5;
+  --accent-foreground: #171717;
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #0a0a0a;
+  --radius: 0.5rem;
+  --sidebar-background: #fafafa;
+  --sidebar-foreground: #404040;
+  --sidebar-primary: #171717;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-accent: #f5f5f5;
+  --sidebar-accent-foreground: #171717;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: #2563eb;
+  --accent-secondary: #404040;
+  --accent-foreground: #fafafa;
+  --font-display: var(--font-sans);
+  --font-body: var(--font-sans);
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --card: #0a0a0a;
+  --card-foreground: #fafafa;
+  --popover: #0a0a0a;
+  --popover-foreground: #fafafa;
+  --primary: #fafafa;
+  --primary-foreground: #171717;
+  --secondary: #262626;
+  --secondary-foreground: #fafafa;
+  --muted: #262626;
+  --muted-foreground: #a3a3a3;
+  --accent: #262626;
+  --accent-foreground: #fafafa;
+  --destructive: #7f1d1d;
+  --destructive-foreground: #fafafa;
+  --border: #262626;
+  --input: #262626;
+  --ring: #d4d4d8;
+  --sidebar-background: #171717;
+  --sidebar-foreground: #f5f5f5;
+  --sidebar-primary: #2563eb;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #262626;
+  --sidebar-accent-foreground: #f5f5f5;
+  --sidebar-border: #262626;
+  --sidebar-ring: #60a5fa;
+  --accent-secondary: #e5e5e5;
+}
+
 @layer base {
   * {
-    @apply border-slate-800;
+    @apply border-border;
     box-sizing: border-box;
   }
 
   html {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--font-sans);
   }
 
-  /* ── Dark mode (default) ── */
   body {
-    @apply bg-slate-950 text-slate-100 antialiased;
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
-  /* ── Light mode override ── */
-  html.light body {
-    @apply bg-slate-100 text-slate-900;
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply tracking-tight;
   }
 
-  html.light .card {
-    @apply bg-white border-slate-200 shadow-sm;
+  ::-webkit-scrollbar {
+    @apply h-2 w-2;
   }
 
-  html.light .card-hover {
-    @apply bg-white border-slate-200 hover:border-slate-300 hover:shadow-md;
+  ::-webkit-scrollbar-track {
+    background: transparent;
   }
 
-  html.light .input {
-    @apply bg-white border-slate-300 text-slate-900 placeholder-slate-400;
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border;
   }
-
-  html.light aside {
-    @apply bg-white/95 border-slate-200;
-  }
-
-  html.light header {
-    @apply bg-white/95 border-slate-200;
-  }
-
-  /* ── Scrollbar ── */
-  ::-webkit-scrollbar { @apply w-1.5; }
-  ::-webkit-scrollbar-track { @apply bg-slate-900; }
-  ::-webkit-scrollbar-thumb { @apply bg-slate-700 rounded-full; }
-  ::-webkit-scrollbar-thumb:hover { @apply bg-slate-600; }
-
-  html.light ::-webkit-scrollbar-track { @apply bg-slate-100; }
-  html.light ::-webkit-scrollbar-thumb { @apply bg-slate-300; }
 }
 
 @layer components {
   .card {
-    @apply bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-xl p-5;
+    @apply flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
   }
 
   .card-hover {
-    @apply card transition-all duration-200 hover:border-slate-700 hover:bg-slate-900/70 hover:shadow-lg hover:shadow-brand-500/5;
+    @apply card transition-colors;
+  }
+
+  .card-hover:hover {
+    background-color: color-mix(in srgb, var(--accent) 60%, transparent);
   }
 
   .btn-primary {
-    @apply bg-brand-600 hover:bg-brand-500 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .btn-primary:hover {
+    background-color: color-mix(in srgb, var(--primary) 90%, transparent);
   }
 
   .btn-secondary {
-    @apply bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-4 py-2 rounded-lg border border-slate-700 transition-all duration-200 active:scale-95;
+    @apply inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
   }
 
   .btn-danger {
-    @apply bg-red-600/20 hover:bg-red-600/30 text-red-400 font-medium px-4 py-2 rounded-lg border border-red-500/30 transition-all duration-200;
+    @apply inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground ring-offset-background transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
   }
 
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium;
   }
 
-  .badge-red   { @apply badge bg-red-500/15 text-red-400 border border-red-500/25; }
-  .badge-orange { @apply badge bg-orange-500/15 text-orange-400 border border-orange-500/25; }
-  .badge-yellow { @apply badge bg-yellow-500/15 text-yellow-400 border border-yellow-500/25; }
-  .badge-green  { @apply badge bg-emerald-500/15 text-emerald-400 border border-emerald-500/25; }
-  .badge-blue   { @apply badge bg-blue-500/15 text-blue-400 border border-blue-500/25; }
+  .badge-red {
+    @apply badge border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300;
+  }
+
+  .badge-orange {
+    @apply badge border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-300;
+  }
+
+  .badge-yellow {
+    @apply badge border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300;
+  }
+
+  .badge-green {
+    @apply badge border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300;
+  }
+
+  .badge-blue {
+    @apply badge border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300;
+  }
 
   .input {
-    @apply bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 
-           placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 
-           focus:border-brand-500 transition-all duration-200 text-sm;
+    @apply flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
+  }
+
+  .toolbar {
+    @apply flex gap-3 rounded-xl border bg-card p-4 shadow-sm;
+  }
+
+  .tab-strip {
+    @apply inline-flex flex-wrap items-center gap-1 rounded-lg border p-1;
+    background-color: color-mix(in srgb, var(--muted) 60%, transparent);
+  }
+
+  .tab-chip {
+    @apply inline-flex h-9 items-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-background hover:text-foreground;
+  }
+
+  .tab-chip-active {
+    @apply bg-background text-foreground shadow-sm;
+  }
+
+  .section-badge {
+    @apply inline-flex items-center gap-2 rounded-full border bg-muted px-3 py-1;
+  }
+
+  .section-badge-label {
+    @apply text-xs font-medium text-muted-foreground;
   }
 
   .skeleton {
-    @apply animate-pulse bg-slate-800 rounded;
-  }
-
-  .gradient-text {
-    @apply bg-gradient-to-r from-brand-400 to-cyan-400 bg-clip-text text-transparent;
+    @apply animate-pulse rounded-md bg-muted;
   }
 }
 
 @layer utilities {
-  /* Fade-in animation */
   .animate-fade-in {
-    animation: fadeIn 0.3s ease-out both;
+    animation: fadeIn 0.2s ease-out both;
   }
 
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  /* Slide-up (for dropdowns / toasts) */
   .animate-slide-up {
     animation: slideUp 0.2s ease-out both;
   }
 
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   @keyframes slideUp {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
-  /* Line clamp utilities */
-  .line-clamp-1 { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
-  .line-clamp-2 { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .line-clamp-3 { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
-
-  /* Responsive container — prevents content from being too wide on ultra-wide screens */
   .content-container {
-    @apply w-full max-w-screen-2xl mx-auto;
+    @apply mx-auto w-full max-w-screen-2xl;
   }
 
-  /* Touch-friendly minimum tap target */
-  .tap-target {
-    min-height: 44px;
-    min-width: 44px;
-    @apply flex items-center justify-center;
+  .line-clamp-1 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
   }
 
-  /* iOS safe-area inset for PWA installed on notched devices */
-  .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  .safe-top {
-    padding-top: env(safe-area-inset-top, 0px);
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
 
-  /* Prevent horizontal overflow on mobile */
+  .line-clamp-3 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+
   .mobile-scroll-x {
-    @apply overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0;
+    @apply -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0;
   }
 }
 
-/* ── Mobile-first responsive overrides ─────────────────────────────────────── */
 @media (max-width: 640px) {
   .card {
-    @apply rounded-xl p-4;
+    @apply px-4 py-5;
   }
 
-  h1 {
-    @apply text-xl;
+  .toolbar {
+    @apply flex-col items-stretch;
   }
 
-  /* Make tables horizontally scrollable on mobile */
   .overflow-x-auto table {
     min-width: 520px;
   }
-
-  /* Full-width buttons on mobile */
-  .btn-primary, .btn-secondary {
-    @apply justify-center;
-  }
-
-  /* Reduce chart heights on mobile */
-  .recharts-responsive-container {
-    font-size: 11px;
-  }
 }
 
-/* ── Print styles for compliance reports ───────────────────────────────────── */
 @media print {
-  aside, header, .btn-primary, .btn-secondary, button { display: none !important; }
-  body { @apply bg-white text-slate-900; }
-  .card { @apply border border-slate-300 shadow-none; }
-}
+  aside,
+  header,
+  .btn-primary,
+  .btn-secondary,
+  button {
+    display: none !important;
+  }
 
+  body {
+    @apply bg-white text-black;
+  }
+
+  .card {
+    @apply border shadow-none;
+  }
+}

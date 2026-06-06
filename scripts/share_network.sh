@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════
-# ShieldAI — Hackathon Network Share Setup
+# Airlock — Hackathon Network Share Setup
 # Rebuilds the dashboard with your LAN IP baked in,
 # so any laptop on the same WiFi can access everything.
 #
@@ -19,7 +19,7 @@ if [[ -z "$LAN_IP" ]]; then
   read -rp "Your IP address: " LAN_IP
 fi
 
-echo -e "\n${CYAN}${BOLD}ShieldAI Hackathon Network Share${RESET}"
+echo -e "\n${CYAN}${BOLD}Airlock Hackathon Network Share${RESET}"
 echo -e "Detected LAN IP: ${GREEN}${BOLD}$LAN_IP${RESET}\n"
 
 cat <<EOF
@@ -57,6 +57,6 @@ echo "  Share with judges / teammates:"
 echo ""
 echo "  http://${LAN_IP}:3000"
 echo ""
-echo "  Login:  demo@shieldai.dev"
+echo "  Login:  demo@airlock.dev"
 echo "  Pass:   Demo1234!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

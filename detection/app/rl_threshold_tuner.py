@@ -1,18 +1,21 @@
 """
-RL Threshold Tuner
-==================
-Reads user feedback from FeedbackStore, computes per-category FP/FN rates,
-and adjusts _DEFAULT_CAT_THRESHOLDS in ml_classifier.py accordingly.
+Mistake-Only Threshold Tuner
+============================
+Reads FALSE POSITIVE corrections submitted by users and raises per-category
+confidence thresholds so the model becomes less trigger-happy on those categories.
 
-Algorithm (bandit-style policy gradient):
-  - If category has high FALSE POSITIVE rate → raise threshold (more conservative)
-  - If category has high FALSE NEGATIVE rate → lower threshold (more sensitive)
-  - Learning rate clips adjustments to ±0.05 per run to prevent oscillation
+Only false positives (user said "not sensitive") are collected from the UI.
+The model ONLY learns from its mistakes — not from confirmed correct detections.
+
+Algorithm:
+  - Count how often each category was flagged as a false positive
+  - If FP rate for a category exceeds 30% → raise its threshold by LEARNING_RATE
   - Thresholds are bounded: [0.30, 0.95] per category
+  - Requires MIN_SAMPLES FP reports per category before adjusting
 
 Output:
   - detection/data/feedback/tuned_thresholds.json   (runtime override)
-  - Loaded by MLClassifier at startup via sklearn_meta.json convention
+  - Loaded by MLClassifier at startup
 
 Usage:
   python -m detection.app.rl_threshold_tuner          # dry run, print only
@@ -54,9 +57,8 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
 LEARNING_RATE    = 0.04   # Max threshold change per run
 THRESHOLD_MIN    = 0.30   # Never go below this (safety floor)
 THRESHOLD_MAX    = 0.95   # Never go above this (recall floor)
-MIN_SAMPLES      = 3      # Minimum feedback samples to trust a category
-FP_ADJUST_UP     = +LEARNING_RATE   # FP → raise threshold
-FN_ADJUST_DOWN   = -LEARNING_RATE   # FN → lower threshold
+MIN_SAMPLES      = 3      # Minimum FP reports needed before adjusting a category
+FP_RATE_TRIGGER  = 0.30   # FP rate above this triggers a threshold increase
 
 
 # ── Core tuner ────────────────────────────────────────────────────────────────
@@ -108,35 +110,22 @@ class RLThresholdTuner:
 
     def compute_stats(self, feedback: list[dict]) -> dict[str, dict]:
         """
-        Compute per-category TP / FP / FN counts.
+        Compute per-category false-positive counts.
 
-        - FP: model predicted category X, user said SAFE / different category
-        - FN: model predicted SAFE, user said category X (or model missed it)
-        - TP: model prediction matches user correction
+        Only processes entries where user_correction == 'SAFE' — these are
+        the mistakes the model made. Other corrections (FN, confirmed TP)
+        are ignored since the UI no longer collects them.
         """
-        stats: dict[str, dict] = defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0, "total": 0})
+        stats: dict[str, dict] = defaultdict(lambda: {"fp": 0, "total": 0})
 
         for entry in feedback:
             predicted = entry.get("model_prediction", "").upper()
             corrected = entry.get("user_correction", "").upper()
 
-            if predicted == corrected:
-                stats[predicted]["tp"] += 1
-                stats[predicted]["total"] += 1
-            elif corrected == "SAFE" or corrected == "":
-                # Model fired, user says it's safe → False Positive
+            # Only count entries where user explicitly said "not sensitive"
+            if corrected in ("SAFE", "") and predicted not in ("SAFE", ""):
                 stats[predicted]["fp"] += 1
                 stats[predicted]["total"] += 1
-            elif predicted == "SAFE" or predicted == "":
-                # Model missed it, user says it IS a violation → False Negative
-                stats[corrected]["fn"] += 1
-                stats[corrected]["total"] += 1
-            else:
-                # Wrong category: FP for predicted, FN for corrected
-                stats[predicted]["fp"] += 1
-                stats[predicted]["total"] += 1
-                stats[corrected]["fn"] += 1
-                stats[corrected]["total"] += 1
 
         return dict(stats)
 
@@ -146,10 +135,8 @@ class RLThresholdTuner:
         current_thresholds: dict[str, float],
     ) -> dict[str, dict]:
         """
-        Compute new thresholds from stats using a simple policy gradient:
-          - High FP rate → raise threshold (be more conservative)
-          - High FN rate → lower threshold (be more sensitive)
-          - Mixed / insufficient data → no change
+        Raise thresholds for categories with too many false positives.
+        Only upward adjustments are made — the model only learns from its mistakes.
         """
         results = {}
 
@@ -168,25 +155,17 @@ class RLThresholdTuner:
                 }
                 continue
 
-            fp_rate = cat_stats["fp"] / total
-            fn_rate = cat_stats["fn"] / total
-
+            fp = cat_stats["fp"]
+            fp_rate = fp / total
             current = current_thresholds.get(category, DEFAULT_THRESHOLDS.get(category, 0.55))
             adjustment = 0.0
             reason = "no_change"
 
-            if fp_rate > 0.3 and fn_rate < 0.1:
-                # Too many false positives → raise threshold
-                adjustment = FP_ADJUST_UP * fp_rate
-                reason = f"high_fp_rate ({fp_rate:.0%})"
-            elif fn_rate > 0.3 and fp_rate < 0.1:
-                # Too many false negatives → lower threshold
-                adjustment = FN_ADJUST_DOWN * fn_rate
-                reason = f"high_fn_rate ({fn_rate:.0%})"
-            elif fp_rate > 0.2 and fn_rate > 0.2:
-                # Mixed signal — small nudge toward higher threshold (precision bias)
-                adjustment = FP_ADJUST_UP * 0.5
-                reason = f"mixed_signal (fp={fp_rate:.0%}, fn={fn_rate:.0%})"
+            if fp_rate > FP_RATE_TRIGGER:
+                # Too many false positives — raise threshold so the model is
+                # less aggressive on this category in future
+                adjustment = round(LEARNING_RATE * fp_rate, 4)
+                reason = f"high_fp_rate ({fp_rate:.0%}, {fp}/{total} reports)"
 
             new_threshold = round(
                 max(THRESHOLD_MIN, min(THRESHOLD_MAX, current + adjustment)),
@@ -198,12 +177,9 @@ class RLThresholdTuner:
                 "new": new_threshold,
                 "adjustment": round(adjustment, 4),
                 "reason": reason,
-                "tp": cat_stats["tp"],
                 "fp": cat_stats["fp"],
-                "fn": cat_stats["fn"],
                 "total": total,
                 "fp_rate": round(fp_rate, 3),
-                "fn_rate": round(fn_rate, 3),
             }
 
         return results
@@ -266,11 +242,12 @@ class RLThresholdTuner:
 
     def run(self, apply: bool = False, verbose: bool = True) -> dict:
         """
-        Full RL tuning run.
+        Full mistake-correction tuning run.
+        Reads FP-only feedback and raises thresholds for over-triggering categories.
 
         Returns a dict with:
-          - feedback_count: total feedback processed
-          - stats: per-category counts
+          - feedback_count: total FP corrections processed
+          - stats: per-category FP counts
           - adjustments: per-category threshold changes
           - new_thresholds: final threshold values
         """
@@ -286,13 +263,13 @@ class RLThresholdTuner:
 
         if verbose:
             print(f"\n{'='*60}")
-            print(f"  RL Threshold Tuner — {len(feedback)} feedback entries")
+            print(f"  Mistake-Only Tuner — {len(feedback)} false-positive reports")
             print(f"{'='*60}")
             for cat, adj in sorted(adjustments.items()):
-                arrow = "↑" if adj["adjustment"] > 0 else ("↓" if adj["adjustment"] < 0 else "→")
+                arrow = "↑" if adj["adjustment"] > 0 else "→"
                 print(f"  {cat:<18} {adj['current']:.3f} {arrow} {adj['new']:.3f}  ({adj['reason']})")
             if not adjustments:
-                print("  No categories with enough feedback yet.")
+                print("  No categories with enough false-positive reports yet.")
             print(f"{'='*60}\n")
 
         return {
@@ -322,7 +299,7 @@ def load_tuned_thresholds() -> dict[str, float]:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    parser = argparse.ArgumentParser(description="RL Threshold Tuner for ShieldAI")
+    parser = argparse.ArgumentParser(description="RL Threshold Tuner for Airlock")
     parser.add_argument("--apply", action="store_true", help="Apply threshold updates")
     parser.add_argument("--reset", action="store_true", help="Reset to default thresholds")
     args = parser.parse_args()

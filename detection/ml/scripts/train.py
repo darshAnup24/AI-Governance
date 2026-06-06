@@ -1,5 +1,5 @@
 """
-ShieldAI ML Model Trainer
+Airlock ML Model Trainer
 =========================
 Trains TWO complementary models:
   1. spaCy textcat (BERT-style bow) — fast multi-label classifier
@@ -324,7 +324,7 @@ def train_spacy(train: list[dict], dev: list[dict], n_iter: int = 20) -> None:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="ShieldAI ML Model Trainer")
+    parser = argparse.ArgumentParser(description="Airlock ML Model Trainer")
     parser.add_argument(
         "--model-type",
         choices=["spacy", "sklearn", "both"],
@@ -340,7 +340,7 @@ def main() -> None:
     args = parser.parse_args()
 
     print("╔══════════════════════════════════════════════════════╗")
-    print("║        ShieldAI ML Model Trainer — v1.0             ║")
+    print("║        Airlock ML Model Trainer — v1.0             ║")
     print("╚══════════════════════════════════════════════════════╝\n")
 
     # Check preprocessed data exists

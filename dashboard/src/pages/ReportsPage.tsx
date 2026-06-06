@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FileText, Download, Loader2 } from 'lucide-react'
 import { useGenerateReport } from '../lib/hooks'
 import { InlineError } from '../components/ErrorBoundary'
+import { PageHeader, PageShell, StatusPill, SurfaceSection } from '../components/ui/page-shell'
 
 const reportTypes = [
     { id: 'compliance', name: 'Compliance Summary', desc: 'Overview of policy enforcement and compliance metrics' },
@@ -27,7 +28,7 @@ export default function ReportsPage() {
             const url = window.URL.createObjectURL(new Blob([blob]))
             const link = document.createElement('a')
             link.href = url
-            link.setAttribute('download', `shieldai-report-${selectedReport}-${Date.now()}.${format}`)
+            link.setAttribute('download', `airlock-report-${selectedReport}-${Date.now()}.${format}`)
             document.body.appendChild(link)
             link.click()
             link.remove()
@@ -39,27 +40,23 @@ export default function ReportsPage() {
 
     const generating = generateMutation.isPending
 
-    return (
-        <div className="space-y-6 animate-fade-in">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-100">Reports</h1>
-                    <p className="text-slate-500 mt-1">Generate compliance and audit reports</p>
-                </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-xs font-semibold text-emerald-400">LIVE</span>
-                </div>
-            </div>
+  return (
+        <PageShell>
+            <PageHeader
+                badge="Operations Reporting"
+                title="Reports"
+                description="Generate compliance, audit, and risk exports from the same governance data plane used across the platform."
+                status={<StatusPill label="Live Exports" tone="live" pulse />}
+            />
 
             {generateMutation.isError && (
                 <InlineError message="Report generation failed. Ensure the governance service is running." onRetry={() => generateMutation.reset()} />
             )}
 
-            {/* Config */}
-            <div className="card flex flex-wrap gap-4 items-end">
+            <SurfaceSection title="Export Configuration" description="Choose a reporting window, output format, and framework bundle before generating a file.">
+              <div className="toolbar flex-wrap items-end">
                 <div>
-                    <label className="block text-xs text-slate-400 mb-1">Date Range</label>
+                    <label className="block text-xs text-[var(--muted-foreground)] mb-1">Date Range</label>
                     <select className="input" value={dateRange} onChange={e => setDateRange(e.target.value)}>
                         <option value="7d">Last 7 days</option>
                         <option value="30d">Last 30 days</option>
@@ -68,7 +65,7 @@ export default function ReportsPage() {
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs text-slate-400 mb-1">Format</label>
+                    <label className="block text-xs text-[var(--muted-foreground)] mb-1">Format</label>
                     <select className="input" value={format} onChange={e => setFormat(e.target.value)}>
                         <option value="pdf">PDF</option>
                         <option value="csv">CSV</option>
@@ -82,7 +79,8 @@ export default function ReportsPage() {
                         <><Download className="w-4 h-4" /> Generate Report</>
                     )}
                 </button>
-            </div>
+              </div>
+            </SurfaceSection>
 
             {/* Report Type Selector */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -93,12 +91,12 @@ export default function ReportsPage() {
                         className={`card-hover text-left transition-all ${selectedReport === rt.id ? 'border-brand-500/50 bg-brand-500/5' : ''}`}
                     >
                         <div className="flex items-start gap-3">
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${selectedReport === rt.id ? 'bg-brand-500/20' : 'bg-slate-800'}`}>
-                                <FileText className={`w-5 h-5 ${selectedReport === rt.id ? 'text-brand-400' : 'text-slate-500'}`} />
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${selectedReport === rt.id ? 'bg-brand-500/20' : 'bg-[var(--muted)]'}`}>
+                                <FileText className={`w-5 h-5 ${selectedReport === rt.id ? 'text-[var(--accent)]' : 'text-[var(--muted-foreground)]'}`} />
                             </div>
                             <div>
-                                <p className="text-sm font-semibold text-slate-200">{rt.name}</p>
-                                <p className="text-xs text-slate-500 mt-0.5">{rt.desc}</p>
+                                <p className="text-sm font-semibold text-[var(--foreground)]">{rt.name}</p>
+                                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{rt.desc}</p>
                             </div>
                         </div>
                     </button>
@@ -106,8 +104,7 @@ export default function ReportsPage() {
             </div>
 
             {/* Preview */}
-            <div className="card">
-                <h3 className="text-lg font-semibold text-slate-100 mb-4">Report Preview</h3>
+            <SurfaceSection title="Report Preview" description="The generated export packages live governance metrics and audit data into one deliverable.">
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         {[
@@ -116,17 +113,17 @@ export default function ReportsPage() {
                             { label: 'Redacted', value: 'Live data' },
                             { label: 'Compliance Rate', value: 'Live data' },
                         ].map(s => (
-                            <div key={s.label} className="bg-slate-800/50 rounded-lg p-4 text-center">
-                                <p className="text-xs text-slate-500">{s.label}</p>
-                                <p className="text-xl font-bold text-slate-100 mt-1">{s.value}</p>
+                            <div key={s.label} className="bg-[var(--muted)]/50 rounded-lg p-4 text-center">
+                                <p className="text-xs text-[var(--muted-foreground)]">{s.label}</p>
+                                <p className="text-xl font-bold text-[var(--foreground)] mt-1">{s.value}</p>
                             </div>
                         ))}
                     </div>
-                    <p className="text-sm text-slate-500 text-center py-4">
+                    <p className="text-sm text-[var(--muted-foreground)] text-center py-4">
                         Click "Generate Report" to download a full report with live data from the backend.
                     </p>
                 </div>
-            </div>
-        </div>
+            </SurfaceSection>
+        </PageShell>
     )
 }

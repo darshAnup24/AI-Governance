@@ -1,5 +1,5 @@
 """
-Dataset preprocessing pipeline for ShieldAI multi-label text classifier.
+Dataset preprocessing pipeline for Airlock multi-label text classifier.
 
 Steps:
   1. Load raw JSONL dataset
@@ -246,7 +246,7 @@ def save_spacy_bin(records: list[dict], path: Path) -> None:
 
 def main() -> None:
     print("=" * 60)
-    print("ShieldAI Dataset Preprocessor")
+    print("Airlock Dataset Preprocessor")
     print("=" * 60)
 
     # Load raw data

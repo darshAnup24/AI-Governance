@@ -17,8 +17,6 @@ import PolicyDemo from './pages/demo/PolicyDemo'
 import ChatDemo from './pages/demo/ChatDemo'
 import AuditDemo from './pages/demo/AuditDemo'
 import ShadowAIDemo from './pages/demo/ShadowAIDemo'
-// ─── Airlock Governance Pages ────────────────────────────────────────────────
-import Login from './pages/Login'
 import GovDashboard from './pages/governance/Dashboard'
 import Models from './pages/governance/Models'
 import Compliance from './pages/governance/Compliance'
@@ -28,6 +26,7 @@ import GovPolicies from './pages/governance/Policies'
 import Vendors from './pages/governance/Vendors'
 import GovReports from './pages/governance/Reports'
 import UserHeatmap from './pages/governance/UserHeatmap'
+import ThreatDetection from './pages/governance/ThreatDetection'
 
 function Wrap({ children }: { children: React.ReactNode }) {
     return <ErrorBoundary>{children}</ErrorBoundary>
@@ -40,7 +39,7 @@ export default function App() {
                 <InstallPWA />
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />
-                    <Route path="/shield-login" element={<Login />} />
+                    <Route path="/airlock-login" element={<Navigate to="/login" replace />} />
                     <Route
                         element={
                             <ProtectedRoute>
@@ -63,7 +62,7 @@ export default function App() {
                         <Route path="/reports" element={<Wrap><ReportsPage /></Wrap>} />
                         <Route path="/settings" element={<Wrap><SettingsPage /></Wrap>} />
 
-                        {/* ShieldAI Governance routes */}
+                        {/* Airlock Governance routes */}
                         <Route path="/governance" element={<Wrap><GovDashboard /></Wrap>} />
                         <Route path="/governance/models" element={<Wrap><Models /></Wrap>} />
                         <Route path="/governance/compliance" element={<Wrap><Compliance /></Wrap>} />
@@ -73,6 +72,7 @@ export default function App() {
                         <Route path="/governance/vendors" element={<Wrap><Vendors /></Wrap>} />
                         <Route path="/governance/reports" element={<Wrap><GovReports /></Wrap>} />
                         <Route path="/governance/heatmap" element={<Wrap><UserHeatmap /></Wrap>} />
+                        <Route path="/governance/threats" element={<Wrap><ThreatDetection /></Wrap>} />
                     </Route>
                     <Route path="*" element={<Navigate to="/governance" replace />} />
                 </Routes>

@@ -24,10 +24,17 @@
         "paths": {
             "@/*": [
                 "src/*"
+            ],
+            "@airlock/shared-ui": [
+                "../apps/shared-ui/src"
+            ],
+            "@airlock/shared-ui/design-system": [
+                "../apps/shared-ui/src/design-system"
             ]
         }
     },
     "include": [
-        "src"
+        "src",
+        "../apps/shared-ui/src"
     ]
 }

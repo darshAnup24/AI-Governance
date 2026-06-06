@@ -6,6 +6,7 @@ import { SkeletonTable } from '../../components/Skeletons'
 import { InlineError } from '../../components/ErrorBoundary'
 import api from '../../lib/api'
 import { Link } from 'react-router-dom'
+import { PageHeader, PageShell, StatusPill, SurfaceSection } from '../../components/ui/page-shell'
 
 const ACTION_COLORS: Record<string, string> = {
   BLOCK: 'bg-red-500/10 text-red-400',
@@ -64,9 +65,9 @@ function LiveFeed({ events }: { events: any[] }) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-          <h2 className="text-base font-semibold text-slate-100">Live Threat Feed</h2>
+          <h2 className="text-base font-semibold text-[var(--foreground)]">Live Threat Feed</h2>
         </div>
-        <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer select-none">
+        <label className="flex items-center gap-2 text-xs text-[var(--muted-foreground)] cursor-pointer select-none">
           <input type="checkbox" checked={autoScroll} onChange={e => setAutoScroll(e.target.checked)} className="accent-brand-500 w-3 h-3" />
           Auto-scroll
         </label>
@@ -75,7 +76,7 @@ function LiveFeed({ events }: { events: any[] }) {
         {events.map((evt: any, i: number) => (
           <div
             key={evt.id}
-            className={`flex items-start gap-3 p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors ${i === 0 ? 'border border-brand-500/10' : ''}`}
+            className={`flex items-start gap-3 p-3 rounded-lg bg-[var(--muted)]/50 hover:bg-[var(--muted)] transition-colors ${i === 0 ? 'border border-[var(--accent)]/10' : ''}`}
           >
             <div className="flex-shrink-0 mt-0.5">
               {evt.action === 'BLOCK' || evt.action === 'REDACT'
@@ -88,18 +89,18 @@ function LiveFeed({ events }: { events: any[] }) {
                 <span className={`text-xs px-2 py-0.5 rounded font-semibold ${ACTION_COLORS[evt.action]}`}>
                   {evt.action}
                 </span>
-                <span className="text-xs text-slate-500">{evt.userName}</span>
+                <span className="text-xs text-[var(--muted-foreground)]">{evt.userName}</span>
                 {evt.detectedCategories?.map((c: string) => (
-                  <span key={c} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">{c}</span>
+                  <span key={c} className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--muted)] text-[var(--muted-foreground)]">{c}</span>
                 ))}
               </div>
-              <p className="text-xs text-slate-500 font-mono mt-1 truncate">{evt.promptPreview}</p>
+              <p className="text-xs text-[var(--muted-foreground)] font-mono mt-1 truncate">{evt.promptPreview}</p>
             </div>
             <div className="text-right flex-shrink-0">
               <p className={`text-xs font-bold ${evt.riskScore >= 70 ? 'text-red-400' : evt.riskScore >= 40 ? 'text-yellow-400' : 'text-emerald-400'}`}>
                 {evt.riskScore}
               </p>
-              <p className="text-[10px] text-slate-600">{timeAgo(evt.createdAt)}</p>
+              <p className="text-[10px] text-[var(--muted-foreground)]/70">{timeAgo(evt.createdAt)}</p>
             </div>
           </div>
         ))}
@@ -167,29 +168,31 @@ export default function ThreatDetection() {
   )
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100">Threat Detection</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Real-time prompt risk monitoring</p>
-        </div>
-        <button onClick={() => refetch()} disabled={isFetching} className="btn-secondary flex items-center gap-2 text-sm py-1.5">
-          <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
+    <PageShell>
+      <PageHeader
+        badge="Detection Operations"
+        title="Threat Detection"
+        description="Monitor prompt risk in real time, run targeted scans, and inspect the live enforcement feed from the shared governance shell."
+        status={<StatusPill label="Live Monitor" tone="warning" pulse />}
+        actions={
+          <button onClick={() => refetch()} disabled={isFetching} className="btn-secondary flex items-center gap-2 text-sm py-1.5">
+            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        }
+      />
 
       {isError && <InlineError message="Live feed unavailable — using cached data." onRetry={() => refetch()} />}
 
       {/* Manual Scan */}
-      <div className="card border border-brand-500/20 bg-brand-500/3">
+      <SurfaceSection className="border border-brand-500/20 bg-[var(--accent)]/3">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-brand-400 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-[var(--accent)] flex items-center gap-2">
             <Search className="w-4 h-4" /> Quick Threat Scan
           </h3>
           <Link
             to="/live-demo"
-            className="flex items-center gap-1 text-xs text-slate-500 hover:text-brand-400 transition-colors"
+            className="flex items-center gap-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--accent)] transition-colors"
           >
             Deep span analysis
             <ExternalLink className="w-3 h-3" />
@@ -221,11 +224,11 @@ export default function ThreatDetection() {
         </div>
 
         {scanResult && (
-          <div className="mt-4 p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3 animate-fade-in">
+          <div className="mt-4 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
             {/* Top metrics row */}
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
-                <span className="text-slate-500 text-xs">Risk Score</span>
+                <span className="text-[var(--muted-foreground)] text-xs">Risk Score</span>
                 <span className={`text-2xl font-bold font-mono ${
                   scanResult.riskScore >= 70 ? 'text-red-400' :
                   scanResult.riskScore >= 40 ? 'text-yellow-400' : 'text-emerald-400'
@@ -237,26 +240,26 @@ export default function ThreatDetection() {
                 }`}>{scanResult.action}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-slate-500 text-xs">EU AI Act</span>
+                <span className="text-[var(--muted-foreground)] text-xs">EU AI Act</span>
                 <span className={`font-bold text-xs ${TIER_COLORS[scanResult.euAiActRiskLevel]}`}>
                   {scanResult.euAiActRiskLevel}
                 </span>
               </div>
               <div className="ml-auto text-right">
-                <p className="text-[10px] text-slate-600 font-mono">{scanResult.durationMs}ms</p>
-                <p className="text-[10px] text-slate-600">{scanResult.threatsDetected} span{scanResult.threatsDetected !== 1 ? 's' : ''} found</p>
+                <p className="text-[10px] text-[var(--muted-foreground)]/70 font-mono">{scanResult.durationMs}ms</p>
+                <p className="text-[10px] text-[var(--muted-foreground)]/70">{scanResult.threatsDetected} span{scanResult.threatsDetected !== 1 ? 's' : ''} found</p>
               </div>
             </div>
 
             {/* Detected categories */}
             {scanResult.categories.length > 0 ? (
               <div>
-                <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-2">Detected Categories</p>
+                <p className="text-[10px] text-[var(--muted-foreground)]/70 uppercase tracking-wider mb-2">Detected Categories</p>
                 <div className="flex flex-wrap gap-2">
                   {scanResult.categories.map((cat: string) => (
                     <span key={cat}
                       className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-semibold ${
-                        CATEGORY_COLORS[cat] || 'bg-slate-700/50 text-slate-300 border-slate-700'
+                        CATEGORY_COLORS[cat] || 'bg-[var(--muted)]/50 text-[var(--foreground)] border-[var(--border)]'
                       }`}
                     >
                       <ChevronRight className="w-3 h-3" />
@@ -274,7 +277,7 @@ export default function ThreatDetection() {
 
             {/* Top span details */}
             {scanResult.detectedSpans.length > 0 && (
-              <div className="space-y-1.5 pt-1 border-t border-slate-800">
+              <div className="space-y-1.5 pt-1 border-t border-[var(--border)]">
                 {scanResult.detectedSpans.slice(0, 4).map((sp: any, i: number) => (
                   <div key={i} className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
@@ -285,26 +288,26 @@ export default function ThreatDetection() {
                         sp.category === 'REGULATORY' ? 'bg-purple-400' :
                         sp.category === 'SECURITY_VULN' ? 'bg-rose-400' : 'bg-yellow-400'
                       }`} />
-                      <span className="text-slate-400">{sp.category?.replace(/_/g, ' ')}</span>
+                      <span className="text-[var(--muted-foreground)]">{sp.category?.replace(/_/g, ' ')}</span>
                       {sp.matched_text && (
-                        <code className="text-[10px] text-slate-600 bg-slate-800 px-1 rounded truncate max-w-40">
+                        <code className="text-[10px] text-[var(--muted-foreground)]/70 bg-[var(--muted)] px-1 rounded truncate max-w-40">
                           {sp.matched_text.slice(0, 28)}…
                         </code>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-12 h-1 bg-slate-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-brand-500 to-red-500 rounded-full"
+                      <div className="w-12 h-1 bg-[var(--muted)] rounded-full overflow-hidden">
+                        <div className="h-full rounded-full bg-[var(--foreground)]"
                           style={{ width: `${Math.round((sp.confidence || 1) * 100)}%` }} />
                       </div>
-                      <span className="text-[10px] text-slate-500 font-mono w-7 text-right">
+                      <span className="text-[10px] text-[var(--muted-foreground)] font-mono w-7 text-right">
                         {Math.round((sp.confidence || 1) * 100)}%
                       </span>
                     </div>
                   </div>
                 ))}
                 {scanResult.detectedSpans.length > 4 && (
-                  <Link to="/live-demo" className="text-[10px] text-brand-400 hover:underline flex items-center gap-1">
+                  <Link to="/live-demo" className="text-[10px] text-[var(--accent)] hover:underline flex items-center gap-1">
                     +{scanResult.detectedSpans.length - 4} more spans — view full breakdown
                     <ExternalLink className="w-2.5 h-2.5" />
                   </Link>
@@ -313,13 +316,12 @@ export default function ThreatDetection() {
             )}
           </div>
         )}
-      </div>
+      </SurfaceSection>
 
       {/* Charts + Feed */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Category Donut */}
-        <div className="card">
-          <h2 className="text-base font-semibold text-slate-100 mb-4">By Category</h2>
+        <SurfaceSection title="By Category" description="Current breakdown of detection types seen in the feed.">
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie
@@ -345,34 +347,34 @@ export default function ThreatDetection() {
               <div key={d.name} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full" style={{ background: d.color }} />
-                  <span className="text-slate-400">{d.name}</span>
+                  <span className="text-[var(--muted-foreground)]">{d.name}</span>
                 </div>
-                <span className="text-slate-300 font-medium">{d.value}%</span>
+                <span className="text-[var(--foreground)] font-medium">{d.value}%</span>
               </div>
             ))}
           </div>
-        </div>
+        </SurfaceSection>
 
         {/* Live Feed */}
-        <div className="card lg:col-span-2">
+        <SurfaceSection title="Live Threat Feed" description="Filter recent actions without leaving the monitoring surface." className="lg:col-span-2">
           {/* Filter bar */}
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <div className="toolbar mb-4 flex-wrap">
             {['ALL', 'BLOCK', 'REDACT', 'WARN', 'LOG', 'ALLOW'].map(a => (
               <button
                 key={a}
                 onClick={() => setFilterAction(a)}
-                className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
+                className={`tab-chip ${
                   filterAction === a
                     ? a === 'ALL'
-                      ? 'bg-brand-500/20 text-brand-400 border-brand-500/40'
+                      ? 'tab-chip-active'
                       : ACTION_COLORS[a] + ' border-current'
-                    : 'text-slate-600 border-slate-700 hover:border-slate-600'
+                    : ''
                 }`}
               >
                 {a}
               </button>
             ))}
-            <span className="ml-auto text-xs text-slate-600">{filteredEvents.length} events</span>
+            <span className="ml-auto text-xs text-[var(--muted-foreground)]/70">{filteredEvents.length} events</span>
           </div>
 
           {isPending ? (
@@ -380,7 +382,7 @@ export default function ThreatDetection() {
           ) : (
             <LiveFeed events={filteredEvents} />
           )}
-        </div>
+        </SurfaceSection>
       </div>
 
       {/* High risk alert banner */}
@@ -389,13 +391,13 @@ export default function ThreatDetection() {
           <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
           <div>
             <p className="text-sm font-semibold text-red-400">Active Block Events Detected</p>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
               {normalizedEvents.filter((e: any) => e.action === 'BLOCK').length} requests were blocked in this session.
               Review the feed above for details.
             </p>
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   )
 }

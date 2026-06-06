@@ -32,14 +32,14 @@ const STATUS_STYLES: Record<string, string> = {
   allowed: 'border-emerald-500/30 bg-emerald-500/5',
   blocked: 'border-red-500/30 bg-red-500/5',
   warn: 'border-yellow-500/30 bg-yellow-500/5',
-  pending: 'border-slate-700 bg-slate-800/30',
+  pending: 'border-[var(--border)] bg-[var(--muted)]/30',
 }
 
 const STATUS_BADGE: Record<string, { label: string; color: string; icon: typeof Shield }> = {
   allowed: { label: 'ALLOWED', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', icon: CheckCircle2 },
   blocked: { label: 'BLOCKED', color: 'text-red-400 bg-red-500/10 border-red-500/20', icon: Shield },
   warn:    { label: 'WARNING', color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20', icon: AlertTriangle },
-  pending: { label: '…',       color: 'text-slate-500 bg-slate-800 border-slate-700', icon: Loader2 },
+  pending: { label: '…',       color: 'text-[var(--muted-foreground)] bg-[var(--muted)] border-[var(--border)]', icon: Loader2 },
 }
 
 function MessageBubble({ msg }: { msg: Message }) {
@@ -50,8 +50,8 @@ function MessageBubble({ msg }: { msg: Message }) {
   return (
     <div className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
       {!isUser && (
-        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-500 to-purple-500 flex items-center justify-center flex-shrink-0 mt-1">
-          <Bot className="w-4 h-4 text-white" />
+        <div className="mt-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--muted)]">
+          <Bot className="h-4 w-4 text-[var(--foreground)]" />
         </div>
       )}
 
@@ -59,8 +59,8 @@ function MessageBubble({ msg }: { msg: Message }) {
         {/* Main bubble */}
         <div className={`px-4 py-3 rounded-2xl text-sm border transition-all
           ${isUser
-            ? (msg.status ? STATUS_STYLES[msg.status] : 'bg-brand-600/20 border-brand-500/30 text-slate-200')
-            : 'bg-slate-800/50 border-slate-700/50 text-slate-300'}`}>
+            ? (msg.status ? STATUS_STYLES[msg.status] : 'bg-brand-600/20 border-brand-500/30 text-[var(--foreground)]')
+            : 'bg-[var(--muted)]/50 border-[var(--border)]/50 text-[var(--foreground)]'}`}>
           <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
         </div>
 
@@ -82,7 +82,7 @@ function MessageBubble({ msg }: { msg: Message }) {
         {isUser && msg.categories && msg.categories.length > 0 && (
           <div className="flex gap-1 flex-wrap">
             {msg.categories.map(c => (
-              <span key={c} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-400">
+              <span key={c} className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--muted)] border border-[var(--border)] text-[var(--muted-foreground)]">
                 {c.replace(/_/g, ' ')}
               </span>
             ))}
@@ -96,8 +96,8 @@ function MessageBubble({ msg }: { msg: Message }) {
       </div>
 
       {isUser && (
-        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center flex-shrink-0 mt-1">
-          <User className="w-4 h-4 text-slate-300" />
+        <div className="mt-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--muted)]">
+          <User className="h-4 w-4 text-[var(--foreground)]" />
         </div>
       )}
     </div>
@@ -198,64 +198,64 @@ export default function ChatDemo() {
   return (
     <div className="space-y-5">
       {/* How it works */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+      <div className="bg-[var(--background)]/50 border border-[var(--border)] rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Info className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-          <span className="text-sm font-semibold text-slate-200">How the Chat Gateway works</span>
+          <span className="text-sm font-semibold text-[var(--foreground)]">How the Chat Gateway works</span>
         </div>
-        <div className="flex items-center gap-2 flex-wrap text-xs text-slate-400">
+        <div className="flex items-center gap-2 flex-wrap text-xs text-[var(--muted-foreground)]">
           {['Your message', 'Proxy :8000', 'Detection engine', 'Policy evaluation', 'LLM (if allowed)'].map((s, i, arr) => (
             <span key={s} className="flex items-center gap-2">
-              <span className="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-slate-300">{s}</span>
-              {i < arr.length - 1 && <ArrowRight className="w-3 h-3 text-slate-600" />}
+              <span className="px-2 py-1 rounded bg-[var(--muted)] border border-[var(--border)] text-[var(--foreground)]">{s}</span>
+              {i < arr.length - 1 && <ArrowRight className="w-3 h-3 text-[var(--muted-foreground)]/70" />}
             </span>
           ))}
         </div>
-        <p className="text-xs text-slate-500 mt-2">
+        <p className="text-xs text-[var(--muted-foreground)] mt-2">
           Every message goes through the AI firewall. <span className="text-red-400 font-medium">BLOCKED</span> = policy rule matched.{' '}
           <span className="text-emerald-400 font-medium">ALLOWED</span> = passed detection & policies, forwarded to LLM.{' '}
-          Blocked messages auto-create an <strong className="text-slate-400">Incident</strong> on the Governance board.
+          Blocked messages auto-create an <strong className="text-[var(--muted-foreground)]">Incident</strong> on the Governance board.
         </p>
       </div>
 
       {/* Quick send buttons */}
       <div className="flex gap-2 flex-wrap items-center">
-        <span className="text-xs text-slate-600">Quick send:</span>
+        <span className="text-xs text-[var(--muted-foreground)]/70">Quick send:</span>
         {STARTER_MESSAGES.map((m, i) => (
           <button key={i} onClick={() => sendMessage(m.text)} disabled={sending}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium border text-slate-400 border-slate-800 hover:border-slate-600 hover:text-slate-200 transition-all disabled:opacity-50">
+            className="px-3 py-1.5 rounded-lg text-xs font-medium border text-[var(--muted-foreground)] border-[var(--border)] hover:border-[var(--accent)]/30 hover:text-[var(--foreground)] transition-all disabled:opacity-50">
             {m.label}
           </button>
         ))}
         {messages.length > 0 && (
-          <button onClick={clearChat} className="ml-auto flex items-center gap-1 text-xs text-slate-600 hover:text-slate-400 transition-colors">
+          <button onClick={clearChat} className="ml-auto flex items-center gap-1 text-xs text-[var(--muted-foreground)]/70 hover:text-[var(--muted-foreground)] transition-colors">
             <RefreshCw className="w-3 h-3" /> Clear
           </button>
         )}
       </div>
 
       {/* Chat window */}
-      <div className="rounded-xl border border-slate-800 bg-slate-950 flex flex-col" style={{ height: '420px' }}>
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] flex flex-col" style={{ height: '420px' }}>
         {/* Header */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-800">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--border)]">
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <MessageSquare className="w-4 h-4 text-slate-400" />
-          <span className="text-sm font-semibold text-slate-300">AI Chat — routed through ShieldAI Proxy</span>
-          <span className="ml-auto text-xs text-slate-600">localhost:8000</span>
+          <MessageSquare className="w-4 h-4 text-[var(--muted-foreground)]" />
+          <span className="text-sm font-semibold text-[var(--foreground)]">AI Chat — routed through Airlock Proxy</span>
+          <span className="ml-auto text-xs text-[var(--muted-foreground)]/70">localhost:8000</span>
         </div>
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
-              <MessageSquare className="w-10 h-10 text-slate-800" />
-              <p className="text-slate-600 text-sm">Type a message or click a Quick Send preset above</p>
-              <p className="text-slate-700 text-xs">Harmful prompts will be BLOCKED before reaching the LLM</p>
+              <MessageSquare className="w-10 h-10 text-[var(--muted-foreground)]/30" />
+              <p className="text-[var(--muted-foreground)]/70 text-sm">Type a message or click a Quick Send preset above</p>
+              <p className="text-[var(--muted-foreground)]/40 text-xs">Harmful prompts will be BLOCKED before reaching the LLM</p>
             </div>
           )}
           {messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
           {sending && (
-            <div className="flex items-center gap-2 text-xs text-slate-600">
+            <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]/70">
               <Loader2 className="w-3 h-3 animate-spin" />
               <span>Processing through proxy…</span>
             </div>
@@ -264,14 +264,14 @@ export default function ChatDemo() {
         </div>
 
         {/* Input */}
-        <div className="p-3 border-t border-slate-800 flex gap-2">
+        <div className="p-3 border-t border-[var(--border)] flex gap-2">
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
             placeholder="Type a message… (Enter to send)"
             disabled={sending}
-            className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-300 placeholder-slate-700 focus:outline-none focus:border-brand-500/50 disabled:opacity-50"
+            className="flex-1 bg-[var(--background)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)]/40 focus:outline-none focus:border-brand-500/50 disabled:opacity-50"
           />
           <button onClick={() => sendMessage()} disabled={sending || !input.trim()}
             className="btn-primary px-3 py-2 flex items-center gap-1.5 disabled:opacity-50">

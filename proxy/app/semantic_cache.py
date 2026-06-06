@@ -7,7 +7,7 @@ dropping latency from ~100 ms → <5 ms.
 Key design:
   - Normalization: lowercase + collapse whitespace → same cache entry for minor variations
   - TTL: 60 s (configurable via SEMANTIC_CACHE_TTL env)
-  - Namespace: "shield:dcache:" to avoid collisions with other Redis keys
+  - Namespace: "airlock:dcache:" to avoid collisions with other Redis keys
   - Fail-open: any Redis error is logged and silently ignored — detection still runs
 """
 
@@ -23,7 +23,7 @@ import structlog
 log = structlog.get_logger()
 
 CACHE_TTL: int = 15  # seconds — short TTL so policy changes clear stale decisions quickly
-CACHE_NS = "shield:dcache:"
+CACHE_NS = "airlock:dcache:"
 
 def _cache_key(prompt: str) -> str:
     # Hash the exact prompt. No skeleton normalization.

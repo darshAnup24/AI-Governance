@@ -127,6 +127,7 @@ def _create_sqlite_tables(conn):
         CREATE TABLE IF NOT EXISTS policy_rules (
             rule_id TEXT PRIMARY KEY,
             org_id TEXT NOT NULL,
+            parent_rule_id TEXT,
             name TEXT NOT NULL,
             description TEXT DEFAULT '',
             conditions TEXT NOT NULL,
@@ -135,9 +136,23 @@ def _create_sqlite_tables(conn):
             priority INTEGER DEFAULT 100,
             enabled BOOLEAN DEFAULT 1,
             exceptions TEXT DEFAULT '[]',
+            version INTEGER DEFAULT 1,
+            rollout_percentage INTEGER DEFAULT 100,
+            rollout_status TEXT DEFAULT 'ACTIVE',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             deleted_at DATETIME
+        )
+    """))
+    conn.execute(__import__("sqlalchemy").text("""
+        CREATE TABLE IF NOT EXISTS policy_versions (
+            id TEXT PRIMARY KEY,
+            policy_id TEXT NOT NULL REFERENCES policy_rules(rule_id),
+            version INTEGER NOT NULL,
+            snapshot TEXT NOT NULL,
+            changed_by TEXT DEFAULT '',
+            reason TEXT DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """))
     conn.execute(__import__("sqlalchemy").text("""
@@ -176,10 +191,14 @@ def _create_sqlite_tables(conn):
 @pytest.fixture
 def client():
     """Test client with the DB dependency overridden to use in-memory SQLite."""
+    import proxy.app.database
+    original_async_session = proxy.app.database.async_session
+    proxy.app.database.async_session = TestSessionLocal
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+    proxy.app.database.async_session = original_async_session
 
 
 @pytest.fixture

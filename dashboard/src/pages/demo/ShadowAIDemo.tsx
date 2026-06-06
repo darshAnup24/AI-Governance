@@ -137,16 +137,16 @@ export default function ShadowAIDemo() {
   return (
     <div className="space-y-5">
       {/* How it works */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+      <div className="bg-[var(--background)]/50 border border-[var(--border)] rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Info className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-          <span className="text-sm font-semibold text-slate-200">How Shadow AI Detection works</span>
+          <span className="text-sm font-semibold text-[var(--foreground)]">How Shadow AI Detection works</span>
         </div>
-        <div className="flex items-center gap-2 flex-wrap text-xs text-slate-400">
+        <div className="flex items-center gap-2 flex-wrap text-xs text-[var(--muted-foreground)]">
           {['Employee visits AI tool', 'Domain matched against blocklist', 'Event flagged + logged', 'Tool classified + risk-rated', 'Appears in Shadow AI dashboard'].map((s, i, arr) => (
             <span key={s} className="flex items-center gap-2">
-              <span className="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-slate-300">{s}</span>
-              {i < arr.length - 1 && <ArrowRight className="w-3 h-3 text-slate-600" />}
+              <span className="px-2 py-1 rounded bg-[var(--muted)] border border-[var(--border)] text-[var(--foreground)]">{s}</span>
+              {i < arr.length - 1 && <ArrowRight className="w-3 h-3 text-[var(--muted-foreground)]/70" />}
             </span>
           ))}
         </div>
@@ -162,7 +162,7 @@ export default function ShadowAIDemo() {
 
         {/* ── Col 1: Blocked Domains Manager ─────────────────────── */}
         <div className="space-y-3">
-          <span className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+          <span className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-2">
             <Ban className="w-4 h-4 text-red-400" /> Domain Blocklist
             <span className="ml-auto text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded font-semibold">
               {blockedDomains.length} blocked
@@ -178,7 +178,7 @@ export default function ShadowAIDemo() {
                 onChange={e => { setNewDomain(e.target.value); setAddError('') }}
                 onKeyDown={e => e.key === 'Enter' && addDomain()}
                 placeholder="deepseek.com"
-                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-red-500/50 transition-colors"
+                className="flex-1 bg-[var(--background)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)]/60 focus:outline-none focus:border-red-500/50 transition-colors"
               />
               <button onClick={addDomain}
                 className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 hover:border-red-500/60 text-red-400 hover:text-red-300 transition-all">
@@ -189,13 +189,13 @@ export default function ShadowAIDemo() {
           </div>
 
           {/* Domain list */}
-          <div className="border border-slate-800 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
+          <div className="border border-[var(--border)] rounded-xl overflow-hidden max-h-64 overflow-y-auto">
             {blockedDomains.map(d => (
-              <div key={d} className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 group">
+              <div key={d} className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)]/50 last:border-0 hover:bg-[var(--muted)]/20 group">
                 <Lock className="w-3 h-3 text-red-400 flex-shrink-0" />
-                <span className="flex-1 text-xs text-slate-300 font-mono">{d}</span>
+                <span className="flex-1 text-xs text-[var(--foreground)] font-mono">{d}</span>
                 <button onClick={() => removeDomain(d)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-600 hover:text-red-400">
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--muted-foreground)]/70 hover:text-red-400">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -203,8 +203,8 @@ export default function ShadowAIDemo() {
           </div>
 
           {/* ── Domain Tester ──────────────────────────────────────── */}
-          <div className="card border border-slate-800 space-y-3">
-            <p className="text-xs font-semibold text-slate-300 flex items-center gap-2">
+          <div className="card border border-[var(--border)] space-y-3">
+            <p className="text-xs font-semibold text-[var(--foreground)] flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-blue-400" /> Test Any Domain
             </p>
             <div className="flex gap-2">
@@ -213,7 +213,7 @@ export default function ShadowAIDemo() {
                 onChange={e => setTestInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && testDomain()}
                 placeholder="https://deepseek.com"
-                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500/50 transition-colors"
+                className="flex-1 bg-[var(--background)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)]/60 focus:outline-none focus:border-blue-500/50 transition-colors"
               />
               <button onClick={testDomain}
                 className="px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30 hover:border-blue-500/60 text-blue-400 hover:text-blue-300 transition-all">
@@ -222,20 +222,20 @@ export default function ShadowAIDemo() {
             </div>
 
             {testResult && (
-              <div className={`rounded-lg p-3 border text-xs animate-fade-in ${testResult.blocked
-                ? 'bg-red-500/10 border-red-500/30' : 'bg-emerald-500/10 border-emerald-500/30'}`}>
+              <div className={`rounded-lg border p-3 text-xs ${testResult.blocked
+                ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950' : 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950'}`}>
                 <div className="flex items-center gap-2 mb-1">
                   {testResult.blocked
                     ? <><Ban className="w-4 h-4 text-red-400" /><span className="font-bold text-red-300 text-sm">BLOCKED</span></>
                     : <><CheckCircle2 className="w-4 h-4 text-emerald-400" /><span className="font-bold text-emerald-300 text-sm">ALLOWED</span></>
                   }
                 </div>
-                <p className="text-slate-400 font-mono">{testResult.domain}</p>
+                <p className="text-[var(--muted-foreground)] font-mono">{testResult.domain}</p>
                 {testResult.blocked && testResult.matchedRule && (
                   <p className="text-red-400/70 mt-1">Matched rule: <code className="text-red-300">{testResult.matchedRule}</code></p>
                 )}
                 {testResult.category && (
-                  <p className="text-slate-500 mt-1">Category: <span className="text-slate-400">{testResult.category.replace('_', ' ')}</span></p>
+                  <p className="text-[var(--muted-foreground)] mt-1">Category: <span className="text-[var(--muted-foreground)]">{testResult.category.replace('_', ' ')}</span></p>
                 )}
                 {!testResult.blocked && (
                   <p className="text-emerald-400/70 mt-1">Not in blocklist — access permitted</p>
@@ -251,26 +251,26 @@ export default function ShadowAIDemo() {
           <div className="grid grid-cols-3 gap-3">
             <div className="card border border-red-500/20 bg-red-500/5 text-center py-3">
               <p className="text-2xl font-bold text-red-400">{blocked.length}</p>
-              <p className="text-xs text-slate-500 mt-0.5">Blocked attempts</p>
+              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Blocked attempts</p>
             </div>
-            <div className="card border border-slate-800 text-center py-3">
-              <p className="text-2xl font-bold text-slate-100">{unauthorized.reduce((a, b) => a + b.count, 0)}</p>
-              <p className="text-xs text-slate-500 mt-0.5">Events injected</p>
+            <div className="card border border-[var(--border)] text-center py-3">
+              <p className="text-2xl font-bold text-[var(--foreground)]">{unauthorized.reduce((a, b) => a + b.count, 0)}</p>
+              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Events injected</p>
             </div>
-            <div className="card border border-slate-800 text-center py-3">
+            <div className="card border border-[var(--border)] text-center py-3">
               <p className="text-2xl font-bold text-emerald-400">{blockedDomains.length}</p>
-              <p className="text-xs text-slate-500 mt-0.5">Domains blocked</p>
+              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Domains blocked</p>
             </div>
           </div>
 
           {/* Simulate buttons */}
-          <div className="card border border-slate-800">
+          <div className="card border border-[var(--border)]">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+              <span className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-2">
                 <Wifi className="w-4 h-4 text-yellow-400" /> Simulate Employee Access
               </span>
               <button onClick={injectAll} disabled={injecting !== null}
-                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 text-slate-400 hover:border-brand-500/50 hover:text-brand-300 transition-all disabled:opacity-50 flex items-center gap-1">
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:border-brand-500/50 hover:text-brand-300 transition-all disabled:opacity-50 flex items-center gap-1">
                 <Zap className="w-3 h-3" /> All tools
               </button>
             </div>
@@ -280,17 +280,17 @@ export default function ShadowAIDemo() {
                 return (
                   <button key={p.label} onClick={() => inject(p)} disabled={injecting !== null}
                     className={`flex items-center gap-2 p-2.5 rounded-xl border transition-all disabled:opacity-50 group text-left
-                      ${isBlocked ? 'border-red-500/30 bg-red-500/5 hover:border-red-500/50' : 'border-slate-800 hover:border-slate-600'}`}>
+                      ${isBlocked ? 'border-red-500/30 bg-red-500/5 hover:border-red-500/50' : 'border-[var(--border)] hover:border-[var(--accent)]/30'}`}>
                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isBlocked ? 'bg-red-400' : p.authorized ? 'bg-emerald-400' : 'bg-yellow-400'}`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-slate-300 font-medium group-hover:text-white transition-colors truncate">{p.tool}</p>
-                      <p className="text-[10px] text-slate-600 truncate">{p.domain}</p>
+                      <p className="text-xs text-[var(--foreground)] font-medium group-hover:text-white transition-colors truncate">{p.tool}</p>
+                      <p className="text-[10px] text-[var(--muted-foreground)]/70 truncate">{p.domain}</p>
                     </div>
                     {isBlocked
                       ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 border border-red-500/30 text-red-400 font-bold flex-shrink-0">BLOCKED</span>
                       : injecting === p.label
-                        ? <Loader2 className="w-3 h-3 animate-spin text-brand-400 flex-shrink-0" />
-                        : <ArrowRight className="w-3 h-3 text-slate-700 group-hover:text-slate-400 flex-shrink-0" />
+                        ? <Loader2 className="w-3 h-3 animate-spin text-[var(--accent)] flex-shrink-0" />
+                        : <ArrowRight className="w-3 h-3 text-[var(--muted-foreground)]/40 group-hover:text-[var(--muted-foreground)] flex-shrink-0" />
                     }
                   </button>
                 )
@@ -299,24 +299,24 @@ export default function ShadowAIDemo() {
           </div>
 
           {/* Injected event log */}
-          <div className="border border-slate-800 rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800 bg-slate-900/50">
-              <span className="text-xs font-semibold text-slate-400">Event Log — This Session</span>
+          <div className="border border-[var(--border)] rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] bg-[var(--background)]/50">
+              <span className="text-xs font-semibold text-[var(--muted-foreground)]">Event Log — This Session</span>
               {injected.length > 0 && (
-                <Link to="/shadow-ai" className="flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 transition-colors">
+                <Link to="/shadow-ai" className="flex items-center gap-1 text-[10px] text-[var(--accent)] hover:text-brand-300 transition-colors">
                   View full dashboard <ExternalLink className="w-2.5 h-2.5" />
                 </Link>
               )}
             </div>
             {injected.length === 0 ? (
-              <div className="py-10 text-center text-slate-700 text-sm">
+              <div className="py-10 text-center text-[var(--muted-foreground)]/40 text-sm">
                 Click a tool above to simulate an employee access attempt
               </div>
             ) : (
               <div className="divide-y divide-slate-800/50">
                 {injected.map(ev => (
                   <div key={ev.tool} className={`flex items-center gap-3 px-4 py-3 transition-colors
-                    ${ev.blocked ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-slate-800/20'}`}>
+                    ${ev.blocked ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-[var(--muted)]/20'}`}>
                     {ev.blocked
                       ? <Ban className="w-4 h-4 text-red-400 flex-shrink-0" />
                       : ev.authorized
@@ -324,24 +324,24 @@ export default function ShadowAIDemo() {
                         : <ShieldOff className="w-4 h-4 text-yellow-400 flex-shrink-0" />}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm text-slate-200 font-medium">{ev.tool}</p>
+                        <p className="text-sm text-[var(--foreground)] font-medium">{ev.tool}</p>
                         {ev.blocked && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 border border-red-500/30 text-red-400 font-bold">BLOCKED</span>
                         )}
                       </div>
                       <div className="flex gap-1 mt-0.5 flex-wrap">
                         {ev.users.map(u => (
-                          <span key={u} className="flex items-center gap-1 text-[10px] text-slate-500">
+                          <span key={u} className="flex items-center gap-1 text-[10px] text-[var(--muted-foreground)]">
                             <User className="w-2.5 h-2.5" />{u}
                           </span>
                         ))}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${CAT_COLORS[ev.category] || 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${CAT_COLORS[ev.category] || 'bg-[var(--muted)] text-[var(--muted-foreground)] border-[var(--border)]'}`}>
                         {ev.category.replace('_', ' ')}
                       </span>
-                      <p className="text-[10px] text-slate-600">{timeAgo(ev.ts)} · {ev.count} events</p>
+                      <p className="text-[10px] text-[var(--muted-foreground)]/70">{timeAgo(ev.ts)} · {ev.count} events</p>
                     </div>
                   </div>
                 ))}
@@ -364,7 +364,7 @@ export default function ShadowAIDemo() {
             </div>
           )}
 
-          <p className="text-[10px] text-slate-700 flex items-center gap-1.5">
+          <p className="text-[10px] text-[var(--muted-foreground)]/40 flex items-center gap-1.5">
             <RefreshCw className="w-3 h-3" />
             Events persist in DB — reload Shadow AI page to see updated graphs
           </p>

@@ -82,20 +82,20 @@ define(['./workbox-bf3571c7'], (function (workbox) { 'use strict';
     "revision": "3ca0b8505b4bec776b69afdba2768812"
   }, {
     "url": "index.html",
-    "revision": "0.9j3gbf2edc"
+    "revision": "0.mbpe5pkkifg"
   }], {});
   workbox.cleanupOutdatedCaches();
   workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html"), {
     allowlist: [/^\/$/]
   }));
-  workbox.registerRoute(/^http:\/\/localhost:4000\/api\//, new workbox.StaleWhileRevalidate({
+  workbox.registerRoute(/\/api\/.*governance|localhost:4000\/api\//, new workbox.StaleWhileRevalidate({
     "cacheName": "gov-api-cache",
     plugins: [new workbox.ExpirationPlugin({
       maxEntries: 50,
       maxAgeSeconds: 300
     })]
   }), 'GET');
-  workbox.registerRoute(/^http:\/\/localhost:8000\/api\//, new workbox.StaleWhileRevalidate({
+  workbox.registerRoute(/localhost:8000\/api\//, new workbox.StaleWhileRevalidate({
     "cacheName": "proxy-api-cache",
     plugins: [new workbox.ExpirationPlugin({
       maxEntries: 50,

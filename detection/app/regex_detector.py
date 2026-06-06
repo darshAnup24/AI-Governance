@@ -61,7 +61,7 @@ class RegexDetector:
             "validate_jwt_structure",
         ),
         RegexPattern("slack_token", re.compile(r"xox[baprs]-[a-zA-Z0-9-]{10,}"), DetectionCategory.API_KEY, 0.95, "validate_entropy"),
-        RegexPattern("stripe_key", re.compile(r"[sr]k_(live|test)_[a-zA-Z0-9]{20,}"), DetectionCategory.API_KEY, 0.97, "validate_entropy"),
+        RegexPattern("stripe_key", re.compile(r"[sr]k_(live|test)_[a-zA-Z0-9]{20,}"), DetectionCategory.API_KEY, 0.97, None),
         RegexPattern("google_api_key", re.compile(r"AIza[0-9A-Za-z\-_]{35}"), DetectionCategory.API_KEY, 0.95, "validate_entropy"),
 
         # ─── Credentials / Connection Strings ─────────────
@@ -149,7 +149,7 @@ class RegexDetector:
             "command_injection",
             re.compile(
                 r"(?i)(?:"
-                r";\s*rm\s+-(?:rf?|fr?)\s+|"  # ; rm -rf
+                r"(?:\b|;|&&|\|\||\|)\s*rm\s+-(?:rf?|fr?)\s+|"  # rm -rf
                 r"(?:&&|\|\||\|)\s*(?:curl|wget|nc|bash|sh|python3?|perl|ruby)\s+(?:https?://|-|/)|"  # pipe to shell tool
                 r"\$\([^)]{3,60}\)|"  # command substitution $(...)
                 r"`[^`]{5,60}`|"  # backtick execution

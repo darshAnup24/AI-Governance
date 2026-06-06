@@ -1,230 +1,274 @@
-import { useState } from 'react'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { useTheme } from '../contexts/ThemeContext'
+import { useMemo, useState } from 'react'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-    LayoutDashboard,
-    Shield,
-    AlertTriangle,
-    Wifi,
-    Settings,
-    LogOut,
-    Menu,
-    X,
-    ChevronDown,
-    Bot,
-    Zap,
-    CheckCircle2,
-    Users,
-    BarChart3,
-    Boxes,
-    Sun,
-    Moon,
-    Activity,
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  Bot,
+  Boxes,
+  CheckCircle,
+  ChevronDown,
+  FileText,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Settings,
+  Shield,
+  Users,
+  Wifi,
 } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
+import { Button } from '../components/ui/button'
+import { SidebarNav } from '../components/ui/sidebar-nav'
+import type { NavItem, NavSection } from '../components/ui/sidebar-nav'
+import { useRuntimeMode } from '../lib/hooks'
 
-const govNavItems = [
-    { to: '/governance', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/governance/models', label: 'AI Models', icon: Boxes },
-    { to: '/governance/compliance', label: 'Compliance', icon: CheckCircle2 },
-    { to: '/governance/policies', label: 'Policy Builder', icon: Shield },
-    { to: '/governance/heatmap', label: 'User Heatmap', icon: Activity },
-    { to: '/governance/advisor', label: 'AI Advisor', icon: Bot },
-    { to: '/governance/incidents', label: 'Incidents', icon: AlertTriangle },
-    { to: '/governance/vendors', label: 'Vendors', icon: Users },
-    { to: '/governance/reports', label: 'Reports', icon: BarChart3 },
-    { to: '/settings', label: 'Settings', icon: Settings },
+const navItems: NavItem[] = [
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/shadow-ai', label: 'Runtime Monitor', icon: Wifi },
+  { to: '/incidents', label: 'Incidents', icon: AlertTriangle },
+  { to: '/reports', label: 'Audit Logs', icon: BarChart3 },
+  { to: '/policies', label: 'Policies', icon: Shield },
+  { to: '/governance/compliance', label: 'Compliance', icon: CheckCircle },
+  { to: '/governance', label: 'AI Inventory', icon: Boxes },
+  { to: '/governance/models', label: 'Models', icon: Boxes },
+  { to: '/governance/vendors', label: 'Vendor Risk', icon: Users },
+  { to: '/governance/heatmap', label: 'Use Cases', icon: Activity },
+  { to: '/governance/threats', label: 'Assessments', icon: AlertTriangle },
+  { to: '/governance/advisor', label: 'AI Advisor', icon: Bot },
+  { to: '/governance/incidents', label: 'Governance Incidents', icon: AlertTriangle },
+  { to: '/governance/policies', label: 'Policy Builder', icon: Shield },
+  { to: '/governance/reports', label: 'Governance Reports', icon: FileText },
+  { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
-const proxyNavItems = [
-    { to: '/dashboard', label: 'Proxy Monitor', icon: LayoutDashboard },
-    { to: '/shadow-ai', label: 'Shadow AI', icon: Wifi },
-]
-
-const demoNavItems = [
-    { to: '/live-demo/detection', label: 'Prompt Inspector', icon: Zap },
-    { to: '/live-demo/policy', label: 'Policy Enforcement', icon: Shield },
-    { to: '/live-demo/chat', label: 'Chat Gateway', icon: Activity },
-    { to: '/live-demo/audit', label: 'Audit & Incidents', icon: AlertTriangle },
-    { to: '/live-demo/shadow-ai', label: 'Shadow AI Sim', icon: Wifi },
-]
+const titles: Record<string, { eyebrow: string; title: string; subtitle: string }> = {
+  '/dashboard': {
+    eyebrow: 'Proxy Monitor',
+    title: 'Operational oversight for live AI traffic',
+    subtitle: 'Track stream health, latency, enforcement actions, and incident signals in one place.',
+  },
+  '/governance': {
+    eyebrow: 'Governance Overview',
+    title: 'A single command surface for policy, risk, and compliance',
+    subtitle: 'Review portfolio health, surface drift, and move quickly on governance signals.',
+  },
+}
 
 export default function AppLayout() {
-    const { user, logout } = useAuth()
-    const { theme, toggle: toggleTheme } = useTheme()
-    const navigate = useNavigate()
-    const [sidebarOpen, setSidebarOpen] = useState(false)
-    const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { user, logout, switchWorkspace, switchEnvironment } = useAuth()
+  const runtimeModeQ = useRuntimeMode()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
 
-    const handleLogout = () => {
-        logout()
-        navigate('/login')
+  const activeMeta = useMemo(() => {
+    const match = Object.entries(titles).find(([path]) => location.pathname === path || location.pathname.startsWith(`${path}/`))
+    if (match) return match[1]
+    return {
+      eyebrow: 'Airlock Workspace',
+      title: 'Focused controls for every part of your AI estate',
+      subtitle: 'Use the navigation to move between live monitoring, governance, and supporting workflows.',
     }
+  }, [location.pathname])
 
-    return (
-        <div className="min-h-screen flex bg-slate-950">
-            {/* Mobile sidebar overlay */}
-            {sidebarOpen && (
-                <div
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
-                    onClick={() => setSidebarOpen(false)}
-                />
-            )}
+  const initials = useMemo(() => (user?.email ?? 'A').slice(0, 1).toUpperCase(), [user?.email])
 
-            {/* Sidebar */}
-            <aside
-                className={`fixed lg:sticky top-0 left-0 h-screen w-64 bg-slate-900/80 backdrop-blur-xl 
-                border-r border-slate-800 z-50 transition-transform duration-300 lg:translate-x-0 flex flex-col
-                ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
-            >
-                {/* Logo */}
-                <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
-                    <div className="w-9 h-9 bg-gradient-to-br from-brand-500 to-cyan-500 rounded-lg flex items-center justify-center shadow-lg shadow-brand-500/20">
-                        <Shield className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                        <h1 className="text-sm font-bold text-slate-100">Airlock</h1>
-                        <p className="text-xs text-slate-500">Governance v1.0</p>
-                    </div>
-                    <button className="ml-auto lg:hidden text-slate-400" onClick={() => setSidebarOpen(false)}>
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
+  const canView = (permission: string) => user?.permissions.includes(permission) ?? false
 
-                {/* Navigation */}
-                <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-                    <p className="px-3 mb-2 text-[10px] uppercase tracking-widest text-slate-600 font-semibold">
-                        Governance
-                    </p>
-                    {govNavItems.map(({ to, label, icon: Icon }) => (
-                        <NavLink
-                            key={to}
-                            to={to}
-                            end={to === '/governance'}
-                            onClick={() => setSidebarOpen(false)}
-                            className={({ isActive }) =>
-                                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150
-                                ${isActive
-                                    ? 'bg-brand-600/20 text-brand-400 border border-brand-500/20 shadow-sm'
-                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`
-                            }
-                        >
-                            <Icon className="w-4 h-4 flex-shrink-0" />
-                            <span>{label}</span>
-                        </NavLink>
-                    ))}
+  const unifiedNavItems = navItems
+    .filter((item) => {
+      if (item.to === '/reports') return canView('can_export_reports') || canView('can_view_dashboard')
+      if (item.to === '/settings') return canView('can_manage_organization') || canView('can_manage_sso')
+      return true
+    })
+    .filter((item) => {
+      if (item.to.includes('/compliance')) return canView('can_view_compliance')
+      if (item.to.includes('/policies')) return canView('can_manage_policies')
+      if (item.to.includes('/vendors')) return canView('can_manage_providers')
+      if (item.to.includes('/reports')) return canView('can_export_reports')
+      return true
+    })
 
-                    <p className="px-3 mt-5 mb-2 text-[10px] uppercase tracking-widest text-slate-600 font-semibold">
-                        Proxy
-                    </p>
-                    {proxyNavItems.map(({ to, label, icon: Icon }) => (
-                        <NavLink
-                            key={to}
-                            to={to}
-                            onClick={() => setSidebarOpen(false)}
-                            className={({ isActive }) =>
-                                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150
-                                ${isActive
-                                    ? 'bg-brand-600/20 text-brand-400 border border-brand-500/20'
-                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`
-                            }
-                        >
-                            <Icon className="w-4 h-4 flex-shrink-0" />
-                            <span>{label}</span>
-                        </NavLink>
-                    ))}
+  const navSections: NavSection[] = useMemo(() => {
+    const sectionMap: Array<{ title: string; paths: string[] }> = [
+      { title: 'Monitoring', paths: ['/dashboard', '/shadow-ai', '/incidents', '/reports'] },
+      { title: 'Governance', paths: ['/policies', '/governance', '/governance/compliance', '/governance/models', '/governance/policies', '/governance/advisor'] },
+      { title: 'Risk', paths: ['/governance/vendors', '/governance/heatmap', '/governance/threats', '/governance/incidents'] },
+      { title: 'Admin', paths: ['/governance/reports', '/settings'] },
+    ]
 
-                    <p className="px-3 mt-5 mb-2 text-[10px] uppercase tracking-widest text-slate-600 font-semibold flex items-center gap-2">
-                        <span>Live Demo</span>
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-brand-500/20 text-brand-400 border border-brand-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse" />
-                            LIVE
-                        </span>
-                    </p>
-                    {demoNavItems.map(({ to, label, icon: Icon }) => (
-                        <NavLink
-                            key={to}
-                            to={to}
-                            onClick={() => setSidebarOpen(false)}
-                            className={({ isActive }) =>
-                                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150
-                                ${isActive
-                                    ? 'bg-brand-600/20 text-brand-400 border border-brand-500/20'
-                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`
-                            }
-                        >
-                            <Icon className="w-4 h-4 flex-shrink-0" />
-                            <span>{label}</span>
-                        </NavLink>
-                    ))}
-                </nav>
+    return sectionMap
+      .map((section) => ({
+        title: section.title,
+        items: section.paths
+          .map((path) => unifiedNavItems.find((item) => item.to === path))
+          .filter(Boolean) as NavItem[],
+      }))
+      .filter((section) => section.items.length > 0)
+  }, [unifiedNavItems])
 
-                {/* User menu + theme toggle */}
-                <div className="p-3 border-t border-slate-800 space-y-1">
-                    {/* Dark mode toggle */}
-                    <button
-                        id="theme-toggle-btn"
-                        onClick={toggleTheme}
-                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
-                    >
-                        {theme === 'dark'
-                            ? <Sun className="w-4 h-4 text-yellow-400" />
-                            : <Moon className="w-4 h-4 text-blue-400" />}
-                        <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-                    </button>
+  const runtimeMode = runtimeModeQ.data?.mode || 'STANDARD'
+  const degradedEvents = runtimeModeQ.data?.degraded_events || 0
 
-                    {/* User dropdown */}
-                    <div className="relative">
-                        <button
-                            onClick={() => setUserMenuOpen(!userMenuOpen)}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/50 transition-colors"
-                        >
-                            <div className="w-7 h-7 bg-gradient-to-br from-brand-500 to-purple-500 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-                                {user?.email?.charAt(0).toUpperCase() || 'U'}
-                            </div>
-                            <div className="flex-1 text-left min-w-0">
-                                <p className="text-xs font-medium text-slate-200 truncate">{user?.email || 'User'}</p>
-                                <p className="text-[10px] text-slate-500 capitalize">{user?.role || 'admin'}</p>
-                            </div>
-                            <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform flex-shrink-0 ${userMenuOpen ? 'rotate-180' : ''}`} />
-                        </button>
+  const runtimeTone =
+    runtimeMode === 'STRICT'
+      ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300'
+      : runtimeMode === 'HYBRID'
+        ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300'
+        : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300'
 
-                        {userMenuOpen && (
-                            <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden">
-                                <button
-                                    onClick={handleLogout}
-                                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-slate-700/50 transition-colors"
-                                >
-                                    <LogOut className="w-4 h-4" />
-                                    <span>Sign out</span>
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </aside>
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
 
-            {/* Main content */}
-            <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
-                {/* Mobile topbar */}
-                <header className="lg:hidden flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/80 backdrop-blur-xl sticky top-0 z-30">
-                    <button onClick={() => setSidebarOpen(true)} className="text-slate-400 hover:text-slate-200">
-                        <Menu className="w-6 h-6" />
-                    </button>
-                    <div className="flex items-center gap-2">
-                        <Shield className="w-5 h-5 text-brand-400" />
-                        <span className="text-sm font-semibold text-slate-100">Airlock</span>
-                    </div>
-                    <button onClick={toggleTheme} className="text-slate-400 hover:text-slate-200">
-                        {theme === 'dark' ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-blue-400" />}
-                    </button>
-                </header>
+  return (
+    <div className="flex min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      {sidebarOpen ? (
+        <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setSidebarOpen(false)} />
+      ) : null}
 
-                {/* Page content */}
-                <main className="flex-1 p-4 lg:p-8 overflow-auto">
-                    <Outlet />
-                </main>
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-[var(--sidebar-background)] text-[var(--sidebar-foreground)] transition-transform md:static md:translate-x-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="border-b px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--sidebar-primary)] text-[var(--sidebar-primary-foreground)]">
+              <Shield className="h-4 w-4" />
             </div>
+            <div className="min-w-0">
+              <p className="truncate text-base font-semibold text-[var(--foreground)]">Airlock</p>
+              <p className="truncate text-xs text-[var(--muted-foreground)]">AI Governance Platform</p>
+            </div>
+          </div>
         </div>
-    )
+
+        <div className="border-b px-4 py-4">
+          <div className="rounded-lg border bg-[var(--background)] p-3 shadow-sm">
+            <p className="text-sm font-medium text-[var(--foreground)]">
+              {user?.organization?.name || user?.department || 'Governance workspace'}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+              {user?.activeWorkspace ? `${user.activeWorkspace.name} is active.` : 'Switch between live monitoring and governance workflows.'}
+            </p>
+            <div className={`mt-3 rounded-md border px-2.5 py-2 text-xs ${runtimeTone}`}>
+              Runtime {runtimeMode} · {degradedEvents} degraded events
+            </div>
+          </div>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          <SidebarNav sections={navSections} title="Platform" />
+        </nav>
+
+        <div className="border-t p-3">
+          <Link
+            to="/live-demo/detection"
+            className="flex items-center gap-3 rounded-lg border bg-[var(--background)] px-3 py-2 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--sidebar-accent)]"
+          >
+            <Activity className="h-4 w-4" />
+            <span>Open demo lab</span>
+          </Link>
+        </div>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 border-b bg-[var(--background)]">
+          <div className="flex h-12 items-center gap-3 px-4 md:px-6">
+            <button
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border bg-[var(--background)] text-[var(--muted-foreground)] md:hidden"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open navigation"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-[var(--muted-foreground)]">{activeMeta.eyebrow}</p>
+              <h1 className="truncate text-base font-medium text-[var(--foreground)]">{activeMeta.title}</h1>
+            </div>
+
+            <div className="hidden items-center gap-2 lg:flex">
+              {user?.workspaces?.length ? (
+                <select
+                  className="h-9 rounded-md border bg-[var(--background)] px-3 text-sm"
+                  value={user.activeWorkspace?.id || ''}
+                  onChange={(event) => void switchWorkspace(event.target.value)}
+                >
+                  {user.workspaces.map((workspace) => (
+                    <option key={workspace.id} value={workspace.id}>
+                      {workspace.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              {user?.activeWorkspace?.environments?.length ? (
+                <select
+                  className="h-9 rounded-md border bg-[var(--background)] px-3 text-sm"
+                  value={user.activeEnvironment?.id || ''}
+                  onChange={(event) => void switchEnvironment(event.target.value)}
+                >
+                  {user.activeWorkspace.environments.map((environment) => (
+                    <option key={environment.id} value={environment.id}>
+                      {environment.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
+
+            <div className="relative">
+              <button
+                onClick={() => setUserMenuOpen((current) => !current)}
+                className="flex items-center gap-3 rounded-lg border bg-[var(--background)] px-2.5 py-1.5 text-left shadow-sm"
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--primary)] text-xs font-semibold text-[var(--primary-foreground)]">
+                  {initials}
+                </div>
+                <div className="hidden sm:block">
+                  <p className="max-w-[180px] truncate text-sm font-medium text-[var(--foreground)]">{user?.email || 'Admin'}</p>
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Administrator'}
+                  </p>
+                </div>
+                <ChevronDown className="h-4 w-4 text-[var(--muted-foreground)]" />
+              </button>
+
+              {userMenuOpen ? (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setUserMenuOpen(false)} />
+                  <div className="absolute right-0 z-20 mt-2 w-72 rounded-lg border bg-[var(--popover)] p-2 shadow-md">
+                    <div className="rounded-md px-2 py-2">
+                      <p className="text-sm font-medium text-[var(--popover-foreground)]">{user?.email || 'Admin user'}</p>
+                      <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                        {user?.activeWorkspace?.name || user?.organization?.name || 'Governance workspace'}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950"
+                      onClick={handleLogout}
+                      icon={<LogOut className="h-4 w-4" />}
+                    >
+                      Sign out
+                    </Button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1">
+          <div className="content-container px-4 py-6 md:px-6">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+    </div>
+  )
 }

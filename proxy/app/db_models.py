@@ -65,6 +65,7 @@ class PolicyRule(Base):
 
     rule_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.org_id"), nullable=False)
+    parent_rule_id = Column(UUID(as_uuid=True), ForeignKey("policy_rules.rule_id"), nullable=True)
     name = Column(String(255), nullable=False)
     description = Column(Text, default="")
     conditions = Column(JSON, nullable=False)
@@ -73,6 +74,9 @@ class PolicyRule(Base):
     priority = Column(Integer, default=100)  # Lower = higher priority
     enabled = Column(Boolean, default=True)
     exceptions = Column(JSON, default=[])
+    version = Column(Integer, default=1)
+    rollout_percentage = Column(Integer, default=100)  # 0-100 for staged rollout
+    rollout_status = Column(String(20), default="ACTIVE")  # DRAFT, STAGED, ACTIVE, ROLLED_BACK
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     deleted_at = Column(DateTime, nullable=True)  # Soft delete
@@ -84,6 +88,18 @@ class PolicyRule(Base):
         Index("ix_policy_rules_priority", "priority"),
         Index("ix_policy_rules_enabled", "enabled"),
     )
+
+
+class PolicyVersion(Base):
+    __tablename__ = "policy_versions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    policy_id = Column(UUID(as_uuid=True), ForeignKey("policy_rules.rule_id"), nullable=False)
+    version = Column(Integer, nullable=False)
+    snapshot = Column(JSON, nullable=False)
+    changed_by = Column(String(255), default="")
+    reason = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class AuditEventRecord(Base):
