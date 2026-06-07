@@ -1,0 +1,44 @@
+---
+description: Security, privacy, and compliance standards for Airlock
+alwaysApply: true
+---
+
+# Security & Compliance
+
+Airlock sells **trust**. Every change must preserve enterprise-grade security posture.
+
+## Non-negotiables
+
+- **Never** commit secrets, API keys, JWT secrets, or real customer data
+- **Never** log prompt content, PII, or credentials at INFO level — use structured redacted logs
+- **Never** bypass auth middleware for "convenience" outside explicit dev-only paths
+- **Never** loosen policy decisions — only `BLOCK > REDACT > WARN > LOG > ALLOW`
+- **Always** scope DB queries by `org_id` (multi-tenant isolation)
+- **Always** validate external URLs against an allowlist before proxying (SSRF prevention)
+
+## Auth patterns
+
+- **Proxy**: JWT via `get_current_user` → `UserContext` (user_id, org_id, role, department)
+- **Governance**: `authMiddleware` + `requireRole('ADMIN'|'MANAGER'|'VIEWER')`
+- **Service-to-service**: `INTERNAL_SERVICE_TOKEN` header for `/api/internal/*` routes
+
+## Compliance touchpoints
+
+| Framework | Where enforced |
+|-----------|----------------|
+| GDPR | PII detection/redaction (`detection/`), user deletion (`governance/`) |
+| EU AI Act | Risk tier classification in `risk_scorer.py` |
+| SOC 2 | Audit trail (`audit.py`, `auditLogger.ts`), RBAC |
+
+## Safe defaults for new endpoints
+
+```python
+# Proxy route — always require auth
+@router.post("/v1/chat/completions")
+async def chat(user: UserContext = Depends(get_current_user)): ...
+```
+
+```typescript
+// Governance route — auth + role + org scope
+router.get("/policies", authMiddleware, requireRole("ADMIN", "MANAGER"), ...)
+```

@@ -1,0 +1,110 @@
+# Airlock AI Governance — .cursorignore
+# Hard block: AI cannot read, index, or @-mention these paths.
+# Pair with .cursorindexingignore for soft exclusions (index-only).
+
+# ─── Secrets & credentials (never expose to AI) ───────────────────────────────
+**/.env
+**/.env.*
+!**/.env.example
+**/credentials.json
+**/secrets.json
+**/*secret*
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/id_rsa
+**/id_rsa.pub
+**/.npmrc
+**/.pypirc
+
+# ─── VCS & tooling internals ──────────────────────────────────────────────────
+.git/
+.svn/
+.hg/
+
+# ─── Dependencies (huge, never edit by hand) ──────────────────────────────────
+**/node_modules/
+.venv/
+venv/
+env/
+**/.pnpm-store/
+
+# ─── Build & compile output ───────────────────────────────────────────────────
+**/dist/
+**/build/
+**/.next/
+**/.nuxt/
+**/.turbo/
+**/.cache/
+**/.parcel-cache/
+**/.vite/
+dashboard/dist/
+governance/dist/
+**/*.tsbuildinfo
+
+# ─── Python artifacts ─────────────────────────────────────────────────────────
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+**/*.egg-info/
+.eggs/
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage/
+
+# ─── ML models & large binaries (track metadata, not weights) ─────────────────
+detection/models/
+detection/ml/models/spacy_textcat/
+detection/ml/models/spacy_textcat_best/
+detection/ml/models/sklearn_classifier.pkl
+**/*.onnx
+**/*.pkl
+**/*.pickle
+**/*.h5
+**/*.pt
+**/*.pth
+**/*.bin
+**/*.safetensors
+**/*.gguf
+ollama_data/
+
+# ─── Large / generated datasets (use detection/ml/data/README.md for context) ─
+detection/ml/data/
+detection/ml/data_backup/
+detection/sensitivity_training_data.csv
+detection/data/feedback/
+detection/config/threshold_history.jsonl
+detection/config/rl_reports.jsonl
+detection/ml/data/raw/
+**/*.jsonl
+graphify-out/
+
+# ─── Docker & infra runtime data ──────────────────────────────────────────────
+postgres_data/
+redis_data/
+docker-compose.override.yml
+
+# ─── OS & editor noise ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Logs & temp files ────────────────────────────────────────────────────────
+**/*.log
+**/*.pid
+**/tmp/
+**/temp/
+
+# ─── Generated Prisma / TypeScript emit (edit source, not output) ─────────────
+governance/prisma/seed.js
+governance/prisma/seed.js.map
+governance/prisma/seed.d.ts
+governance/prisma/seed.d.ts.map

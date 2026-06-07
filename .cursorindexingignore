@@ -1,0 +1,41 @@
+# Airlock AI Governance — .cursorindexingignore
+# Soft block: excluded from codebase search/index, but still readable via @file.
+# Use for large files the agent rarely needs but you may @-mention on demand.
+
+# ─── Lock files (large, regenerable; @-mention when bumping deps) ─────────────
+poetry.lock
+**/package-lock.json
+**/yarn.lock
+**/pnpm-lock.yaml
+
+# ─── Evaluation & training artifacts (regenerable via ML pipeline) ──────────
+detection/ml/evaluation/
+detection/ml/evaluation/*.json
+detection/ml/evaluation/*.md
+detection/ml/models/*_meta.json
+
+# ─── Helm chart rendered output (templates are source of truth) ───────────────
+# (none yet — add if you introduce helm render output)
+
+# ─── Chrome extension packaged builds ─────────────────────────────────────────
+extensions/**/dist/
+extensions/**/*.crx
+extensions/**/*.zip
+
+# ─── Demo / script output ─────────────────────────────────────────────────────
+**/*.pdf
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.svg
+**/*.ico
+**/*.woff
+**/*.woff2
+**/*.ttf
+**/*.eot
+
+# ─── Test fixture dumps (keep tests/indexed; exclude bulky fixtures) ──────────
+tests/fixtures/
+tests/**/*.jsonl
+tests/**/*.csv

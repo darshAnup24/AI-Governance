@@ -1,0 +1,47 @@
+---
+description: React dashboard — Vite, TanStack Query, Tailwind patterns
+globs: dashboard/**/*.{ts,tsx,css}
+alwaysApply: false
+---
+
+# Dashboard (Command Center)
+
+## Stack
+
+- React 18, Vite, TypeScript, TailwindCSS, TanStack Query v5, Recharts, React Router v6
+
+## Data fetching
+
+- **All hooks** live in `dashboard/src/lib/hooks.ts` — never fetch inline in page components
+- Proxy API (port 8000): `import api from './api'`
+- Governance API (port 4000): `import govApi from './govApi'`
+- Use `queryKey` arrays that include filter params; set `staleTime`/`refetchInterval` per data freshness needs
+
+```typescript
+// ✅ Centralized hook
+export function usePolicies() {
+  return useQuery({
+    queryKey: ['policies'],
+    queryFn: () => govApi.get('/api/policies').then(r => r.data.data ?? []),
+    retry: 2,
+  });
+}
+```
+
+## Page organization
+
+- Governance pages: `dashboard/src/pages/governance/` (Policies, Incidents, Vendors, Compliance, etc.)
+- Live demos: `dashboard/src/pages/demo/` — must call real APIs, not mock data
+- Layout: `dashboard/src/layouts/AppLayout.tsx` — sidebar nav lives here
+
+## UI conventions
+
+- Enterprise admin aesthetic — clean tables, KPI cards, severity badges
+- Risk colors: green (low) → yellow → orange → red (critical)
+- Icons: `lucide-react` — stay consistent with existing pages
+- Env vars: `VITE_API_URL`, `VITE_GOVERNANCE_URL` (see `docker-compose.yml`)
+
+## Do not
+
+- Add new global state libraries — TanStack Query is the source of truth
+- Bypass proxy for chat demo — `/live-demo/` routes through port 8000 intentionally

@@ -1,0 +1,45 @@
+---
+description: Airlock AI Governance — product context, architecture, and monorepo map
+alwaysApply: true
+---
+
+# Airlock AI Governance
+
+**Airlock** makes enterprise AI adoption smooth and secure — end-to-end governance for large and medium enterprises adopting LLMs.
+
+## Product pillars
+
+1. **AI Gateway (Proxy)** — OpenAI-compatible proxy; every LLM call passes through policy + detection
+2. **Detection Engine** — Multi-detector pipeline (PII, injection, bias, secrets, regulatory)
+3. **Governance API** — Policies, incidents, vendors, compliance, audit, org/user management
+4. **Command Center (Dashboard)** — Executive visibility, shadow AI monitoring, live demos
+
+## Service map
+
+| Service | Port | Stack | Path |
+|---------|------|-------|------|
+| Dashboard | 3000 | React + Vite + TanStack Query | `dashboard/` |
+| Governance | 4000 | Node + Express + Prisma | `governance/` |
+| Proxy | 8000 | Python + FastAPI | `proxy/` |
+| Detection | 8001 | Python + FastAPI + ML | `detection/` |
+
+## Request flow (never break this order)
+
+```
+Client → Auth → Rate Limit → Detection → Policy Evaluate → BLOCK/REDACT/ALLOW → Audit → Upstream LLM → Response Inspection
+```
+
+## Cross-cutting rules
+
+- **Org isolation**: Every query and policy must scope to `org_id`
+- **Policy monotonicity**: Policies may only make decisions **stricter** than detection (never loosen)
+- **Audit everything**: Governance mutations and proxy decisions emit audit events
+- **Dev stack**: `docker compose up --build` — see `docker-compose.yml` and `.env.example`
+- **Legacy naming**: Codebase may reference "ShieldAI"; brand externally as **Airlock**
+
+## Where to change what
+
+- Proxy routing / redaction / upstream → `proxy/app/`
+- Detectors / risk scoring → `detection/app/`
+- CRUD APIs / Prisma schema → `governance/src/` + `governance/prisma/schema.prisma`
+- UI pages / hooks → `dashboard/src/`

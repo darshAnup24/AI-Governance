@@ -1,0 +1,34 @@
+---
+description: ML training pipeline and detector development conventions
+globs: detection/ml/**/*
+alwaysApply: false
+---
+
+# Detection ML Pipeline
+
+## Layout
+
+- Training scripts: `detection/ml/scripts/` (train, preprocess, evaluate, generate datasets)
+- RL tuning: `detection/ml/rl/` (threshold optimization, reward functions)
+- Model metadata (tracked): `detection/ml/models/*_meta.json`
+- Model weights (ignored): `detection/ml/models/*.pkl`, `spacy_textcat/`
+- Data docs: `detection/ml/data/README.md` — datasets are external/large, not in repo
+
+## Runtime vs training
+
+- **Runtime detectors** live in `detection/app/detectors/` and `detection/app/ml_classifier.py`
+- **Training** is offline — changes to training scripts must not break the FastAPI hot path
+- Sprint 2+ uses ONNX micro-models; Ollama is fallback only
+
+## Adding a detector
+
+1. Implement in `detection/app/detectors/<name>_detector.py`
+2. Register in `detection/app/main.py` parallel gather
+3. Add category to risk scorer multipliers if new severity tier needed
+4. Add evaluation in `detection/ml/scripts/evaluate.py`
+
+## Do not
+
+- Commit model binaries or multi-GB datasets
+- Import heavy training deps (transformers, full spaCy models) in `detection/app/main.py` startup
+- Change detection thresholds in code — use `detection/config/thresholds.json`

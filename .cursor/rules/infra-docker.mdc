@@ -1,0 +1,40 @@
+---
+description: Docker, Helm, and deployment conventions
+globs: "{docker-compose.yml,infra/**,**/Dockerfile,scripts/**}"
+alwaysApply: false
+---
+
+# Infrastructure
+
+## Local dev
+
+- `docker compose up --build` starts the full stack
+- Service healthchecks defined in `docker-compose.yml` — preserve them when adding services
+- Postgres: TimescaleDB on host port **5433** (not 5432)
+- Dev secrets in compose are placeholders — never copy to production
+
+## Service dependencies
+
+```
+postgres, redis → governance, detection → proxy → dashboard
+ollama → detection (fallback inference)
+dns-sinkhole → proxy + detection (shadow AI)
+```
+
+## Dockerfiles
+
+- Python services: root context `.`, dockerfile in `proxy/Dockerfile` / `detection/Dockerfile`
+- Governance: context `./governance`, own Dockerfile
+- Dashboard: build args `VITE_API_URL`, `VITE_GOVERNANCE_URL`
+
+## Helm (production path)
+
+- Chart: `infra/helm/ai-gateway/`
+- Values: `values.yaml` — override per environment, not hardcode in templates
+- Templates: `proxy.yaml`, `common.yaml` — use `_helpers.tpl` for labels
+
+## Scripts
+
+- `scripts/demo.sh`, `scripts/live_demo_events.sh` — demo orchestration
+- `scripts/init-db.sql` — DB bootstrap on first postgres start
+- `scripts/run_feature_tests.sh` — integration test runner

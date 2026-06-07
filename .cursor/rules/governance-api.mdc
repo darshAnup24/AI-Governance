@@ -1,0 +1,45 @@
+---
+description: Node.js governance API — Express, Prisma, Zod conventions
+globs: governance/**/*.{ts,tsx,prisma}
+alwaysApply: false
+---
+
+# Governance API
+
+## Stack
+
+- Node 20, Express, TypeScript, Prisma ORM, Zod validation, JWT (jsonwebtoken)
+
+## Route structure
+
+- Routes in `governance/src/routes/` — one file per domain (policies, incidents, vendors, audit, etc.)
+- Internal service routes in `internal.ts` — protected by `INTERNAL_SERVICE_TOKEN`, not user JWT
+- Middleware: `auth.ts` (JWT), `auditLogger.ts` (mutations), helmet + rate-limit in `index.ts`
+
+## Prisma patterns
+
+- Schema: `governance/prisma/schema.prisma` — run `npm run db:generate` after changes
+- Seed data: `governance/prisma/seed.ts` (edit source, not generated `.js`)
+- Soft deletes: use `deleted_at` where the schema defines it
+- Always filter by `orgId` from `req.user`
+
+## Request validation
+
+```typescript
+// Validate input with Zod before Prisma calls
+const parsed = createPolicySchema.safeParse(req.body);
+if (!parsed.success) {
+  res.status(400).json({ error: parsed.error.flatten() });
+  return;
+}
+```
+
+## API response shape
+
+- Consistent JSON: `{ data: T }` for success, `{ error: string }` for failures
+- HTTP codes: 401 unauthenticated, 403 forbidden role, 404 not found, 409 conflict
+
+## Inter-service calls
+
+- Proxy fetches policies via `GOVERNANCE_API_URL` + `GOVERNANCE_SERVICE_TOKEN`
+- Detection URL available as `DETECTION_SERVICE_URL` env var

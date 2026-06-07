@@ -1,0 +1,45 @@
+---
+description: Python conventions for proxy and detection services
+globs: "{proxy,detection,tests}/**/*.{py,pyi}"
+alwaysApply: false
+---
+
+# Python Services (Proxy + Detection)
+
+## Stack
+
+- Python 3.11, FastAPI, Pydantic v2, httpx, structlog, SQLAlchemy async, ruff, mypy strict
+
+## Conventions
+
+- Use `from __future__ import annotations` in new modules
+- Settings via `pydantic-settings` in `proxy/app/config.py` — never hardcode URLs/secrets
+- Logging: `structlog.get_logger()` with structured key=value fields
+- Async DB: `AsyncSession` from `proxy/app/database.py` with `get_db` dependency
+- Shared models live in `proxy/app/models.py` — detection imports from proxy, not vice versa
+
+## Detection pipeline
+
+- Each detector in `detection/app/detectors/` returns spans with `category`, `confidence`, `start`, `end`
+- `risk_scorer.py` aggregates; category multipliers and role modifiers are intentional — don't flatten
+- New detectors must be wired in `detection/app/main.py` parallel pipeline
+- Target latency: <5ms p95 for detection path (cache-friendly)
+
+## Policy engine
+
+```python
+# Policies only escalate — never downgrade detection action
+if policy_action.rank > detection_action.rank:
+    final_action = policy_action
+```
+
+## Testing
+
+- Tests in `tests/` — use pytest-asyncio (`asyncio_mode = auto`)
+- E2E policy tests: `tests/test_policy_e2e.py`
+- Run: `poetry run pytest` or `scripts/run_feature_tests.sh`
+
+## Lint
+
+- Line length 100, ruff rules E/F/I/N/W/UP/B/SIM
+- Fix with `poetry run ruff check --fix`
