@@ -536,8 +536,25 @@ app = FastAPI(
 
 
 @app.get("/health")
-async def health_check() -> dict[str, str]:
-    return {"status": "healthy", "service": "detection", "version": "0.2.0"}
+async def health_check() -> dict[str, Any]:
+    redis_status = "ok"
+    try:
+        if redis_client is None:
+            redis_status = "error"
+        else:
+            await redis_client.ping()
+    except Exception:
+        redis_status = "error"
+
+    return {
+        "status": "ok",
+        "service": "detection",
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "dependencies": {
+            "postgres": "error",
+            "redis": redis_status,
+        },
+    }
 
 
 @app.get("/metrics")

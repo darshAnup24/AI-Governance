@@ -10,11 +10,13 @@ import {
   Users,
   Workflow,
 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { useDashboardStats } from '../../lib/hooks'
+import { useDashboardStats, useGovernanceProxyStats } from '../../lib/hooks'
 import { SkeletonCard, SkeletonChart } from '../../components/Skeletons'
 import { InlineError } from '../../components/ErrorBoundary'
 import { PageHeader, PageShell, StatusPill, SurfaceSection } from '../../components/ui/page-shell'
+import { useGovernanceDemoStream } from '../../lib/live'
 
 function SmallMetric({
   label,
@@ -58,6 +60,14 @@ const chartTooltip = ({ active, payload, label }: any) => {
 
 export default function GovDashboard() {
   const { data, isPending, isError, refetch } = useDashboardStats()
+  const govProxyStats = useGovernanceProxyStats()
+  const govStream = useGovernanceDemoStream(100)
+  const [uptimeSeconds, setUptimeSeconds] = useState(0)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setUptimeSeconds((value) => value + 1), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const inventory = data?.inventory
   const compliance = data?.compliance
@@ -67,9 +77,28 @@ export default function GovDashboard() {
   const incidents = data?.incidents
   const reports = data?.reports
   const vendors = data?.vendors
+  const liveStats = govProxyStats.data
+  const uptimeLabel = `${Math.floor(uptimeSeconds / 3600)
+    .toString()
+    .padStart(2, '0')}:${Math.floor((uptimeSeconds % 3600) / 60)
+    .toString()
+    .padStart(2, '0')}:${(uptimeSeconds % 60).toString().padStart(2, '0')}`
 
   return (
     <PageShell>
+      <div className="mb-4 flex flex-wrap items-center gap-4 rounded-2xl border border-emerald-300/20 bg-[linear-gradient(90deg,rgba(4,120,87,0.18),rgba(15,23,42,0.92))] px-4 py-3 text-sm text-white shadow-[0_10px_40px_rgba(4,120,87,0.15)]">
+        <div className="flex items-center gap-3">
+          <span className="relative flex h-3 w-3">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+            <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-400" />
+          </span>
+          <span className="font-semibold">LIVE - Airlock Gateway Active</span>
+        </div>
+        <span className="text-white/80">Requests intercepted: {liveStats?.totalToday ?? govStream.events.length}</span>
+        <span className="text-white/80">Threats blocked today: {liveStats?.blockedToday ?? 0}</span>
+        <span className="text-white/80">Uptime: {uptimeLabel}</span>
+      </div>
+
       <PageHeader
         badge="Governance Command Center"
         title="Structured operational modules for AI governance"

@@ -1,93 +1,97 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 
-export default defineConfig({
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@airlock/shared-ui': path.resolve(__dirname, '../apps/shared-ui/src'),
-      '@airlock/shared-ui/design-system': path.resolve(__dirname, '../apps/shared-ui/src/design-system'),
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+
+  return {
+    define: {
+      __AIRLOCK_DEMO_MODE__: JSON.stringify(env.DEMO_MODE ?? env.VITE_DEMO_MODE ?? 'false'),
     },
-    dedupe: ['react', 'react-dom', 'react-router-dom'],
-  },
-  plugins: [
-    react(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        runtimeCaching: [
-          // Cache governance API calls for 5 minutes (stale-while-revalidate)
-          {
-            urlPattern: /\/api\/.*governance|localhost:4000\/api\//,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'gov-api-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 300 },
-            },
-          },
-          // Cache proxy API calls
-          {
-            urlPattern: /localhost:8000\/api\//,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'proxy-api-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 300 },
-            },
-          },
-          // Cache Google Fonts
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\//,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-cache',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-        ],
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
+        '@airlock/shared-ui': path.resolve(__dirname, '../apps/shared-ui/src'),
+        '@airlock/shared-ui/design-system': path.resolve(__dirname, '../apps/shared-ui/src/design-system'),
       },
-      manifest: {
-        name: 'Airlock Governance',
-        short_name: 'Airlock',
-        description: 'Enterprise AI governance — real-time prompt monitoring, compliance, and threat detection',
-        start_url: '/governance',
-        display: 'standalone',
-        background_color: '#020617',
-        theme_color: '#6366f1',
-        orientation: 'any',
-        categories: ['business', 'security', 'productivity'],
-        icons: [
-          {
-            src: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="40" fill="%236366f1"/><path d="M96 20L32 50v56c0 46 26 88 64 106 38-18 64-60 64-106V50L96 20z" fill="white"/></svg>',
-            sizes: '192x192',
-            type: 'image/svg+xml',
-          },
-        ],
-        shortcuts: [
-          { name: 'Dashboard', url: '/governance', description: 'AI Governance overview' },
-          { name: 'Threats', url: '/governance/threats', description: 'Live threat feed' },
-          { name: 'Policies', url: '/governance/policies', description: 'Policy builder' },
-          { name: 'Compliance', url: '/governance/reports', description: 'Compliance reports' },
-        ],
-      },
-      devOptions: {
-        enabled: true,
-        type: 'module',
-      },
-    }),
-  ],
-  server: {
-    host: '0.0.0.0',
-    port: 3000,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
+      dedupe: ['react', 'react-dom', 'react-router-dom'],
+    },
+    plugins: [
+      react(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        injectRegister: 'auto',
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          runtimeCaching: [
+            {
+              urlPattern: /\/api\/.*governance|localhost:4000\/api\//,
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'gov-api-cache',
+                expiration: { maxEntries: 50, maxAgeSeconds: 300 },
+              },
+            },
+            {
+              urlPattern: /localhost:8000\/api\//,
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'proxy-api-cache',
+                expiration: { maxEntries: 50, maxAgeSeconds: 300 },
+              },
+            },
+            {
+              urlPattern: /^https:\/\/fonts\.googleapis\.com\//,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-fonts-cache',
+                expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+          ],
+        },
+        manifest: {
+          name: 'Airlock Governance',
+          short_name: 'Airlock',
+          description: 'Enterprise AI governance — real-time prompt monitoring, compliance, and threat detection',
+          start_url: '/governance',
+          display: 'standalone',
+          background_color: '#020617',
+          theme_color: '#6366f1',
+          orientation: 'any',
+          categories: ['business', 'security', 'productivity'],
+          icons: [
+            {
+              src: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="40" fill="%236366f1"/><path d="M96 20L32 50v56c0 46 26 88 64 106 38-18 64-60 64-106V50L96 20z" fill="white"/></svg>',
+              sizes: '192x192',
+              type: 'image/svg+xml',
+            },
+          ],
+          shortcuts: [
+            { name: 'Dashboard', url: '/governance', description: 'AI Governance overview' },
+            { name: 'Threats', url: '/governance/threats', description: 'Live threat feed' },
+            { name: 'Policies', url: '/governance/policies', description: 'Policy builder' },
+            { name: 'Compliance', url: '/governance/reports', description: 'Compliance reports' },
+          ],
+        },
+        devOptions: {
+          enabled: true,
+          type: 'module',
+        },
+      }),
+    ],
+    server: {
+      host: '0.0.0.0',
+      port: 3000,
+      proxy: {
+        '/api': {
+          target: 'http://localhost:8000',
+          changeOrigin: true,
+        },
       },
     },
-  },
+  }
 })

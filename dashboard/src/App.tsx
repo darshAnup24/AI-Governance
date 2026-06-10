@@ -27,6 +27,7 @@ import Vendors from './pages/governance/Vendors'
 import GovReports from './pages/governance/Reports'
 import UserHeatmap from './pages/governance/UserHeatmap'
 import ThreatDetection from './pages/governance/ThreatDetection'
+import AdvisorLivePage from './pages/AdvisorLivePage'
 
 function Wrap({ children }: { children: React.ReactNode }) {
     return <ErrorBoundary>{children}</ErrorBoundary>
@@ -74,6 +75,14 @@ export default function App() {
                         <Route path="/governance/heatmap" element={<Wrap><UserHeatmap /></Wrap>} />
                         <Route path="/governance/threats" element={<Wrap><ThreatDetection /></Wrap>} />
                     </Route>
+                    <Route
+                        path="/advisor-live"
+                        element={
+                            <ProtectedRoute>
+                                <Wrap><AdvisorLivePage /></Wrap>
+                            </ProtectedRoute>
+                        }
+                    />
                     <Route path="*" element={<Navigate to="/governance" replace />} />
                 </Routes>
             </AuthProvider>

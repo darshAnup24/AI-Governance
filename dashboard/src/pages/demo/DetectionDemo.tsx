@@ -1,11 +1,11 @@
 import { useState, useRef } from 'react'
 import {
   Shield, AlertTriangle, CheckCircle2, Loader2, Send,
-  ChevronRight, Info, Scan, ArrowRight, ThumbsDown,
+  ChevronRight, Info, Scan, ArrowRight, ThumbsDown, PlayCircle,
 } from 'lucide-react'
 import api from '../../lib/api'
-import govApi from '../../lib/govApi'
 import { useQueryClient } from '../../lib/hooks'
+import { GOLDEN_DEMO_PROMPT, useDemoFlow } from './DemoFlowContext'
 
 const DETECTION_API = 'http://localhost:8001'
 
@@ -72,12 +72,12 @@ interface InspectResult {
 
 export default function DetectionDemo() {
   const qc = useQueryClient()
+  const { flowRunning, lastRun, runGoldenFlow } = useDemoFlow()
   const [prompt, setPrompt] = useState(PRESETS[0].text)
   const [activePreset, setActivePreset] = useState(0)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<InspectResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [incidentCreated, setIncidentCreated] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Mistake feedback state — only track false positives flagged by user
@@ -86,22 +86,12 @@ export default function DetectionDemo() {
 
   const handleInspect = async () => {
     if (!prompt.trim()) return
-    setLoading(true); setError(null); setResult(null); setIncidentCreated(false)
+    setLoading(true); setError(null); setResult(null)
     setFeedbackSent({})
     try {
       const resp = await api.post('/api/v1/inspect', { text: prompt })
       const data: InspectResult = resp.data
       setResult(data)
-
-      if (data.action === 'BLOCK' || data.risk_score >= 70) {
-        const cats = data.categories.join(', ') || 'unknown'
-        await govApi.post('/api/incidents', {
-          title: `[Demo] ${data.categories[0] || 'High-Risk Prompt'} Detected`,
-          description: `Prompt Inspector detected ${cats} with risk score ${data.risk_score}. Action: ${data.action}. Prompt: "${prompt.slice(0, 80)}..."`,
-          severity: data.risk_score >= 90 ? 'CRITICAL' : data.risk_score >= 70 ? 'HIGH' : 'MEDIUM',
-        }).catch(() => null)
-        setIncidentCreated(true)
-      }
 
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['incidents'] }),
@@ -183,7 +173,24 @@ export default function DetectionDemo() {
         <p className="text-xs text-[var(--muted-foreground)] mt-2">
           Every prompt is scored by 6+ detectors in parallel. Results appear in the <strong className="text-[var(--muted-foreground)]">Audit Trail</strong> tab and high-risk prompts auto-create incidents on the <strong className="text-[var(--muted-foreground)]">Incidents board</strong>.
         </p>
+        <button
+          onClick={() => void runGoldenFlow(GOLDEN_DEMO_PROMPT)}
+          disabled={flowRunning}
+          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--accent)]/30 hover:bg-[var(--accent)]/5 disabled:opacity-50"
+        >
+          <PlayCircle className="h-3.5 w-3.5" />
+          <span>Run the full golden flow from this prompt</span>
+        </button>
       </div>
+
+      {lastRun ? (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--background)]/80 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Latest correlated trace</p>
+          <p className="mt-2 text-sm text-[var(--foreground)]">
+            {lastRun.action} · risk {lastRun.riskScore} · {lastRun.categories.join(', ') || 'No categories'} · trace {lastRun.traceId.slice(0, 8)}
+          </p>
+        </div>
+      ) : null}
 
       {/* Presets */}
       <div className="flex gap-2 flex-wrap">
@@ -359,11 +366,10 @@ export default function DetectionDemo() {
                 </div>
               )}
 
-              {/* Incident created badge */}
-              {incidentCreated && (
+              {result.action !== 'ALLOW' && (
                 <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
                   <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span>Incident auto-created on the <strong>Incidents board</strong> — check Governance → Incidents</span>
+                  <span>Prompt Inspector is detection-only. Run the <strong>golden flow</strong> to create the incident, advisor summary, and live audit trace.</span>
                 </div>
               )}
             </div>

@@ -122,7 +122,9 @@ export default function UserHeatmapPage() {
           {/* Heatmap rows */}
           <div className="space-y-1.5">
             {heatmap.map((row: any, i: number) => {
-              const avg = Math.round(row.days.reduce((a: number, v: number) => a + v, 0) / row.days.length)
+              const days = Array.isArray(row.days) ? row.days : []
+              if (!days.length) return null
+              const avg = Math.round(days.reduce((a: number, v: number) => a + v, 0) / days.length)
               const { label, cls } = riskLabel(avg)
               return (
                 <div key={i} className="flex items-center gap-0">
@@ -132,7 +134,7 @@ export default function UserHeatmapPage() {
                   </div>
 
                   {/* Cells */}
-                  {row.days.map((score: number, d: number) => (
+                  {days.map((score: number, d: number) => (
                     <div key={d} className="flex-1 flex justify-center items-center min-w-[40px] py-0.5">
                       <div
                         title={`${row.user} — ${DAYS[d]}: ${score}`}

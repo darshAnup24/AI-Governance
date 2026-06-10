@@ -5,12 +5,9 @@ import {
   Filter, Zap,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import axios from 'axios'
 import govApi from '../../lib/govApi'
-import { useAuditEvents, useIncidents, useQueryClient } from '../../lib/hooks'
-
-const PROXY_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-const DEV_TOKEN = 'dev-secret-change-in-production'
+import { useGovernanceProxyFeed, useGovernanceProxyStats, useIncidents, useQueryClient } from '../../lib/hooks'
+import { GOLDEN_DEMO_PROMPT, useDemoFlow } from './DemoFlowContext'
 
 const ACTION_COLORS: Record<string, string> = {
   BLOCK:  'bg-red-500/10 text-red-400 border-red-500/20',
@@ -61,37 +58,33 @@ const TEST_EVENTS = [
 
 export default function AuditDemo() {
   const qc = useQueryClient()
+  const { lastRun, flowRunning, runGoldenFlow } = useDemoFlow()
   const [filterAction, setFilterAction] = useState<string>('')
   const [generating, setGenerating] = useState<string | null>(null)
   const [recentIncidents, setRecentIncidents] = useState<string[]>([])
 
-  const { data: events = [], isFetching, refetch } = useAuditEvents({
-    action: filterAction || undefined,
-    limit: 20,
-  })
+  const runtimeFeedQ = useGovernanceProxyFeed()
+  const runtimeStatsQ = useGovernanceProxyStats()
   const { data: incidents = [] } = useIncidents()
+  const runtimeStats = runtimeStatsQ.data ?? {}
+  const events = Array.isArray(runtimeFeedQ.data?.runtimeFeed) ? runtimeFeedQ.data.runtimeFeed : []
+  const filteredEvents = filterAction ? events.filter((event: any) => event.action === filterAction) : events
 
   const generateEvent = async (t: typeof TEST_EVENTS[0]) => {
     setGenerating(t.label)
     try {
-      // Route through the real proxy so events land in audit DB + proxy monitor
-      await axios.post(
-        `${PROXY_URL}/v1/chat/completions`,
-        { model: 'gpt-4o', messages: [{ role: 'user', content: t.prompt }] },
-        { headers: { Authorization: `Bearer ${DEV_TOKEN}`, 'Content-Type': 'application/json' }, validateStatus: () => true }
-      )
+      const resp = await govApi.post('/api/proxy/simulate', {
+        prompt: t.prompt,
+        provider: 'OpenAI',
+      })
 
-      if (t.category !== 'CLEAN') {
-        const inc = await govApi.post('/api/incidents', {
-          title: `[Audit Demo] ${t.category.replace(/_/g, ' ')} Detected`,
-          description: `Test event generated from Audit Demo. Prompt: "${t.prompt.slice(0, 80)}..."`,
-          severity: t.severity,
-        })
-        setRecentIncidents(prev => [inc.data?.title || t.label, ...prev.slice(0, 4)])
+      if (resp.data?.incident?.title) {
+        setRecentIncidents(prev => [resp.data.incident.title, ...prev.slice(0, 4)])
       }
 
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['auditEvents'] }),
+        qc.invalidateQueries({ queryKey: ['governanceProxyFeed'] }),
+        qc.invalidateQueries({ queryKey: ['governanceProxyStats'] }),
         qc.invalidateQueries({ queryKey: ['incidents'] }),
         qc.invalidateQueries({ queryKey: ['dashboardStats'] }),
         qc.invalidateQueries({ queryKey: ['detectionBreakdown'] }),
@@ -100,11 +93,9 @@ export default function AuditDemo() {
     setGenerating(null)
   }
 
-  const totalEvents = (events as any[]).length
-  const blocked = (events as any[]).filter((e: any) => e.action_taken === 'BLOCK').length
-  const avgRisk = totalEvents > 0
-    ? Math.round((events as any[]).reduce((s: number, e: any) => s + (e.risk_score || 0), 0) / totalEvents)
-    : 0
+  const totalEvents = Number(runtimeStats.totalToday ?? events.length)
+  const blocked = Number(runtimeStats.blockedToday ?? events.filter((e: any) => e.action === 'BLOCK').length)
+  const avgRisk = Number(runtimeStats.riskScore ?? 0)
 
   return (
     <div className="space-y-5">
@@ -126,7 +117,24 @@ export default function AuditDemo() {
           Every detection & policy decision is logged immutably. Use <strong className="text-[var(--muted-foreground)]">Generate Test Event</strong> below to inject sample data — it will appear in this table <em>and</em> on the{' '}
           <Link to="/governance/incidents" className="text-[var(--accent)] underline hover:text-brand-300">Incidents board</Link>.
         </p>
+        <button
+          onClick={() => void runGoldenFlow(GOLDEN_DEMO_PROMPT)}
+          disabled={flowRunning}
+          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--accent)]/30 hover:bg-[var(--accent)]/5 disabled:opacity-50"
+        >
+          <Zap className="h-3.5 w-3.5" />
+          <span>Generate the golden-path audit trace</span>
+        </button>
       </div>
+
+      {lastRun ? (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--background)]/80 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Latest trace correlation</p>
+          <p className="mt-2 text-sm text-[var(--foreground)]">
+            Trace {lastRun.traceId.slice(0, 8)} · audit {lastRun.auditEventId?.slice(0, 8) || 'pending'} · incident {lastRun.incidentId?.slice(0, 8) || 'none'}
+          </p>
+        </div>
+      ) : null}
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -211,7 +219,7 @@ export default function AuditDemo() {
             <div className="flex items-center gap-2">
               <ScrollText className="w-4 h-4 text-[var(--muted-foreground)]" />
               <span className="text-sm font-semibold text-[var(--foreground)]">Live Audit Log</span>
-              {isFetching && <Loader2 className="w-3 h-3 animate-spin text-[var(--muted-foreground)]/70" />}
+              {runtimeFeedQ.isFetching && <Loader2 className="w-3 h-3 animate-spin text-[var(--muted-foreground)]/70" />}
             </div>
             <div className="flex items-center gap-2">
               {/* Filter */}
@@ -225,7 +233,7 @@ export default function AuditDemo() {
                   <option value="ALLOW">ALLOW</option>
                 </select>
               </div>
-              <button onClick={() => refetch()} className="p-1.5 rounded hover:bg-[var(--muted)] text-[var(--muted-foreground)]/70 hover:text-[var(--foreground)] transition-colors">
+              <button onClick={() => { void runtimeFeedQ.refetch(); void runtimeStatsQ.refetch() }} className="p-1.5 rounded hover:bg-[var(--muted)] text-[var(--muted-foreground)]/70 hover:text-[var(--foreground)] transition-colors">
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -242,19 +250,18 @@ export default function AuditDemo() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
-                {(events as any[]).length === 0 && (
+                {filteredEvents.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-3 py-8 text-center text-[var(--muted-foreground)]/40">
                       No events yet — generate a test event or send something through the Chat tab
                     </td>
                   </tr>
                 )}
-                {(events as any[]).map((ev: any) => {
-                  const spans = ev.detection_results?.detected_spans || []
-                  const cats: string[] = [...new Set(spans.map((s: any) => s.category).filter(Boolean))] as string[]
-                  const action = ev.action_taken || 'ALLOW'
+                {filteredEvents.map((ev: any) => {
+                  const cats: string[] = Array.isArray(ev.categories) ? ev.categories : []
+                  const action = ev.action || 'ALLOW'
                   return (
-                    <tr key={ev.event_id} className="hover:bg-[var(--muted)]/20 transition-colors">
+                    <tr key={ev.id} className="hover:bg-[var(--muted)]/20 transition-colors">
                       <td className="px-3 py-2.5 text-[var(--muted-foreground)]/70 font-mono whitespace-nowrap">
                         {ev.timestamp ? timeAgo(ev.timestamp) : '—'}
                       </td>
@@ -273,9 +280,9 @@ export default function AuditDemo() {
                         <div className="flex items-center gap-1.5">
                           <div className="w-12 h-1 bg-[var(--muted)] rounded-full overflow-hidden">
                             <div className="h-full rounded-full bg-[var(--foreground)]"
-                              style={{ width: `${Math.min(ev.risk_score || 0, 100)}%` }} />
+                              style={{ width: `${Math.min(ev.riskScore || 0, 100)}%` }} />
                           </div>
-                          <span className="text-[var(--muted-foreground)] font-mono">{ev.risk_score || 0}</span>
+                          <span className="text-[var(--muted-foreground)] font-mono">{ev.riskScore || 0}</span>
                         </div>
                       </td>
                       <td className="px-3 py-2.5">

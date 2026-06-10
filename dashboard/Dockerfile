@@ -9,8 +9,10 @@ COPY . .
 # Accept build-time env vars so Vite bakes the correct API URLs into the bundle
 ARG VITE_API_URL=http://localhost:8000
 ARG VITE_GOVERNANCE_URL=http://localhost:4000
+ARG VITE_DEMO_MODE=true
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_GOVERNANCE_URL=$VITE_GOVERNANCE_URL
+ENV VITE_DEMO_MODE=$VITE_DEMO_MODE
 
 # Build the production bundle
 RUN npm run build

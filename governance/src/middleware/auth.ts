@@ -32,6 +32,7 @@ declare global {
       workspaceId?: string;
       environmentId?: string;
       workspaceRole?: string;
+      traceId?: string;
     }
   }
 }

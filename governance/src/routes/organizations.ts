@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 
 import { prisma } from "../index";
 import { PERMISSIONS, requirePermission } from "../engine/rbacEngine";
+import { TenantScopeError, resolveScopedTenantContext } from "../middleware/workspace";
 
 export const organizationsRouter = Router();
 
@@ -190,7 +191,10 @@ organizationsRouter.post(
   requirePermission(PERMISSIONS.canManageEnvironments, { scope: "workspace" }),
   async (req: Request, res: Response) => {
     try {
-      const workspaceId = String(req.params.workspaceId);
+      const scoped = await resolveScopedTenantContext(req, {
+        workspaceId: String(req.params.workspaceId),
+      });
+      const workspaceId = scoped.workspaceId!;
       const { name, type, settings } = req.body;
       if (!name) {
         res.status(400).json({ error: "Environment name required" });
@@ -221,6 +225,10 @@ organizationsRouter.post(
 
       res.status(201).json(environment);
     } catch (err: any) {
+      if (err instanceof TenantScopeError) {
+        res.status(err.statusCode).json({ error: err.message });
+        return;
+      }
       res.status(500).json({ error: err.message });
     }
   },

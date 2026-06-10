@@ -2,17 +2,18 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Shield, AlertTriangle, Eye, Activity, CheckCircle,
   Zap, Server, Clock, Filter, RefreshCw, XCircle,
-  BarChart3, Gauge, Radio, Wifi, HardDrive, Layers,
+  BarChart3, Gauge, Radio, Wifi, HardDrive, Layers, ChevronDown, Bug, KeyRound,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Cell,
 } from 'recharts'
-import { useAnalyticsTrend, useAuditEvents, useProxyStats,
+import { useAnalyticsTrend, useAuditEvents, useProxyStats, useGovernanceProxyStats,
   useLatencyPercentiles, useRedisHealth, useUpstreamLatency,
   useQueueDepth, useActiveStreams, useRuntimeMode } from '../lib/hooks'
-import { useLiveAuditFeed } from '../lib/live'
+import { useGovernanceDemoStream, useLiveAuditFeed, type GovernanceLiveIncident } from '../lib/live'
 import { PageHeader, PageShell, StatusPill } from '../components/ui/page-shell'
+import govApi from '../lib/govApi'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,14 @@ const ACTION_META: Record<string, { color: string; bg: string; dot: string; labe
   WARN:   { color: 'text-yellow-400',  bg: 'bg-yellow-500/15 border-yellow-500/30', dot: 'bg-yellow-500', label: 'WARNED'   },
   ALLOW:  { color: 'text-emerald-400', bg: 'bg-emerald-500/15 border-emerald-500/30', dot: 'bg-emerald-500', label: 'ALLOWED' },
   LOG:    { color: 'text-blue-400',    bg: 'bg-blue-500/15 border-blue-500/30',    dot: 'bg-blue-500',   label: 'LOGGED'   },
+}
+
+const SEVERITY_META: Record<string, string> = {
+  CRITICAL: 'badge-red',
+  HIGH: 'badge-orange',
+  MEDIUM: 'badge-yellow',
+  LOW: 'badge-blue',
+  ALLOWED: 'badge-green',
 }
 
 function riskColor(score: number) {
@@ -46,6 +55,13 @@ function fmt(ts: string) {
 
 function shortHash(h: string) { return h ? h.slice(0, 8) + '…' : '—' }
 
+function detectionIcon(category?: string) {
+  if (category === 'PROMPT_INJECTION') return Bug
+  if (category === 'SECRET') return KeyRound
+  if (category === 'PII' || category === 'FINANCIAL') return AlertTriangle
+  return Shield
+}
+
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null
   return (
@@ -63,41 +79,87 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 // ── Live event feed row ──────────────────────────────────────────────────────
 
-function EventRow({ ev, flash }: { ev: any; flash: boolean }) {
-  const meta   = ACTION_META[ev.action_taken] ?? ACTION_META.ALLOW
-  const cats   = (ev.detection_results?.detected_spans ?? []).map((s: any) => s.category)
-  const score  = ev.risk_score ?? 0
+function EventRow({
+  ev,
+  flash,
+  expanded,
+  onToggle,
+}: {
+  ev: GovernanceLiveIncident
+  flash: boolean
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const score = ev.riskScore ?? 0
+  const primaryCategory = ev.categories?.[0]
+  const Icon = detectionIcon(primaryCategory)
 
   return (
-    <div className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-xs transition-colors
-      ${flash
-        ? 'border-[var(--border)] bg-[var(--muted)]'
-        : 'border-transparent hover:bg-[var(--muted)]'
-      }`}
+    <div
+      className={`rounded-xl border px-3 py-3 text-xs transition-all ${flash ? 'animate-feed-enter animate-flash-highlight border-yellow-300/70' : 'border-[var(--border)]'} ${expanded ? 'bg-[var(--muted)]/40' : 'bg-[var(--card)] hover:bg-[var(--muted)]/30'}`}
     >
-      <span className="text-[var(--muted-foreground)]/60 w-20 shrink-0 font-mono tabular-nums">{fmt(ev.timestamp)}</span>
-      <div className="w-24 shrink-0">
-        <div className="flex items-center gap-1.5">
-          <div className="flex-1 h-1.5 bg-[var(--muted)] rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all ${riskBg(score)}`} style={{ width: `${score}%` }} />
-          </div>
-          <span className={`font-mono font-bold w-6 text-right ${riskColor(score)}`}>{score}</span>
+      <button onClick={onToggle} className="flex w-full items-center gap-3 text-left">
+        <span className="w-20 shrink-0 font-mono tabular-nums text-[var(--muted-foreground)]/70">{fmt(ev.timestamp)}</span>
+        <span className={`badge ${SEVERITY_META[ev.severity] || 'badge-blue'} min-w-[88px] justify-center`}>
+          {ev.action === 'ALLOW' ? 'ALLOWED' : ev.severity}
+        </span>
+        <span className="inline-flex w-8 shrink-0 justify-center">
+          <Icon className="h-4 w-4 text-[var(--muted-foreground)]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="line-clamp-1 text-sm font-medium text-[var(--foreground)]">{ev.promptPreview || ev.title || 'No prompt preview'}</p>
+          <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{primaryCategory || 'SAFE'} · {ev.provider} · {ev.latencyMs ?? 0} ms</p>
         </div>
-      </div>
-      <span className={`px-2 py-0.5 rounded-full border font-bold text-[10px] shrink-0 ${meta.bg} ${meta.color}`}>
-        {meta.label}
-      </span>
-      <div className="flex gap-1 flex-wrap min-w-0 flex-1">
-        {cats.length > 0
-          ? cats.slice(0, 3).map((c: string) => (
-              <span key={c} className="px-1.5 py-0.5 bg-[var(--muted)] rounded text-[10px] text-[var(--muted-foreground)] font-mono">{c}</span>
-            ))
-          : <span className="text-[var(--muted-foreground)]/30 text-[10px]">clean</span>
-        }
-      </div>
-      <span className="text-[var(--muted-foreground)]/60 shrink-0 hidden md:block w-20 truncate">{ev.tool_name || '—'}</span>
-      <span className="text-[var(--muted-foreground)]/60 shrink-0 hidden lg:block w-18">{ev.llm_provider || '—'}</span>
-      <span className="text-[var(--muted-foreground)]/40 font-mono hidden xl:block shrink-0 w-20">{shortHash(ev.prompt_hash)}</span>
+        <div className="hidden w-24 shrink-0 lg:block">
+          <div className="flex items-center gap-1.5">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--muted)]">
+              <div className={`h-full rounded-full ${riskBg(score)}`} style={{ width: `${score}%` }} />
+            </div>
+            <span className={`w-7 text-right font-mono font-bold ${riskColor(score)}`}>{score}</span>
+          </div>
+        </div>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+
+      {expanded ? (
+        <div className="mt-4 grid gap-4 border-t border-[var(--border)] pt-4 md:grid-cols-[1.1fr_0.9fr]">
+          <div className="space-y-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">Prompt</p>
+              <p className="mt-1 rounded-lg bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]">{ev.promptPreview}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">Response preview</p>
+              <p className="mt-1 rounded-lg bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]">
+                {ev.responsePreview || 'No provider response was returned because the request was blocked.'}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(ev.categories || ['SAFE']).map((category) => (
+                <span key={`${ev.id}-${category}`} className="rounded-full border border-[var(--border)] px-2.5 py-1 text-[10px] font-mono text-[var(--muted-foreground)]">
+                  {category}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+              <p className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">AI Advisor</p>
+              <p className="mt-2 text-sm leading-6 text-[var(--foreground)]">{ev.advisor?.summary || 'Advisor summary pending.'}</p>
+            </div>
+            {ev.advisor?.remediation?.length ? (
+              <ol className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+                {ev.advisor.remediation.map((step, index) => (
+                  <li key={`${ev.id}-${index}`} className="text-sm text-[var(--foreground)]">
+                    <span className="mr-2 font-semibold text-[var(--muted-foreground)]">{index + 1}.</span>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -106,6 +168,7 @@ function EventRow({ ev, flash }: { ev: any; flash: boolean }) {
 
 export default function DashboardPage() {
   const statsQ       = useProxyStats()
+  const govStatsQ    = useGovernanceProxyStats()
   const trendQ       = useAnalyticsTrend(30)
   const eventsQ      = useAuditEvents({ limit: 50 })
   const latencyQ     = useLatencyPercentiles()
@@ -115,26 +178,32 @@ export default function DashboardPage() {
   const streamsQ     = useActiveStreams()
   const runtimeModeQ = useRuntimeMode()
   const liveFeed     = useLiveAuditFeed(50)
+  const demoFeed     = useGovernanceDemoStream(100)
 
   const [filter, setFilter]     = useState<string>('ALL')
   const [flashId, setFlashId]   = useState<string | null>(null)
   const [newCount, setNewCount] = useState(0)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const lastTopRef              = useRef<string | null>(null)
 
-  const stats       = statsQ.data       ?? {}
+  const stats       = govStatsQ.data ?? statsQ.data ?? {}
   const polledEvents: any[] = Array.isArray(eventsQ.data) ? eventsQ.data : []
-  const events: any[] = liveFeed.events.length
-    ? liveFeed.events.map((event) => ({
-        event_id: event.event_id,
+  const events: GovernanceLiveIncident[] = demoFeed.events.length
+    ? demoFeed.events
+    : polledEvents.map((event) => ({
+        id: event.event_id,
         timestamp: event.timestamp,
-        risk_score: event.risk_score ?? 0,
-        action_taken: event.action_taken ?? 'ALLOW',
-        llm_provider: event.llm_provider ?? '—',
-        detection_results: {
-          detected_spans: (event.categories || []).map((category) => ({ category })),
-        },
+        action: event.action_taken ?? 'ALLOW',
+        severity: event.action_taken === 'ALLOW' ? 'ALLOWED' : event.risk_score >= 85 ? 'CRITICAL' : event.risk_score >= 60 ? 'HIGH' : event.risk_score >= 35 ? 'MEDIUM' : 'LOW',
+        provider: event.llm_provider ?? '—',
+        riskScore: event.risk_score ?? 0,
+        traceId: '',
+        promptPreview: `Trace ${shortHash(event.prompt_hash || '')}`,
+        responsePreview: '',
+        categories: (event.detection_results?.detected_spans ?? []).map((span: any) => span.category),
+        latencyMs: 0,
+        title: event.action_taken === 'ALLOW' ? 'ALLOWED - No Violations' : 'Threat detected',
       }))
-    : polledEvents
   const trend       = trendQ.data       ?? []
   const latency     = latencyQ.data     ?? {}
   const redis       = redisQ.data       ?? { connected: false }
@@ -146,7 +215,7 @@ export default function DashboardPage() {
   // Flash newest event when feed updates
   useEffect(() => {
     if (!events.length) return
-    const topId = events[0]?.event_id
+    const topId = events[0]?.id
     if (topId && topId !== lastTopRef.current) {
       if (lastTopRef.current !== null) {
         setFlashId(topId)
@@ -159,7 +228,7 @@ export default function DashboardPage() {
 
   const displayed = filter === 'ALL'
     ? events
-    : events.filter(e => e.action_taken === filter)
+    : events.filter(e => e.action === filter)
 
   const FILTERS = ['ALL', 'BLOCK', 'WARN', 'REDACT', 'ALLOW']
 
@@ -174,7 +243,7 @@ export default function DashboardPage() {
         badge="Proxy Monitor"
         title="Live request stream, audit trail, and risk analytics"
         description="A single operational surface for latency, queue health, runtime posture, and enforcement actions."
-        status={<StatusPill label={liveFeed.status === 'connected' ? 'Live Stream' : liveFeed.status.toUpperCase()} tone={liveFeed.status === 'connected' ? 'live' : 'warning'} />}
+        status={<StatusPill label={demoFeed.status === 'connected' ? 'Live Demo Stream' : demoFeed.status.toUpperCase()} tone={demoFeed.status === 'connected' ? 'live' : 'warning'} />}
         actions={
           <div className="flex items-center gap-3">
           {newCount > 0 && (
@@ -183,7 +252,7 @@ export default function DashboardPage() {
             </span>
           )}
           <button
-            onClick={() => { eventsQ.refetch(); statsQ.refetch(); setNewCount(0) }}
+            onClick={() => { eventsQ.refetch(); statsQ.refetch(); govStatsQ.refetch(); setNewCount(0) }}
             className="p-1.5 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)] transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
@@ -201,7 +270,7 @@ export default function DashboardPage() {
           <span className="font-medium">
             Runtime mode: {runtimeMode.mode || liveFeed.runtimeMode || 'STANDARD'}
           </span>
-          <span>Stream: {liveFeed.status}</span>
+          <span>Stream: {demoFeed.status}</span>
           <span>Active SSE: {liveFeed.activeStreams || streams.active_streams || 0}</span>
           <span>Degraded events: {liveFeed.degradedEvents || runtimeMode.degraded_events || 0}</span>
           <span>Last heartbeat: {liveFeed.lastHeartbeat ? fmt(liveFeed.lastHeartbeat) : 'waiting'}</span>
@@ -209,13 +278,14 @@ export default function DashboardPage() {
       </div>
 
       {/* ── KPI row ───────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
         {[
           { label: 'Total Today',  value: stats.totalToday   ?? '—', icon: Activity,     color: 'text-[var(--foreground)]' },
           { label: 'Blocked',      value: stats.blockedToday ?? '—',  icon: XCircle,      color: 'text-red-500',     sub: `${stats.blockRate ?? 0}%` },
           { label: 'Warned',       value: stats.warnedToday  ?? '—',  icon: AlertTriangle,color: 'text-amber-500',   sub: `${stats.warnRate ?? 0}%`  },
           { label: 'Redacted',     value: stats.redactedToday?? '—',  icon: Eye,          color: 'text-orange-500',  sub: `${stats.redactRate ?? 0}%`},
           { label: 'Allowed',      value: stats.allowedToday ?? '—',  icon: CheckCircle,  color: 'text-emerald-600' },
+          { label: 'Pass Rate',    value: `${stats.passRate ?? 0}%`,  icon: Shield,       color: 'text-emerald-600', sub: 'clean traffic' },
           { label: 'Avg Risk',     value: stats.avgRiskScore ?? '—',  icon: Zap,          color: 'text-[var(--foreground)]',   sub: `${stats.highRiskToday ?? 0} high` },
         ].map(({ label, value, icon: Icon, color, sub }) => (
           <div key={label} className="card-hover border border-[var(--border)] bg-[var(--card)]">
@@ -427,12 +497,23 @@ export default function DashboardPage() {
             <div className="h-2 w-2 rounded-full bg-emerald-500" />
             <h2 className="text-sm font-semibold text-[var(--foreground)]">Live Request Feed</h2>
             <span className="text-[10px] text-[var(--muted-foreground)]/70">
-              ({events.length} loaded · {liveFeed.status})
+              ({events.length} loaded · {demoFeed.status})
             </span>
           </div>
 
-          {/* Filters */}
-          <div className="flex gap-1">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={async () => {
+                await govApi.post('/api/proxy/reset')
+                demoFeed.setEvents([])
+                setExpandedId(null)
+                setNewCount(0)
+                await govStatsQ.refetch()
+              }}
+              className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-[10px] font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              Clear
+            </button>
             <Filter className="w-3.5 h-3.5 text-[var(--muted-foreground)]/70 self-center mr-1" />
             {FILTERS.map(f => (
               <button
@@ -455,12 +536,11 @@ export default function DashboardPage() {
         {/* Column headers */}
         <div className="flex items-center gap-3 px-3 pb-1.5 border-b border-[var(--border)] text-[9px] text-[var(--muted-foreground)]/70 uppercase tracking-wider font-medium">
           <span className="w-20 shrink-0">Time</span>
-          <span className="w-24 shrink-0">Risk</span>
-          <span className="w-16 shrink-0">Action</span>
-          <span className="flex-1">Categories</span>
-          <span className="w-20 shrink-0 hidden md:block">Tool</span>
-          <span className="w-18 shrink-0 hidden lg:block">Provider</span>
-          <span className="w-20 shrink-0 hidden xl:block">Hash</span>
+          <span className="w-24 shrink-0">Severity</span>
+          <span className="w-8 shrink-0">Type</span>
+          <span className="flex-1">Prompt</span>
+          <span className="hidden w-24 shrink-0 lg:block">Risk</span>
+          <span className="w-5 shrink-0" />
         </div>
 
         {/* Rows */}
@@ -476,7 +556,13 @@ export default function DashboardPage() {
             </div>
           ) : (
             displayed.map(ev => (
-              <EventRow key={ev.event_id} ev={ev} flash={ev.event_id === flashId} />
+              <EventRow
+                key={ev.id}
+                ev={ev}
+                flash={ev.id === flashId}
+                expanded={expandedId === ev.id}
+                onToggle={() => setExpandedId((current) => (current === ev.id ? null : ev.id))}
+              />
             ))
           )}
         </div>

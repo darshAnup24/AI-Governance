@@ -145,3 +145,23 @@ class GovernanceClient:
             if cached_val is not None:
                 return cached_val
             return []
+
+    async def create_incident(self, payload: dict[str, Any]) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{self._base_url}/api/internal/incidents",
+                headers={"X-Service-Token": self._service_token},
+                json=payload,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    async def generate_incident_summary(self, payload: dict[str, Any]) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                f"{self._base_url}/api/internal/advisor/incident-summary",
+                headers={"X-Service-Token": self._service_token},
+                json=payload,
+            )
+            resp.raise_for_status()
+            return resp.json()

@@ -22,23 +22,32 @@ import { organizationsRouter } from "./routes/organizations";
 import { invitationsRouter } from "./routes/invitations";
 import { providersRouter } from "./routes/providers";
 import { settingsRouter } from "./routes/settings";
+import { proxyRouter } from "./routes/proxy";
 import { connectRedis } from "./engine/redisEnrichment";
 import { authMiddleware, requireGovernanceScope } from "./middleware/auth";
 import { auditMiddleware } from "./middleware/auditLogger";
 import { workspaceContextMiddleware, validateWorkspaceAccess } from "./middleware/workspace";
 import { prisma } from "./platform/prisma";
+import { assertSecureRuntimeConfig } from "./platform/runtimeConfig";
+import { attachTraceId } from "./platform/requestContext";
 export { prisma };
 
 const app = express();
 const PORT = process.env.GOVERNANCE_PORT || 4000;
 
+assertSecureRuntimeConfig();
+
 // ─── Global Middleware ───────────────────────────────────
 app.use(helmet());
 app.use(cors({ 
-    origin: (process.env.CORS_ORIGIN || "http://localhost:3000,http://localhost:3002").split(","), 
+    origin: (process.env.CORS_ORIGIN || "http://localhost:3000").split(","), 
     credentials: true 
 }));
 app.use(express.json({ limit: "10mb" }));
+app.use((req, res, next) => {
+    attachTraceId(req, res);
+    next();
+});
 app.use(
     rateLimit({
         windowMs: 60 * 1000,
@@ -50,7 +59,20 @@ app.use(
 
 // ─── Health ──────────────────────────────────────────────
 app.get("/health", (_req, res) => {
-    res.json({ status: "healthy", service: "governance", version: "0.1.0" });
+    void Promise.allSettled([
+        prisma.$queryRaw`SELECT 1`,
+        connectRedis().then((client) => client.ping()),
+    ]).then(([postgres, redis]) => {
+        res.json({
+            status: "ok",
+            service: "governance",
+            timestamp: new Date().toISOString(),
+            dependencies: {
+                postgres: postgres.status === "fulfilled" ? "ok" : "error",
+                redis: redis.status === "fulfilled" ? "ok" : "error",
+            },
+        });
+    });
 });
 
 // ─── Public Routes ───────────────────────────────────────
@@ -79,6 +101,34 @@ app.use("/api/organization", authMiddleware, requireGovernanceScope, organizatio
 app.use("/api/invitations", authMiddleware, requireGovernanceScope, auditMiddleware, invitationsRouter);
 app.use("/api/providers", authMiddleware, requireGovernanceScope, providersRouter);
 app.use("/api/settings", authMiddleware, requireGovernanceScope, settingsRouter);
+app.use("/api/proxy", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, proxyRouter);
+
+// ─── Routing Rules (alias: expose policy rules in routing-rule shape) ──────
+app.get("/api/routing-rules", authMiddleware, requireGovernanceScope, workspaceContextMiddleware, validateWorkspaceAccess, async (req: express.Request, res: express.Response) => {
+    try {
+        const { prisma } = await import("./platform/prisma");
+        const orgId = req.user!.orgId;
+        const workspaceId = req.workspaceId || undefined;
+        const rules = await prisma.policyRule.findMany({
+            where: { orgId, deletedAt: null, ...(workspaceId ? { workspaceId } : {}) },
+            orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
+            take: 50,
+        });
+        res.json(rules.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            action: r.action,
+            enabled: r.enabled,
+            priority: r.priority,
+            category: r.category,
+            scope: r.scope,
+            conditions: r.conditions,
+            description: r.description,
+        })));
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // ─── Error Handler ───────────────────────────────────────
 app.use(

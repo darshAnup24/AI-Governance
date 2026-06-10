@@ -74,8 +74,8 @@ class DetectionPipeline:
         if self.whitelist_checker(normalized):
             return self._safe_response(detection_id, [], start)
 
-        route, _ = fast_path_route(normalized, cache=None)
-        if route == "SAFE":
+        route, route_meta = fast_path_route(normalized, cache=None)
+        if route == "SAFE" and route_meta.get("route") in {"empty", "cache_hit"}:
             return self._safe_response(detection_id, [], start)
 
         defended_text, _ = length_defense(normalized, max_len=self.max_prompt_chars)

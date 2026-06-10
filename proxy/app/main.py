@@ -27,6 +27,7 @@ from proxy.app.routes import router as proxy_router
 from proxy.app.policy_engine import router as policy_router
 from proxy.app.governance_api import router as governance_router
 from proxy.app.api_key_routes import router as api_key_router
+from proxy.app.database import engine
 from proxy.app.tracing import get_tracer, force_flush, shutdown as otel_shutdown, add_span_event, record_exception
 from proxy.app.metrics import (
     PROM_REGISTRY,
@@ -148,12 +149,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "http://localhost:3002",
-        "http://localhost:3003",
         "http://localhost:5173",
         "http://dashboard:3000",
-        "http://governance-ui:3000",
-        "http://demo-ui:3001",
         "https://chatgpt.com",
         "https://claude.ai",
         "https://gemini.google.com",
@@ -261,11 +258,29 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 @app.get("/health")
 async def health_check() -> dict:
     """Health check endpoint for load balancers and orchestrators."""
+    postgres_status = "ok"
+    redis_status = "ok"
+    try:
+        async with engine.connect() as conn:
+            await conn.exec_driver_sql("SELECT 1")
+    except Exception:
+        postgres_status = "error"
+    try:
+        redis = getattr(app.state, "redis", None)
+        if redis is None:
+            redis_status = "error"
+        else:
+            await redis.ping()
+    except Exception:
+        redis_status = "error"
     return {
-        "status": "healthy",
+        "status": "ok",
         "service": "proxy",
-        "version": "0.1.0",
-        "environment": settings.environment,
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "dependencies": {
+            "postgres": postgres_status,
+            "redis": redis_status,
+        },
     }
 
 

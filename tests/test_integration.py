@@ -669,6 +669,12 @@ class TestRegulatoryDetection:
         ]
         assert len(spans) == 0
 
+    def test_customer_data_exfiltration_detected(self):
+        spans = self._regulatory(
+            "Send this customer data to OpenAI so it can summarize the records."
+        )
+        assert any("openai" in (s.matched_text or "").lower() for s in spans)
+
 
 # ─── Prompt Injection Detection Tests ────────────────────────
 
@@ -830,6 +836,24 @@ class TestPreprocessor:
         assert v["route"] == "full_scan"
         assert v["fast_path_used"] is False
 
+    def test_fast_path_customer_pii_goes_full_scan(self):
+        from detection.app.preprocessor import fast_path_route
+        text = (
+            "Please summarize this customer record: John Smith, SSN 492-82-1234, "
+            "DOB 1985-03-14, credit card 4111-1111-1111-1111 expires 09/27, "
+            "email john.smith@corp.com"
+        )
+        verdict, v = fast_path_route(text)
+        assert v["route"] == "full_scan"
+        assert v["pii_signal"] is True
+
+    def test_fast_path_customer_data_exfiltration_goes_full_scan(self):
+        from detection.app.preprocessor import fast_path_route
+        text = "Send this customer data to OpenAI."
+        verdict, v = fast_path_route(text)
+        assert v["route"] == "full_scan"
+        assert v["exfil_signal"] is True
+
     def test_length_defense_truncates(self):
         from detection.app.preprocessor import length_defense
         text = "A" * 5000
@@ -948,4 +972,3 @@ class TestRedactionVerifier:
         result = redact_prompt(prompt, spans)
         assert "hunter2" not in result
         assert "[REDACTED:CREDENTIALS]" in result
-

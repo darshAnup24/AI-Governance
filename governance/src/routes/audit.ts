@@ -87,3 +87,57 @@ auditRouter.get('/stats', authMiddleware, async (req: Request, res: Response) =>
     res.json({ totalLogs, actionCounts, recentActivity });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
+
+// GET /api/audit-logs/by-user — user activity heatmap
+auditRouter.get('/by-user', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { days = '30' } = req.query;
+    const since = new Date();
+    since.setDate(since.getDate() - parseInt(days as string, 10));
+
+    const rows = await prisma.auditLog.groupBy({
+      by: ['userId'],
+      where: {
+        orgId: req.user!.orgId,
+        timestamp: { gte: since },
+        userId: { not: null },
+      },
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 50,
+    });
+
+    const userIds = rows.map((r: any) => r.userId).filter(Boolean) as string[];
+    const users = userIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, name: true, email: true },
+        })
+      : [];
+    const userMap: Record<string, any> = {};
+    for (const u of users) userMap[u.id] = u;
+
+    res.json(
+      rows.map((r: any) => ({
+        userId: r.userId,
+        user: userMap[r.userId] || null,
+        eventCount: (r._count as any).id,
+      }))
+    );
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/audit-logs/recent — last N audit events (for incident timeline widgets)
+auditRouter.get('/recent', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(parseInt((req.query.limit as string) || '20', 10), 100);
+    const logs = await prisma.auditLog.findMany({
+      where: { orgId: req.user!.orgId },
+      orderBy: { timestamp: 'desc' },
+      take: limit,
+      include: { user: { select: { id: true, name: true, email: true } } },
+    });
+    res.json(logs);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+

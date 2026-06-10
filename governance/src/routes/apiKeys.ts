@@ -3,6 +3,7 @@ import { Router, Request, Response } from "express";
 import { generateAPIKey } from "../engine/authService";
 import { PERMISSIONS, requirePermission } from "../engine/rbacEngine";
 import { prisma } from "../index";
+import { TenantScopeError, resolveScopedTenantContext } from "../middleware/workspace";
 
 export const apiKeysRouter = Router();
 
@@ -22,35 +23,48 @@ apiKeysRouter.post(
   "/",
   requirePermission(PERMISSIONS.canManageApiKeys),
   async (req: Request, res: Response) => {
-    const { raw, prefix, hash } = generateAPIKey();
-    const key = await prisma.aPIKey.create({
-      data: {
-        orgId: req.user!.orgId,
+    try {
+      const scoped = await resolveScopedTenantContext(req, {
         workspaceId: req.body.workspaceId || req.workspaceId || null,
         environmentId: req.body.environmentId || req.environmentId || null,
-        userId: req.user!.userId,
-        name: req.body.name || "Service Key",
-        keyPrefix: prefix,
-        keyHash: hash,
-        scopes: req.body.scopes || ["proxy:chat"],
-        rateLimitPerMin: req.body.rateLimitPerMin || 60,
-        expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : null,
-      },
-    });
+      });
 
-    await prisma.auditLog.create({
-      data: {
-        orgId: req.user!.orgId,
-        workspaceId: key.workspaceId,
-        userId: req.user!.userId,
-        action: "API_KEY_CREATED",
-        resource: "api_key",
-        resourceId: key.id,
-        details: { scopes: key.scopes, environmentId: key.environmentId },
-      },
-    });
+      const { raw, prefix, hash } = generateAPIKey();
+      const key = await prisma.aPIKey.create({
+        data: {
+          orgId: req.user!.orgId,
+          workspaceId: scoped.workspaceId,
+          environmentId: scoped.environmentId,
+          userId: req.user!.userId,
+          name: req.body.name || "Service Key",
+          keyPrefix: prefix,
+          keyHash: hash,
+          scopes: req.body.scopes || ["proxy:chat"],
+          rateLimitPerMin: req.body.rateLimitPerMin || 60,
+          expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : null,
+        },
+      });
 
-    res.status(201).json({ ...key, rawKey: raw });
+      await prisma.auditLog.create({
+        data: {
+          orgId: req.user!.orgId,
+          workspaceId: key.workspaceId,
+          userId: req.user!.userId,
+          action: "API_KEY_CREATED",
+          resource: "api_key",
+          resourceId: key.id,
+          details: { scopes: key.scopes, environmentId: key.environmentId },
+        },
+      });
+
+      res.status(201).json({ ...key, rawKey: raw });
+    } catch (err: any) {
+      if (err instanceof TenantScopeError) {
+        res.status(err.statusCode).json({ error: err.message });
+        return;
+      }
+      res.status(500).json({ error: err.message });
+    }
   },
 );
 

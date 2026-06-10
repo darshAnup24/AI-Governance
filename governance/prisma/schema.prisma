@@ -455,6 +455,7 @@ model AuditLog {
   orgId     String      @map("org_id")
   workspaceId String?   @map("workspace_id")
   userId    String?     @map("user_id")
+  traceId   String?     @map("trace_id")
   action    AuditAction
   resource  String?
   resourceId String?    @map("resource_id")
@@ -468,6 +469,7 @@ model AuditLog {
   user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([orgId, timestamp])
+  @@index([traceId])
   @@index([userId, timestamp])
   @@index([action])
   @@map("audit_logs")
@@ -612,6 +614,7 @@ model Incident {
   workspaceId     String?          @map("workspace_id")
   environmentId   String?          @map("environment_id")
   modelId         String?          @map("model_id")
+  traceId         String?          @map("trace_id")
   title           String
   description     String           @default("")
   severity        IncidentSeverity @default(MEDIUM)
@@ -639,6 +642,7 @@ model Incident {
 
   @@index([orgId])
   @@index([orgId, workspaceId])
+  @@index([traceId])
   @@index([severity])
   @@index([status])
   @@map("incidents")
@@ -921,6 +925,7 @@ model PolicyVersion {
 model IncidentEvent {
   id          String   @id @default(uuid())
   incidentId  String   @map("incident_id")
+  traceId     String?  @map("trace_id")
   eventType   String   @map("event_type")
   payload     Json     @default("{}")
   createdBy   String   @default("") @map("created_by")
@@ -929,6 +934,7 @@ model IncidentEvent {
   incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
 
   @@index([incidentId])
+  @@index([traceId])
   @@map("incident_events")
 }
 

@@ -50,7 +50,7 @@ PG_PORT      ?= 5433
 # ─── Port conflict detection ───────────────────────────────────────
 # Checks each required host port and prints a warning if occupied by
 # something other than this project.
-CHECK_PORTS := 8000 8001 4000 3000 3002 3003 6379
+CHECK_PORTS := 8000 8001 4000 3000 6379
 
 define check_port
 	@if ss -tlnp 2>/dev/null | grep -q ":$(1) " && \
@@ -62,7 +62,7 @@ endef
 # ─── .PHONY targets ───────────────────────────────────────────────
 .PHONY: help up up-core up-all down restart status logs logs-proxy \
         logs-detection logs-governance logs-dashboard build build-proxy \
-        build-detection build-governance build-dashboard build-governance-ui build-demo-ui \
+        build-detection build-governance build-dashboard \
         test test-fast test-watch lint lint-fix \
         migrate seed gov-setup gov-seed gov-studio \
         pull-models install-sdk clean clean-volumes \
@@ -78,6 +78,7 @@ help:
 	@printf "\n$(BOLD)$(CYAN)Airlock — AI Governance Gateway$(RESET)\n\n"
 	@printf "$(BOLD)Core$(RESET)\n"
 	@printf "  $(GREEN)make setup$(RESET)          First-time setup: build + start + seed\n"
+	@printf "  $(GREEN)make demo$(RESET)           Clean start + seed + open screens + continuous loop\n"
 	@printf "  $(GREEN)make up$(RESET)             Start all services (detached)\n"
 	@printf "  $(GREEN)make up-core$(RESET)        Start infra only: postgres + redis\n"
 	@printf "  $(GREEN)make down$(RESET)           Stop & remove containers (keep volumes)\n"
@@ -155,6 +156,31 @@ down:
 	$(COMPOSE) down
 	$(call OK,All containers stopped)
 
+demo:
+	$(call INFO,Resetting demo environment…)
+	$(COMPOSE) down -v
+	$(call INFO,Starting all services…)
+	$(COMPOSE) up -d
+	@for url in http://localhost:8000/health http://localhost:8001/health http://localhost:4000/health http://localhost:3000; do \
+		printf "  waiting for $$url"; \
+		for i in $$(seq 1 30); do \
+			if curl -fsS $$url >/dev/null 2>&1; then printf " $(GREEN)ok$(RESET)\n"; break; fi; \
+			if [ $$i -eq 30 ]; then printf " $(RED)failed$(RESET)\n"; exit 1; fi; \
+			printf "."; sleep 2; \
+		done; \
+	done
+	$(call INFO,Seeding demo data…)
+	@bash scripts/seed.sh
+	@printf "$(GREEN)$(BOLD)✅ Airlock is live. Dashboard: http://localhost:3000 | Advisor Screen: http://localhost:3000/advisor-live$(RESET)\n"
+	@if command -v xdg-open >/dev/null 2>&1; then \
+		xdg-open http://localhost:3000 >/dev/null 2>&1 || true; \
+		xdg-open http://localhost:3000/advisor-live >/dev/null 2>&1 || true; \
+	elif command -v open >/dev/null 2>&1; then \
+		open http://localhost:3000 >/dev/null 2>&1 || true; \
+		open http://localhost:3000/advisor-live >/dev/null 2>&1 || true; \
+	fi
+	@bash scripts/demo_loop.sh
+
 ## Full restart
 restart: down up
 
@@ -196,8 +222,6 @@ status:
 	@printf "  Detection:    $(CYAN)http://localhost:8001$(RESET)\n"
 	@printf "  Governance:   $(CYAN)http://localhost:4000$(RESET)\n"
 	@printf "  Dashboard:    $(CYAN)http://localhost:3000$(RESET)\n"
-	@printf "  Governance UI:$(CYAN)http://localhost:3002$(RESET)\n"
-	@printf "  Demo UI:      $(CYAN)http://localhost:3003$(RESET)\n"
 	@printf "  AlertManager: $(CYAN)http://localhost:9093$(RESET)\n"
 	@printf "  Prometheus:   $(CYAN)http://localhost:9090$(RESET)\n"
 	@printf "  Grafana:      $(CYAN)http://localhost:3001$(RESET) (admin/airlock)\n\n"
@@ -258,14 +282,6 @@ build-governance:
 build-dashboard:
 	$(call INFO,Building dashboard image…)
 	$(COMPOSE) build dashboard
-
-build-governance-ui:
-	$(call INFO,Building governance-ui image…)
-	$(COMPOSE) build governance-ui
-
-build-demo-ui:
-	$(call INFO,Building demo-ui image…)
-	$(COMPOSE) build demo-ui
 
 ## Rebuild dashboard with a specific host IP (for network sharing)
 ## Usage: make rebuild-dashboard IP=192.168.1.105
@@ -399,10 +415,6 @@ redis-cli:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # DEMO + NETWORK SHARING
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-demo:
-	$(call INFO,Running demo script…)
-	bash scripts/demo.sh
-
 share:
 	$(call INFO,Setting up network sharing…)
 	bash scripts/share_network.sh

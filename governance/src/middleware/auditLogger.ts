@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../index';
+import { getTraceId, logRouteError } from '../platform/requestContext';
 
 // Map HTTP methods + route patterns to semantic audit actions
 const ACTION_MAP: Record<string, Record<string, string>> = {
@@ -74,14 +75,18 @@ export function auditMiddleware(
     // Non-blocking audit log write
     const action = getSemanticAction(req.method, req.path);
     
+    const traceId = getTraceId(req);
     prisma.auditLog.create({
       data: {
         orgId: req.user?.orgId || 'unknown',
         userId: req.user?.userId || null,
+        workspaceId: req.workspaceId || null,
+        traceId,
         action: action as any,
         resource: req.path.split('/')[1] || 'unknown',
         resourceId: (req.params?.id as string) || null,
         details: {
+          traceId,
           method: req.method,
           path: req.path,
           statusCode: res.statusCode,
@@ -92,7 +97,9 @@ export function auditMiddleware(
         userAgent: req.headers['user-agent'] || 'unknown',
         severity: res.statusCode >= 400 ? 'MEDIUM' : 'LOW',
       },
-    }).catch(() => {}); // Non-blocking
+    }).catch((error) => {
+      logRouteError("audit-middleware.write_failed", error, traceId);
+    });
 
     return originalJson(body);
   };

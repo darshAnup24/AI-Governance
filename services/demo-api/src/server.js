@@ -154,7 +154,15 @@ function analyzePrompt(text) {
 }
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'healthy', service: 'demo-api', version: '0.1.0' })
+  res.json({
+    status: 'ok',
+    service: 'demo-api',
+    timestamp: new Date().toISOString(),
+    dependencies: {
+      postgres: 'error',
+      redis: 'error',
+    },
+  })
 })
 
 app.post('/api/demo/auth/login', (req, res) => {

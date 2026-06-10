@@ -4,6 +4,7 @@ JWT authentication middleware and rate limiter for the proxy service.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import time
@@ -51,8 +52,32 @@ class JWTAuth:
 
     def _decode_dev_token(self, token: str, settings: Settings) -> UserContext:
         """Decode a development-mode token (not for production)."""
+        jwt_claims = self._decode_unverified_jwt_claims(token)
+        if jwt_claims:
+            return UserContext(
+                user_id=str(
+                    jwt_claims.get("userId")
+                    or jwt_claims.get("sub")
+                    or jwt_claims.get("user_id")
+                    or "cc9a61be-b6bd-444e-af35-363a25ed175c"
+                ),
+                email=str(jwt_claims.get("email") or "dev@company.com"),
+                department=str(jwt_claims.get("department") or "engineering"),
+                role=str(jwt_claims.get("role") or "user"),
+                permissions=self._extract_permissions(jwt_claims.get("permissions")),
+                org_id=str(
+                    jwt_claims.get("orgId")
+                    or jwt_claims.get("org_id")
+                    or settings.dev_org_id
+                ),
+                workspace_id=str(
+                    jwt_claims.get("workspaceId")
+                    or jwt_claims.get("workspace_id")
+                    or ""
+                ),
+            )
+
         # Dev tokens: "dev-token-<base64-email>" or any Bearer token in dev mode
-        import base64
 
         if token.startswith("dev-token-"):
             try:
@@ -71,6 +96,25 @@ class JWTAuth:
             org_id=settings.dev_org_id,
             workspace_id="",
         )
+
+    def _decode_unverified_jwt_claims(self, token: str) -> dict[str, Any] | None:
+        """Best-effort payload decode for local development JWTs."""
+        if token.count(".") != 2:
+            return None
+
+        try:
+            _header, payload, _signature = token.split(".")
+            padded = payload + "=" * (-len(payload) % 4)
+            decoded = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+            claims = json.loads(decoded)
+            return claims if isinstance(claims, dict) else None
+        except Exception:
+            return None
+
+    def _extract_permissions(self, raw_permissions: Any) -> list[str]:
+        if isinstance(raw_permissions, list):
+            return [str(permission) for permission in raw_permissions if str(permission)]
+        return ["read", "write"]
 
     async def __call__(
         self,

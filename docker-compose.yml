@@ -99,9 +99,11 @@ services:
       - USE_ONNX_DETECTION=true
       - USE_OLLAMA_IN_SYNC_PATH=false
       - USE_OLLAMA_ASYNC_ONLY=true
+      - ALLOW_INSECURE_DEFAULT_SECRETS=true
       - JWT_SECRET=airlock-dev-secret-change-me
       - INTERNAL_SERVICE_TOKEN=internal-service-token-change-me
-      - CORS_ORIGIN=http://localhost:3000,http://localhost:3002
+      - CORS_ORIGIN=http://localhost:3000
+      - DEMO_MODE=${DEMO_MODE:-true}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - OTEL_SERVICE_NAME=airlock-governance
     depends_on:
@@ -128,11 +130,14 @@ services:
       args:
         - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
         - VITE_GOVERNANCE_URL=${VITE_GOVERNANCE_URL:-http://localhost:4000}
+        - VITE_DEMO_MODE=${VITE_DEMO_MODE:-true}
     ports:
       - "3000:3000"
     environment:
       - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
       - VITE_GOVERNANCE_URL=${VITE_GOVERNANCE_URL:-http://localhost:4000}
+      - DEMO_MODE=${DEMO_MODE:-true}
+      - VITE_DEMO_MODE=${VITE_DEMO_MODE:-true}
     depends_on:
       - proxy
       - governance
@@ -311,44 +316,6 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
-    networks:
-      - ai-gateway-net
-
-  # ─── Governance UI (Enterprise Frontend) ────────────────
-  governance-ui:
-    build:
-      context: ./apps
-      dockerfile: governance-ui/Dockerfile
-    ports:
-      - "3002:3000"
-    environment:
-      - VITE_GOVERNANCE_API_URL=/api/governance
-      - VITE_DEMO_API_URL=/api/demo
-      - VITE_GATEWAY_URL=/api
-    depends_on:
-      - proxy
-      - governance
-    networks:
-      - ai-gateway-net
-
-  # ─── Demo UI (Lab/Sandbox Frontend) ─────────────────────
-  demo-ui:
-    build:
-      context: ./apps
-      dockerfile: demo-ui/Dockerfile
-    ports:
-      - "3003:3001"
-    environment:
-      - VITE_GOVERNANCE_API_URL=/api/governance
-      - VITE_DEMO_API_URL=/api/demo
-      - VITE_GATEWAY_URL=/api
-    depends_on:
-      - proxy
-      - demo-api
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001"]
-      interval: 15s
-      timeout: 5s
     networks:
       - ai-gateway-net
 

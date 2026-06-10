@@ -2,6 +2,16 @@ import { NextFunction, Request, Response } from "express";
 
 import { prisma } from "../index";
 
+export class TenantScopeError extends Error {
+  statusCode: number;
+
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.name = "TenantScopeError";
+    this.statusCode = statusCode;
+  }
+}
+
 export function workspaceContextMiddleware(
   req: Request,
   _res: Response,
@@ -79,4 +89,64 @@ export async function validateWorkspaceAccess(
   }
 
   next();
+}
+
+export async function resolveScopedTenantContext(
+  req: Request,
+  input: {
+    workspaceId?: string | null;
+    environmentId?: string | null;
+    requireMembership?: boolean;
+  },
+) {
+  if (!req.user) {
+    throw new TenantScopeError(401, "Authentication required");
+  }
+
+  const requireMembership = input.requireMembership !== false;
+  let workspaceId = input.workspaceId || null;
+  let environmentId = input.environmentId || null;
+
+  if (workspaceId) {
+    const workspace = await prisma.workspace.findFirst({
+      where: { id: workspaceId, orgId: req.user.orgId },
+      select: { id: true },
+    });
+    if (!workspace) {
+      throw new TenantScopeError(404, "Workspace not found in your organization");
+    }
+    if (requireMembership && !req.user.workspaceIds.includes(workspaceId)) {
+      throw new TenantScopeError(403, "Not authorized for this workspace");
+    }
+  }
+
+  if (environmentId) {
+    const environment = await prisma.environment.findFirst({
+      where: {
+        id: environmentId,
+        workspace: {
+          orgId: req.user.orgId,
+        },
+      },
+      select: { id: true, workspaceId: true },
+    });
+    if (!environment) {
+      throw new TenantScopeError(404, "Environment not found in your organization");
+    }
+    if (workspaceId && environment.workspaceId !== workspaceId) {
+      throw new TenantScopeError(
+        403,
+        "Environment does not belong to the requested workspace",
+      );
+    }
+    workspaceId = workspaceId || environment.workspaceId;
+    if (requireMembership && !req.user.workspaceIds.includes(environment.workspaceId)) {
+      throw new TenantScopeError(403, "Not authorized for this environment");
+    }
+  }
+
+  return {
+    workspaceId,
+    environmentId,
+  };
 }

@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../index";
 import { v4 as uuidv4 } from "uuid";
+import { getTraceId } from "../platform/requestContext";
+import { sendRouteError } from "./routeUtils";
 
 export const advisorRouter = Router();
 
@@ -8,6 +10,63 @@ const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://ollama:11434";
 const PRIMARY_ADVISOR_MODEL = process.env.PRIMARY_ADVISOR_MODEL || "llama3.2:3b";
 const FALLBACK_MODEL = process.env.FALLBACK_MODEL || "tinyllama";
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "nomic-embed-text";
+
+type IncidentAdvisorInput = {
+  orgId: string;
+  userId?: string | null;
+  traceId: string;
+  incidentType: string;
+  severity: string;
+  offendingPrompt: string;
+  detectionEvidence: Record<string, unknown>;
+  violatedPolicy: string;
+  incidentId?: string | null;
+};
+
+function extractJsonObject(text: string): Record<string, unknown> | null {
+  const trimmed = text.trim();
+  const candidates = [trimmed];
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.push(trimmed.slice(firstBrace, lastBrace + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function normalizeAdvisorPayload(payload: Record<string, unknown>) {
+  const risk = String(payload.risk_level || "MEDIUM").toUpperCase();
+  const allowedRisk = ["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(risk) ? risk : "MEDIUM";
+  const remediation = Array.isArray(payload.remediation)
+    ? payload.remediation.map((item) => String(item))
+    : [
+        "Review the detection evidence tied to this trace_id.",
+        "Confirm whether the violating workflow should remain blocked.",
+        "Update policy coverage or user guidance before re-enabling the workflow.",
+      ];
+
+  return {
+    summary: String(payload.summary || "A governed AI security incident was detected and requires review."),
+    risk_level: allowedRisk,
+    remediation,
+    compliance_impact: String(
+      payload.compliance_impact ||
+        "This touches GDPR, HIPAA, and the AI Act depending on whether personal, health, or high-risk model data was involved.",
+    ),
+  };
+}
 
 async function getAvailableModel(): Promise<string> {
   try {
@@ -23,7 +82,7 @@ async function getAvailableModel(): Promise<string> {
   }
 }
 
-async function queryOllama(prompt: string, system?: string): Promise<string> {
+export async function queryOllama(prompt: string, system?: string): Promise<string> {
     const model = await getAvailableModel();
     const res = await fetch(`${OLLAMA_URL}/api/generate`, {
         method: "POST",
@@ -33,6 +92,56 @@ async function queryOllama(prompt: string, system?: string): Promise<string> {
     if (!res.ok) throw new Error("Ollama unavailable");
     const data = (await res.json()) as any;
     return data.response || "";
+}
+
+export async function generateIncidentAdvisorSummary(input: IncidentAdvisorInput) {
+    const prompt = `You are an enterprise AI governance advisor. You analyze AI security incidents and provide clear, actionable guidance for security and compliance teams.
+Given an incident report, respond ONLY with valid JSON (no markdown, no preamble) in this exact structure:
+{
+"summary": "2-3 sentence plain English summary of what happened and why it's a risk",
+"risk_level": "LOW|MEDIUM|HIGH|CRITICAL",
+"remediation": ["step 1", "step 2", "step 3"],
+"compliance_impact": "Which regulations this touches (GDPR, HIPAA, AI Act) and why"
+}
+
+Pass to the user message: the incident type, severity, the offending prompt (truncated to 500 chars), the detection evidence JSON, and the policy that was violated.
+
+Incident type: ${input.incidentType}
+Severity: ${input.severity}
+Offending prompt: ${input.offendingPrompt.slice(0, 500)}
+Detection evidence JSON: ${JSON.stringify(input.detectionEvidence)}
+Policy violated: ${input.violatedPolicy}`;
+
+    let responseText = "";
+    try {
+      responseText = await queryOllama(prompt, "Return strict JSON only.");
+    } catch {
+      responseText = "";
+    }
+
+    const parsed = responseText ? extractJsonObject(responseText) : null;
+    const normalized = normalizeAdvisorPayload(parsed || {});
+
+    await prisma.auditLog.create({
+      data: {
+        orgId: input.orgId,
+        userId: input.userId || null,
+        traceId: input.traceId,
+        action: "REPORT_GENERATED",
+        resource: "advisor_incident_summary",
+        resourceId: input.incidentId || input.traceId,
+        severity: input.severity as any,
+        details: {
+          traceId: input.traceId,
+          incidentId: input.incidentId || null,
+          incidentType: input.incidentType,
+          violatedPolicy: input.violatedPolicy,
+          advisor: normalized,
+        },
+      },
+    });
+
+    return normalized;
 }
 
 async function getEmbedding(text: string): Promise<number[]> {
@@ -51,6 +160,24 @@ function cosineSimilarity(a: number[], b: number[]): number {
     const normA = Math.sqrt(a.reduce((s, v) => s + v * v, 0));
     const normB = Math.sqrt(b.reduce((s, v) => s + v * v, 0));
     return normA && normB ? dot / (normA * normB) : 0;
+}
+
+function buildDemoComplianceImpact(categories: string[], action: string) {
+    const impacts = [
+        "Auditability preserved through immutable request tracing.",
+        "Human review remains possible through linked incident evidence.",
+    ];
+    if (categories.includes("PII")) {
+        impacts.unshift("GDPR-sensitive personal data was intercepted before external model exposure.");
+        impacts.push("ISO 27001 data handling controls were reinforced by policy enforcement.");
+    }
+    if (categories.includes("PROMPT_INJECTION")) {
+        impacts.unshift("Prompt injection safeguards reduced the chance of model instruction compromise.");
+    }
+    if (action === "BLOCK") {
+        impacts.push("Provider egress was prevented, limiting downstream compliance blast radius.");
+    }
+    return impacts;
 }
 
 async function buildOrgContext(orgId: string) {
@@ -265,6 +392,106 @@ Format as JSON array.`;
         } catch {
             res.json({ recommendations: [], rawAnalysis: response });
         }
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+advisorRouter.post("/incident-summary", async (req: Request, res: Response) => {
+    try {
+        const traceId = getTraceId(req);
+        const payload = await generateIncidentAdvisorSummary({
+            orgId: req.user!.orgId,
+            userId: req.user!.userId,
+            traceId,
+            incidentType: String(req.body?.incidentType || "policy_violation"),
+            severity: String(req.body?.severity || "MEDIUM"),
+            offendingPrompt: String(req.body?.offendingPrompt || ""),
+            detectionEvidence:
+                req.body?.detectionEvidence && typeof req.body.detectionEvidence === "object"
+                    ? req.body.detectionEvidence
+                    : {},
+            violatedPolicy: String(req.body?.violatedPolicy || "Unspecified policy"),
+            incidentId: req.body?.incidentId ? String(req.body.incidentId) : null,
+        });
+        res.json(payload);
+    } catch (err) {
+        sendRouteError(res, req, "advisor.incident-summary", err);
+    }
+});
+
+advisorRouter.post("/demo-summary", async (req: Request, res: Response) => {
+    try {
+        const {
+            prompt,
+            traceId,
+            incidentId,
+            action = "ALLOW",
+            riskScore = 0,
+            categories = [],
+            policyName = "Golden Demo - Block Sensitive Customer Data",
+            provider = "OpenAI",
+        } = req.body || {};
+
+        const orgId = req.user!.orgId;
+        const userId = req.user!.userId;
+        const complianceChecks = await prisma.complianceCheck.findMany({
+            where: { orgId },
+            select: { framework: true, score: true, status: true },
+            take: 6,
+        });
+
+        const complianceImpact = buildDemoComplianceImpact(
+            Array.isArray(categories) ? categories : [],
+            String(action),
+        );
+        const highestFramework = complianceChecks[0]?.framework || "EU_AI_ACT";
+        const summary =
+            action === "BLOCK"
+                ? `Sensitive customer data was detected and blocked before the request could be sent to ${provider}.`
+                : `The request completed the governance pipeline and remained within the configured risk posture.`;
+        const rationale =
+            action === "BLOCK"
+                ? `${policyName} matched ${Array.isArray(categories) && categories.length > 0 ? categories.join(", ") : "the detected policy context"} at risk score ${riskScore}.`
+                : `No blocking policy matched the request, so the proxy allowed the workflow to continue.`;
+        const remediation = action === "BLOCK"
+            ? [
+                "Mask or tokenize direct identifiers before sending the prompt to any external model.",
+                "Route the task through an approved internal assistant for customer-data use cases.",
+                "Review the linked incident evidence and confirm whether the user needs coaching or policy tuning.",
+            ]
+            : [
+                "Keep the request inside approved provider boundaries.",
+                "Continue monitoring for repeated risky patterns in the same workspace.",
+            ];
+
+        await prisma.auditLog.create({
+            data: {
+                orgId,
+                userId,
+                traceId: traceId || null,
+                action: "REPORT_GENERATED",
+                resource: "advisor_demo_summary",
+                resourceId: incidentId || traceId || null,
+                details: {
+                    traceId,
+                    incidentId,
+                    action,
+                    riskScore,
+                    categories,
+                    provider,
+                    promptPreview: String(prompt || "").slice(0, 120),
+                    frameworkHint: highestFramework,
+                },
+            },
+        });
+
+        res.json({
+            summary,
+            rationale,
+            remediation,
+            complianceImpact,
+        });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

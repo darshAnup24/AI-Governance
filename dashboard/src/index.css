@@ -204,6 +204,18 @@
     animation: slideUp 0.2s ease-out both;
   }
 
+  .animate-feed-enter {
+    animation: feedEnter 0.32s cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+
+  .animate-advisor-fade {
+    animation: advisorFade 0.36s cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+
+  .animate-flash-highlight {
+    animation: flashHighlight 1s ease-out both;
+  }
+
   @keyframes fadeIn {
     from {
       opacity: 0;
@@ -223,6 +235,37 @@
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+
+  @keyframes feedEnter {
+    from {
+      opacity: 0;
+      transform: translateY(-16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes advisorFade {
+    from {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes flashHighlight {
+    0% {
+      background-color: rgba(250, 204, 21, 0.28);
+    }
+    100% {
+      background-color: transparent;
     }
   }
 

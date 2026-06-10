@@ -252,6 +252,51 @@ def _get_governance_client(settings: Settings) -> GovernanceClient:
     return _governance_client
 
 
+async def _create_governance_incident_bundle(
+    *,
+    settings: Settings,
+    user: UserContext,
+    trace_id: str,
+    prompt_text: str,
+    provider: str,
+    risk_score: int,
+    detection_result: dict[str, Any],
+    policy_decision: PolicyDecision | None,
+) -> dict[str, Any] | None:
+    try:
+        gov_client = _get_governance_client(settings)
+        categories = [
+            str(span.get("category", ""))
+            for span in detection_result.get("detected_spans", [])
+            if span.get("category")
+        ]
+        policy_name = policy_decision.reason if policy_decision and policy_decision.reason else "Proxy policy enforcement"
+        incident = await gov_client.create_incident({
+            "orgId": user.org_id,
+            "userId": user.user_id,
+            "workspaceId": user.workspace_id or None,
+            "traceId": trace_id,
+            "title": f"Blocked AI request to {provider}",
+            "description": f"Prompt blocked before upstream egress. Categories: {', '.join(categories) or 'none'}.",
+            "severity": "CRITICAL" if risk_score >= 85 else "HIGH",
+        })
+        advisor = await gov_client.generate_incident_summary({
+            "orgId": user.org_id,
+            "userId": user.user_id,
+            "incidentId": incident.get("id"),
+            "traceId": trace_id,
+            "incidentType": "prompt_policy_violation",
+            "severity": incident.get("severity", "HIGH"),
+            "offendingPrompt": prompt_text[:500],
+            "detectionEvidence": detection_result,
+            "violatedPolicy": policy_name,
+        })
+        return {"incident": incident, "advisor": advisor}
+    except Exception as exc:
+        log.warning("governance.incident_bundle_failed", trace_id=trace_id, error=str(exc))
+        return None
+
+
 async def _call_detection(
     http_client: httpx.AsyncClient,
     prompt_text: str,
@@ -541,6 +586,33 @@ async def chat_completions(
         log.warning("proxy.policy_eval_failed", error=str(_policy_exc))
 
     if action == ActionType.BLOCK:
+        incident_bundle = await _create_governance_incident_bundle(
+            settings=settings,
+            user=user,
+            trace_id=trace_id,
+            prompt_text=prompt_text,
+            provider=provider.value,
+            risk_score=risk_score,
+            detection_result=detection_result,
+            policy_decision=policy_decision,
+        )
+        if incident_bundle:
+            detection_result.setdefault("trace_id", trace_id)
+            detection_result["incident"] = incident_bundle.get("incident")
+            detection_result["advisor"] = incident_bundle.get("advisor")
+            _fire_platform_event(
+                redis,
+                stream=EventStream.INCIDENT_EVENTS,
+                event_type="IncidentCreated",
+                user=user,
+                trace_id=trace_id,
+                payload={
+                    "incident": incident_bundle.get("incident"),
+                    "advisor": incident_bundle.get("advisor"),
+                    "provider": provider.value,
+                    "risk_score": risk_score,
+                },
+            )
         # Emit audit event for block
         matched_rule_id = policy_decision.matched_rule_id if policy_decision else None
         block_reason = (
@@ -571,9 +643,13 @@ async def chat_completions(
             policy_decision=policy_decision,
             verbose=settings.is_dev,
         )
+        error_payload = error_detail.model_dump()
+        if incident_bundle:
+            error_payload["incident"] = incident_bundle.get("incident")
+            error_payload["advisor"] = incident_bundle.get("advisor")
         return JSONResponse(
             status_code=403,
-            content=error_detail.model_dump(),
+            content=error_payload,
         )
 
     # Sprint 3: Stateful seamless redaction — entity ID mapping per session
@@ -890,28 +966,30 @@ async def analytics_trend(
     except (ValueError, AttributeError):
         org_id_val = user.org_id
 
+    # Use date_trunc (standard Postgres) instead of time_bucket (TimescaleDB-only)
     query = text("""
-        SELECT time_bucket('1 day', timestamp) AS day,
+        SELECT date_trunc('day', timestamp) AS day,
                COUNT(*) FILTER (WHERE action_taken = 'BLOCK') as blocked,
                COUNT(*) FILTER (WHERE action_taken = 'REDACT') as redacted,
                COUNT(*) FILTER (WHERE action_taken = 'WARN') as warned,
                COUNT(*) FILTER (WHERE action_taken = 'ALLOW') as allowed
         FROM audit_events
-        WHERE org_id::text = :org_id AND timestamp > NOW() - (:days || ' days')::interval
-        GROUP BY day ORDER BY day;
+        WHERE org_id::text = :org_id
+          AND timestamp > NOW() - (:days || ' days')::interval
+        GROUP BY day
+        ORDER BY day;
     """)
     result = await db.execute(query, {"org_id": org_id_val, "days": str(days)})
     rows = result.fetchall()
 
     data = []
-    # If using Timescale/Postgres, row.day is datetime. Ensure formatting.
     for row in rows:
         data.append({
             "date": row.day.strftime("%Y-%m-%d") if row.day else None,
-            "blocked": row.blocked,
-            "redacted": row.redacted,
-            "warned": row.warned,
-            "allowed": row.allowed,
+            "blocked": int(row.blocked or 0),
+            "redacted": int(row.redacted or 0),
+            "warned": int(row.warned or 0),
+            "allowed": int(row.allowed or 0),
         })
     return {"data": data, "days": days}
 
@@ -967,17 +1045,7 @@ async def analytics_categories(
             "color": color_map.get(cat, "#94a3b8"),
         })
 
-    # Fallback if no data
-    if not data:
-        data = [
-            {"name": "PII", "value": 32, "raw_count": 0, "color": "#3b82f6"},
-            {"name": "Prompt Injection", "value": 25, "raw_count": 0, "color": "#ef4444"},
-            {"name": "API Key", "value": 18, "raw_count": 0, "color": "#f97316"},
-            {"name": "Regulatory", "value": 12, "raw_count": 0, "color": "#eab308"},
-            {"name": "Hallucination", "value": 8, "raw_count": 0, "color": "#a855f7"},
-            {"name": "Bias", "value": 5, "raw_count": 0, "color": "#22c55e"},
-        ]
-
+    # Return empty array when no data — no fake fallback that misleads dashboards
     return data
 
 
@@ -1005,7 +1073,7 @@ async def list_audit_events(
     total = (await db.execute(total_sql, params)).scalar() or 0
 
     data_sql = text(f"""
-        SELECT event_id, timestamp, user_id, llm_provider, tool_name,
+        SELECT event_id, trace_id, timestamp, user_id, llm_provider, tool_name,
                risk_score, action_taken, prompt_hash, detection_results
         FROM audit_events
         WHERE {base_where}
@@ -1018,6 +1086,7 @@ async def list_audit_events(
         "data": [
             {
                 "event_id":          str(r.event_id),
+                "trace_id":          str(r.trace_id) if r.trace_id else None,
                 "timestamp":         r.timestamp.isoformat() if r.timestamp else None,
                 "user_id":           str(r.user_id),
                 "llm_provider":      r.llm_provider,
@@ -1053,25 +1122,29 @@ async def analytics_latency(
     except (ValueError, AttributeError):
         org_id_val = user.org_id
 
-    query = text("""
-        SELECT
-            percentile_cont(0.50) WITHIN GROUP (ORDER BY request_duration_ms) AS p50,
-            percentile_cont(0.95) WITHIN GROUP (ORDER BY request_duration_ms) AS p95,
-            percentile_cont(0.99) WITHIN GROUP (ORDER BY request_duration_ms) AS p99,
-            COUNT(*) AS sample_count
-        FROM audit_events
-        WHERE org_id::text = :org_id
-          AND timestamp >= NOW() - INTERVAL '1 hour'
-          AND request_duration_ms > 0
-    """)
-    result = await db.execute(query, {"org_id": org_id_val})
-    row = result.fetchone()
-    return {
-        "p50": round(float(row.p50 or 0), 2),
-        "p95": round(float(row.p95 or 0), 2),
-        "p99": round(float(row.p99 or 0), 2),
-        "sample_count": int(row.sample_count or 0),
-    }
+    try:
+        query = text("""
+            SELECT
+                percentile_cont(0.50) WITHIN GROUP (ORDER BY request_duration_ms) AS p50,
+                percentile_cont(0.95) WITHIN GROUP (ORDER BY request_duration_ms) AS p95,
+                percentile_cont(0.99) WITHIN GROUP (ORDER BY request_duration_ms) AS p99,
+                COUNT(*) AS sample_count
+            FROM audit_events
+            WHERE org_id::text = :org_id
+              AND timestamp >= NOW() - INTERVAL '1 hour'
+              AND request_duration_ms > 0
+        """)
+        result = await db.execute(query, {"org_id": org_id_val})
+        row = result.fetchone()
+        return {
+            "p50": round(float(row.p50 or 0), 2),
+            "p95": round(float(row.p95 or 0), 2),
+            "p99": round(float(row.p99 or 0), 2),
+            "sample_count": int(row.sample_count or 0),
+        }
+    except Exception as e:
+        log.warning("analytics_latency.failed", error=str(e))
+        return {"p50": 0, "p95": 0, "p99": 0, "sample_count": 0}
 
 
 @router.get("/api/v1/analytics/redis-health")
@@ -1405,11 +1478,23 @@ async def stream_events(
                             last_timestamp = record.timestamp
                             detections = record.detection_results or {}
                             spans = detections.get("detected_spans", [])
-                            categories = sorted({s.get("category") for s in spans if s.get("category")})
+                            fallback_categories = detections.get("categories", [])
+                            categories = sorted(
+                                {
+                                    *(s.get("category") for s in spans if s.get("category")),
+                                    *(category for category in fallback_categories if isinstance(category, str)),
+                                }
+                            )
                             payload = build_event_payload(
                                 record=record,
                                 sequence=sequence,
                                 categories=categories,
+                                trace_id=detections.get("traceId") or detections.get("trace_id"),
+                                request_id=detections.get("requestId") or detections.get("request_id"),
+                                incident_id=detections.get("incidentId") or detections.get("incident_id"),
+                                org_id=detections.get("orgId") or detections.get("org_id") or str(record.org_id),
+                                workspace_id=detections.get("workspaceId") or detections.get("workspace_id"),
+                                session_id=detections.get("sessionId") or detections.get("session_id") or getattr(record, "session_id", ""),
                                 stream_health={
                                     "active_streams": getattr(app.state, "_active_streams", 0),
                                     "runtime_mode": parse_runtime_mode(get_settings().runtime_security_mode).value,

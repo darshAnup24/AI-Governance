@@ -32,24 +32,16 @@ const SEV_ICON: Record<string, React.ReactNode> = {
   LOW:      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />,
 }
 
-const COLUMNS = ['OPEN', 'INVESTIGATING', 'RESOLVED'] as const
+const COLUMNS = ['OPEN', 'INVESTIGATING', 'RESOLVED_CLOSED'] as const
 type Column = typeof COLUMNS[number]
 const COL_LABELS: Record<Column, string> = {
-  OPEN: 'Open', INVESTIGATING: 'Investigating', RESOLVED: 'Resolved',
+  OPEN: 'Open', INVESTIGATING: 'Investigating', RESOLVED_CLOSED: 'Resolved',
 }
 const COL_COLORS: Record<Column, string> = {
   OPEN: 'bg-red-500/5 border-red-500/10',
   INVESTIGATING: 'bg-yellow-500/5 border-yellow-500/10',
-  RESOLVED: 'bg-emerald-500/5 border-emerald-500/10',
+  RESOLVED_CLOSED: 'bg-emerald-500/5 border-emerald-500/10',
 }
-
-const FALLBACK: Incident[] = [
-  { id: '1', title: 'HR Model discriminates by age', description: 'Bias detected in resume screening model', severity: 'CRITICAL', status: 'OPEN', createdAt: '2024-06-01T10:00:00Z', model: { name: 'HR Screening Tool' } },
-  { id: '2', title: 'Data leak via prompt injection', description: 'System prompt override detected', severity: 'HIGH', status: 'INVESTIGATING', createdAt: '2024-05-28T14:30:00Z', model: { name: 'Customer Chatbot' } },
-  { id: '3', title: 'GDPR violation in logging', description: 'PII found in audit logs', severity: 'HIGH', status: 'OPEN', createdAt: '2024-05-25T09:15:00Z' },
-  { id: '4', title: 'Model hallucinating citations', description: 'Fabricated references in research output', severity: 'MEDIUM', status: 'INVESTIGATING', createdAt: '2024-05-20T11:00:00Z', model: { name: 'GPT Wrapper Service' } },
-  { id: '5', title: 'SQL injection in generated code', description: 'Code generation produced vulnerable SQL', severity: 'MEDIUM', status: 'RESOLVED', createdAt: '2024-05-15T16:45:00Z' },
-]
 
 // ── Time helper ───────────────────────────────────────────────────────────────
 
@@ -89,7 +81,7 @@ function IncidentCard({ inc, onMove, moving }: {
       </div>
 
       {/* Move buttons */}
-      {inc.status !== 'RESOLVED' && (
+      {inc.status !== 'RESOLVED_CLOSED' && (
         <div className="flex gap-1.5 mt-2.5 ml-5">
           {inc.status === 'OPEN' && (
             <button
@@ -102,7 +94,7 @@ function IncidentCard({ inc, onMove, moving }: {
           )}
           {inc.status === 'INVESTIGATING' && (
             <button
-              onClick={() => onMove(inc.id, 'RESOLVED')}
+              onClick={() => onMove(inc.id, 'RESOLVED_CLOSED')}
               disabled={moving}
               className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors disabled:opacity-50"
             >
@@ -128,7 +120,7 @@ export default function IncidentsPage() {
       await qc.cancelQueries({ queryKey: ['incidents'] })
       const prev = qc.getQueryData(['incidents'])
       qc.setQueryData<Incident[]>(['incidents'], old =>
-        old?.map(i => i.id === id ? { ...i, status } : i) ?? FALLBACK
+        old?.map(i => i.id === id ? { ...i, status } : i) ?? []
       )
       return { prev }
     },
@@ -150,7 +142,7 @@ export default function IncidentsPage() {
     setShowAdd(false)
   }
 
-  const totalOpen = (incidents ?? []).filter((i: Incident) => i.status !== 'RESOLVED').length
+  const totalOpen = (incidents ?? []).filter((i: Incident) => i.status !== 'RESOLVED_CLOSED').length
 
   return (
     <PageShell>

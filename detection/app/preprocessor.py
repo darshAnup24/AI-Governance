@@ -67,6 +67,26 @@ _SECRET_MARKERS: tuple[str, ...] = (
     "bearer", "private_key",
 )
 
+_PII_MARKERS: tuple[str, ...] = (
+    "ssn", "social security", "social sec", "date of birth", "dob",
+    "credit card", "card number", "cvv", "expires", "expiry",
+    "customer record", "customer data", "email", "phone", "address",
+)
+
+_EXFIL_MARKERS: tuple[str, ...] = (
+    "send this customer data to openai",
+    "send customer data to openai",
+    "send this data to openai",
+    "share this customer data with openai",
+    "share this data with openai",
+    "upload this customer data to openai",
+    "export this customer data to openai",
+    "send this customer data to chatgpt",
+    "share this customer data with chatgpt",
+    "send this customer data to claude",
+    "share this customer data with claude",
+)
+
 # Corporate compliance / regulatory signals.
 # Texts containing these must be fully scanned — never fast-pathed as SAFE.
 _REGULATORY_MARKERS: tuple[str, ...] = (
@@ -136,6 +156,9 @@ _CODE_MARKER_RE: _re.Pattern[str] = _re.compile(
 _SECRET_MARKER_RE: _re.Pattern[str] = _re.compile(
     "|".join(_re.escape(m) for m in sorted(_SECRET_MARKERS, key=len, reverse=True))
 )
+_PII_MARKER_RE: _re.Pattern[str] = _re.compile(
+    "|".join(_re.escape(m) for m in sorted(_PII_MARKERS, key=len, reverse=True))
+)
 _INJECTION_MARKER_RE: _re.Pattern[str] = _re.compile(
     "|".join(_re.escape(m) for m in sorted(_INJECTION_MARKERS, key=len, reverse=True))
 )
@@ -144,6 +167,9 @@ _REGULATORY_MARKER_RE: _re.Pattern[str] = _re.compile(
 )
 _VULN_MARKER_RE: _re.Pattern[str] = _re.compile(
     "|".join(_re.escape(m) for m in sorted(_VULN_MARKERS, key=len, reverse=True))
+)
+_EXFIL_MARKER_RE: _re.Pattern[str] = _re.compile(
+    "|".join(_re.escape(m) for m in sorted(_EXFIL_MARKERS, key=len, reverse=True))
 )
 
 
@@ -253,17 +279,21 @@ def fast_path_route(
     text_lower = text.lower()
     has_code_markers     = bool(_CODE_MARKER_RE.search(text))
     has_secret_context   = bool(_SECRET_MARKER_RE.search(text_lower))
+    has_pii_signal       = bool(_PII_MARKER_RE.search(text_lower))
     has_injection_signal = bool(_INJECTION_MARKER_RE.search(text_lower))
     has_regulatory_signal = bool(_REGULATORY_MARKER_RE.search(text_lower))
     has_vuln_signal      = bool(_VULN_MARKER_RE.search(text_lower))
+    has_exfil_signal     = bool(_EXFIL_MARKER_RE.search(text_lower))
 
-    if not has_code_markers and not has_secret_context and not has_injection_signal \
-            and not has_regulatory_signal and not has_vuln_signal:
+    if not has_code_markers and not has_secret_context and not has_pii_signal \
+            and not has_injection_signal and not has_regulatory_signal \
+            and not has_vuln_signal and not has_exfil_signal:
         v.update({
             "fast_path_used": True,
             "route": "natural_language",
             "code_markers": False,
             "secret_context": False,
+            "pii_signal": False,
             "latency_ms": (time.perf_counter() - t0) * 1000,
         })
         return "SAFE", v
@@ -273,9 +303,11 @@ def fast_path_route(
         "route": "full_scan",
         "code_markers": has_code_markers,
         "secret_context": has_secret_context,
+        "pii_signal": has_pii_signal,
         "injection_signal": has_injection_signal,
         "regulatory_signal": has_regulatory_signal,
         "vuln_signal": has_vuln_signal,
+        "exfil_signal": has_exfil_signal,
         "latency_ms": (time.perf_counter() - t0) * 1000,
     })
     return None, v

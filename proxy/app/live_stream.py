@@ -22,6 +22,12 @@ def build_event_payload(
     record: Any,
     sequence: int,
     categories: list[str],
+    trace_id: str | None,
+    request_id: str | None,
+    incident_id: str | None,
+    org_id: str | None,
+    workspace_id: str | None,
+    session_id: str | None,
     stream_health: dict[str, Any],
 ) -> dict[str, Any]:
     return {
@@ -29,13 +35,22 @@ def build_event_payload(
         "event_id": str(record.event_id),
         "timestamp": record.timestamp.isoformat() if record.timestamp else None,
         "sequence": sequence,
+        "trace_id": trace_id,
+        "request_id": request_id,
+        "incident_id": incident_id,
+        "org_id": org_id,
+        "workspace_id": workspace_id,
+        "session_id": session_id,
         "user_id": str(record.user_id),
         "risk_score": record.risk_score,
         "action_taken": record.action_taken,
         "llm_provider": record.llm_provider,
+        "tool_name": record.tool_name,
+        "prompt_hash": record.prompt_hash,
         "categories": categories,
         "stream_health": stream_health,
     }
+
 
 
 def heartbeat_payload(*, sequence: int, stream_health: dict[str, Any]) -> str:

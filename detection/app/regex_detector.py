@@ -244,6 +244,18 @@ class RegexDetector:
             DetectionCategory.REGULATORY,
             0.91,
         ),
+        RegexPattern(
+            "customer_data_exfiltration",
+            re.compile(
+                r"(?is)\b(?:send|share|upload|export|forward|paste)\b"
+                r"(?:\s+\w+){0,6}\s+\b(?:customer|client|user|personal)\s+"
+                r"(?:data|record|records|information|details)\b"
+                r"(?:\s+\w+){0,6}\s+\b(?:to|with|into)\b"
+                r"(?:\s+\w+){0,3}\s+\b(?:openai|chatgpt|claude|anthropic|gemini)\b"
+            ),
+            DetectionCategory.REGULATORY,
+            0.93,
+        ),
 
         # ─── Prompt Injection ─────────────────────────────
         # Pattern 1: command verb targeting safety / system / instruction objects

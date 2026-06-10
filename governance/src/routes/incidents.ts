@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../index";
 import { serviceRegistry } from "../platform/serviceRegistry";
+import { getTraceId } from "../platform/requestContext";
+import { sendRouteError } from "./routeUtils";
 
 export const incidentsRouter = Router();
 
@@ -14,7 +16,7 @@ incidentsRouter.get("/stats", async (req: Request, res: Response) => {
         );
         res.json(stats);
     } catch (err: any) {
-        res.status(500).json({ error: err.message });
+        sendRouteError(res, req, "incidents.stats", err);
     }
 });
 
@@ -24,7 +26,7 @@ incidentsRouter.get("/", async (req: Request, res: Response) => {
         const incidents = await serviceRegistry.incidents.list(req.user!.orgId, req.query as any);
         res.json(incidents);
     } catch (err: any) {
-        res.status(500).json({ error: err.message });
+        sendRouteError(res, req, "incidents.list", err);
     }
 });
 
@@ -41,7 +43,7 @@ incidentsRouter.get("/:id", async (req: Request, res: Response) => {
         }
         res.json(incident);
     } catch (err: any) {
-        res.status(500).json({ error: err.message });
+        sendRouteError(res, req, "incidents.getById", err);
     }
 });
 
@@ -58,10 +60,11 @@ incidentsRouter.post("/", async (req: Request, res: Response) => {
             modelId,
             workspaceId: workspaceId || null,
             environmentId: environmentId || null,
+            traceId: getTraceId(req),
         });
         res.json(incident);
     } catch (err: any) {
-        res.status(500).json({ error: err.message });
+        sendRouteError(res, req, "incidents.create", err);
     }
 });
 
@@ -89,7 +92,7 @@ incidentsRouter.put("/:id", async (req: Request, res: Response) => {
         });
         res.json(updated);
     } catch (err: any) {
-        res.status(500).json({ error: err.message });
+        sendRouteError(res, req, "incidents.update", err);
     }
 });
 
@@ -130,11 +133,13 @@ incidentsRouter.patch("/:id/status", async (req: Request, res: Response) => {
         await prisma.incidentEvent.create({
             data: {
                 incidentId: req.params.id as string,
+                traceId: getTraceId(req),
                 eventType: 'STATUS_CHANGE',
                 payload: {
                     from: current.status,
                     to: status,
                     changedBy: req.user!.userId,
+                    traceId: getTraceId(req),
                     resolution: resolution || undefined,
                     rootCause: rootCause || undefined,
                 },
@@ -151,7 +156,7 @@ incidentsRouter.patch("/:id/status", async (req: Request, res: Response) => {
         });
         res.json(updated);
     } catch (err: any) {
-        res.status(500).json({ error: err.message });
+        sendRouteError(res, req, "incidents.status", err);
     }
 });
 
@@ -175,8 +180,9 @@ incidentsRouter.post("/:id/assign", async (req: Request, res: Response) => {
         await prisma.incidentEvent.create({
             data: {
                 incidentId: req.params.id as string,
+                traceId: getTraceId(req),
                 eventType: "ASSIGNED",
-                payload: { assignedTo: userId, assignedByName: user.name, assignedBy: req.user!.userId },
+                payload: { assignedTo: userId, assignedByName: user.name, assignedBy: req.user!.userId, traceId: getTraceId(req) },
                 createdBy: req.user!.userId,
             },
         });
@@ -187,7 +193,7 @@ incidentsRouter.post("/:id/assign", async (req: Request, res: Response) => {
         });
         res.json(updated);
     } catch (err: any) {
-        res.status(500).json({ error: err.message });
+        sendRouteError(res, req, "incidents.assign", err);
     }
 });
 
@@ -211,8 +217,9 @@ incidentsRouter.post("/:id/escalate", async (req: Request, res: Response) => {
         await prisma.incidentEvent.create({
             data: {
                 incidentId: req.params.id as string,
+                traceId: getTraceId(req),
                 eventType: "ESCALATED",
-                payload: { escalatedTo: userId, escalatedByName: user.name, escalatedBy: req.user!.userId },
+                payload: { escalatedTo: userId, escalatedByName: user.name, escalatedBy: req.user!.userId, traceId: getTraceId(req) },
                 createdBy: req.user!.userId,
             },
         });
@@ -223,7 +230,7 @@ incidentsRouter.post("/:id/escalate", async (req: Request, res: Response) => {
         });
         res.json(updated);
     } catch (err: any) {
-        res.status(500).json({ error: err.message });
+        sendRouteError(res, req, "incidents.escalate", err);
     }
 });
 
@@ -300,6 +307,27 @@ incidentsRouter.delete("/:id/evidence/:evidenceId", async (req: Request, res: Re
         });
 
         res.json({ deleted: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/incidents/:id/events — Incident timeline events
+incidentsRouter.get("/:id/events", async (req: Request, res: Response) => {
+    try {
+        const incident = await prisma.incident.findFirst({
+            where: { id: req.params.id as string, orgId: req.user!.orgId },
+        });
+        if (!incident) {
+            res.status(404).json({ error: "Incident not found" });
+            return;
+        }
+        const events = await prisma.incidentEvent.findMany({
+            where: { incidentId: req.params.id as string },
+            orderBy: { createdAt: "desc" },
+            take: 100,
+        });
+        res.json(events);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

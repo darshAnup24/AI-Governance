@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { PERMISSIONS, requirePermission } from "../engine/rbacEngine";
 import { prisma } from "../index";
+import { TenantScopeError, resolveScopedTenantContext } from "../middleware/workspace";
 
 export const usersRouter = Router();
 
@@ -55,8 +56,24 @@ usersRouter.patch("/:id/role", requirePermission(PERMISSIONS.canManageUsers), as
             data: { role },
         });
         if (workspaceId) {
+          const scoped = await resolveScopedTenantContext(req, {
+            workspaceId,
+          });
+          const targetMembership = await prisma.membership.findFirst({
+            where: {
+              userId,
+              workspaceId: scoped.workspaceId!,
+              user: { orgId: req.user!.orgId },
+              workspace: { orgId: req.user!.orgId },
+            },
+            select: { id: true },
+          });
+          if (!targetMembership) {
+            res.status(404).json({ error: "User is not a member of this workspace in your organization" });
+            return;
+          }
           await prisma.membership.updateMany({
-            where: { userId, workspaceId },
+            where: { userId, workspaceId: scoped.workspaceId! },
             data: { role, permissions: permissions || undefined },
           });
         }
@@ -77,6 +94,10 @@ usersRouter.patch("/:id/role", requirePermission(PERMISSIONS.canManageUsers), as
         });
         res.json(updated);
     } catch (err: any) {
+        if (err instanceof TenantScopeError) {
+            res.status(err.statusCode).json({ error: err.message });
+            return;
+        }
         res.status(500).json({ error: err.message });
     }
 });

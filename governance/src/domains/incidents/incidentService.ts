@@ -130,6 +130,7 @@ export class IncidentService {
         workspaceId: input.workspaceId || null,
         environmentId: input.environmentId || null,
         modelId: input.modelId || null,
+        traceId: input.traceId || null,
         title: input.title,
         description: input.description || "",
         severity: (input.severity || "MEDIUM") as any,
@@ -140,30 +141,39 @@ export class IncidentService {
     await prisma.incidentEvent.create({
       data: {
         incidentId: incident.id,
+        traceId: input.traceId || null,
         eventType: "CREATED",
         payload: {
           title: incident.title,
           severity: incident.severity,
           createdBy: input.userId,
+          traceId: input.traceId || null,
         },
         createdBy: input.userId,
       },
     });
 
-    await governanceEventBus.publish({
-      stream: "incident_events",
-      eventType: "IncidentCreated",
-      orgId: input.orgId,
-      workspaceId: input.workspaceId,
-      environmentId: input.environmentId,
-      traceId: input.traceId,
-      payload: {
-        incidentId: incident.id,
-        severity: incident.severity,
-        modelId: incident.modelId,
-        actorUserId: input.userId,
-      },
-    });
+    try {
+      await governanceEventBus.publish({
+        stream: "incident_events",
+        eventType: "IncidentCreated",
+        orgId: input.orgId,
+        workspaceId: input.workspaceId,
+        environmentId: input.environmentId,
+        traceId: input.traceId,
+        payload: {
+          incidentId: incident.id,
+          severity: incident.severity,
+          modelId: incident.modelId,
+          actorUserId: input.userId,
+        },
+      });
+    } catch (error: any) {
+      console.warn(
+        "[incident-service] publish skipped:",
+        error?.message || error,
+      );
+    }
 
     return incident;
   }

@@ -3,16 +3,19 @@ import argon2 from "argon2";
 import jwt from "jsonwebtoken";
 
 import { prisma } from "../index";
+import { getRequiredSecret } from "../platform/runtimeConfig";
 import { resolveAuthorizationContext } from "./rbacEngine";
 
-const JWT_SECRET =
-  process.env.JWT_SECRET ||
-  process.env.GOVERNANCE_JWT_SECRET ||
-  "airlock-enterprise-secret-change-me";
-const REFRESH_SECRET =
-  process.env.REFRESH_SECRET ||
-  process.env.GOVERNANCE_REFRESH_SECRET ||
-  "airlock-refresh-secret-change-me";
+const JWT_SECRET = getRequiredSecret(
+  ["JWT_SECRET", "GOVERNANCE_JWT_SECRET"],
+  "airlock-enterprise-secret-change-me",
+  "Access token secret",
+);
+const REFRESH_SECRET = getRequiredSecret(
+  ["REFRESH_SECRET", "GOVERNANCE_REFRESH_SECRET"],
+  "airlock-refresh-secret-change-me",
+  "Refresh token secret",
+);
 const ACCESS_TOKEN_TTL_SECONDS = 60 * 60;
 const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 const MAX_LOGIN_ATTEMPTS = 5;

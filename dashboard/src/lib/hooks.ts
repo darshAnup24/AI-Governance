@@ -108,6 +108,30 @@ export function useProxyStats() {
   })
 }
 
+export function useGovernanceProxyStats() {
+  return useQuery({
+    queryKey: ['governanceProxyStats'],
+    queryFn: () => govApi.get('/api/proxy/stats').then(r => r.data),
+    retry: 2,
+    staleTime: 2_000,
+    gcTime: 60_000,
+    refetchInterval: 2_000,
+    refetchIntervalInBackground: true,
+  })
+}
+
+export function useGovernanceProxyFeed() {
+  return useQuery({
+    queryKey: ['governanceProxyFeed'],
+    queryFn: () => govApi.get('/api/proxy/feed').then(r => r.data),
+    retry: 2,
+    staleTime: 2_000,
+    gcTime: 60_000,
+    refetchInterval: 2_000,
+    refetchIntervalInBackground: true,
+  })
+}
+
 // ── Governance (port 4000) ─────────────────────────────────────────────────
 
 export function usePolicies() {
@@ -187,7 +211,10 @@ export function useIncidents() {
   return useQuery({
     queryKey: ['incidents'],
     queryFn: () => govApi.get('/api/incidents').then(r => {
-      const d = r.data; return Array.isArray(d) ? d : (d?.data ?? [])
+      const d = r.data
+      if (Array.isArray(d)) return d
+      if (Array.isArray(d?.incidents)) return d.incidents
+      return d?.data ?? []
     }),
     retry: 2,
     staleTime: 5_000,
