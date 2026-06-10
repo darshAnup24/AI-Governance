@@ -100,19 +100,62 @@ function MessageBubble({ msg }: { msg: Message }) {
   )
 }
 
+const PROXY_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
 export default function ChatDemo() {
   const { flowRunning, lastRun, runGoldenFlow } = useDemoFlow()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState(GOLDEN_DEMO_PROMPT)
+  const [liveMode, setLiveMode] = useState(false)
+  const [sending, setSending] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Real round-trip: prompt -> proxy -> detection -> Ollama -> response inspection.
+  // The reply shown is the post-inspection content (proxy redacts/blocks the LLM output).
+  const sendLive = async (content: string, userMsgId: string, startedAt: number) => {
+    const resp = await fetch(`${PROXY_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer dev-demo-token',
+        'X-LLM-Provider': 'ollama',
+        'X-API-Key': 'ollama-local',
+      },
+      body: JSON.stringify({
+        model: 'llama3.2:3b',
+        messages: [{ role: 'user', content }],
+        stream: false,
+      }),
+    })
+    const latencyMs = Math.round(performance.now() - startedAt)
+    const riskScore = Number(resp.headers.get('X-Risk-Score') || 0)
+    const action = (resp.headers.get('X-Action') || 'ALLOW').toUpperCase()
+    const data = await resp.json().catch(() => ({}))
+
+    if (resp.status === 403) {
+      const detail = data?.detail || 'Blocked by policy before reaching the model.'
+      setMessages(prev => prev.map(m => m.id === userMsgId ? {
+        ...m, status: 'blocked', riskScore, latencyMs, policyDetail: 'blocked · live Ollama',
+      } : m))
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: detail }])
+      return
+    }
+
+    const reply = data?.choices?.[0]?.message?.content || '(no response from model)'
+    const status: Message['status'] = action === 'BLOCK' ? 'blocked' : action === 'WARN' || action === 'REDACT' ? 'warn' : 'allowed'
+    setMessages(prev => prev.map(m => m.id === userMsgId ? {
+      ...m, status, riskScore, latencyMs, policyDetail: `action ${action} · live Ollama (response inspected)`,
+    } : m))
+    setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: reply }])
+  }
+
   const sendMessage = async (text?: string) => {
     const content = (text || input).trim()
-    if (!content || flowRunning) return
+    if (!content || flowRunning || sending) return
     setInput('')
 
     const userMsgId = crypto.randomUUID()
@@ -121,7 +164,12 @@ export default function ChatDemo() {
     }])
 
     const startedAt = performance.now()
+    setSending(true)
     try {
+      if (liveMode) {
+        await sendLive(content, userMsgId, startedAt)
+        return
+      }
       const run = await runGoldenFlow(content)
       const latencyMs = Math.round(performance.now() - startedAt)
       if (!run) {
@@ -146,8 +194,10 @@ export default function ChatDemo() {
       }])
     } catch {
       setMessages(prev => prev.map(m => m.id === userMsgId ? {
-        ...m, status: 'blocked', policyDetail: 'Proxy unreachable',
+        ...m, status: 'blocked', policyDetail: liveMode ? 'Proxy/Ollama unreachable' : 'Proxy unreachable',
       } : m))
+    } finally {
+      setSending(false)
     }
   }
 
@@ -157,12 +207,21 @@ export default function ChatDemo() {
     <div className="space-y-5">
       {/* How it works */}
       <div className="bg-[var(--background)]/50 border border-[var(--border)] rounded-xl p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Info className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-          <span className="text-sm font-semibold text-[var(--foreground)]">How the Chat Gateway works</span>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <span className="text-sm font-semibold text-[var(--foreground)]">How the Chat Gateway works</span>
+          </div>
+          <button
+            onClick={() => setLiveMode(v => !v)}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${liveMode ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-500' : 'border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]'}`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${liveMode ? 'bg-emerald-500' : 'bg-[var(--muted-foreground)]'}`} />
+            {liveMode ? 'Live: Ollama (real round-trip)' : 'Simulated (click for live)'}
+          </button>
         </div>
         <div className="flex items-center gap-2 flex-wrap text-xs text-[var(--muted-foreground)]">
-          {['Your message', 'Proxy :8000', 'Detection engine', 'Policy evaluation', 'LLM (if allowed)'].map((s, i, arr) => (
+          {['Your message', 'Proxy :8000', 'Detection engine', 'Policy evaluation', liveMode ? 'Ollama + response check' : 'LLM (if allowed)'].map((s, i, arr) => (
             <span key={s} className="flex items-center gap-2">
               <span className="px-2 py-1 rounded bg-[var(--muted)] border border-[var(--border)] text-[var(--foreground)]">{s}</span>
               {i < arr.length - 1 && <ArrowRight className="w-3 h-3 text-[var(--muted-foreground)]/70" />}

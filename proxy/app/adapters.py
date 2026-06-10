@@ -197,6 +197,11 @@ class ProviderAdapter:
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             }
+        elif provider == LLMProvider.OLLAMA:
+            # Local Ollama needs no auth — runs on the machine, no API key.
+            return {
+                "Content-Type": "application/json",
+            }
         raise ValueError(f"Unsupported provider: {provider}")
 
     @staticmethod
@@ -206,6 +211,8 @@ class ProviderAdapter:
             LLMProvider.OPENAI: settings.upstream_openai_url,
             LLMProvider.ANTHROPIC: settings.upstream_anthropic_url,
             LLMProvider.AZURE_OPENAI: settings.upstream_azure_openai_url,
+            # Ollama exposes an OpenAI-compatible API locally.
+            LLMProvider.OLLAMA: settings.ollama_url,
         }
         base = urls.get(provider, settings.upstream_openai_url)
 
@@ -214,6 +221,7 @@ class ProviderAdapter:
             LLMProvider.ANTHROPIC: "/v1/messages",
             LLMProvider.AZURE_OPENAI: "/openai/deployments/gpt-4/chat/completions?api-version=2024-02-01",
             LLMProvider.COHERE: "/v1/chat",
+            LLMProvider.OLLAMA: "/v1/chat/completions",
         }
         return base + endpoints.get(provider, "/v1/chat/completions")
 

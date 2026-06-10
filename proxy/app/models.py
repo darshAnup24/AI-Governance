@@ -27,6 +27,7 @@ class LLMProvider(str, Enum):
     ANTHROPIC = "anthropic"
     AZURE_OPENAI = "azure_openai"
     COHERE = "cohere"
+    OLLAMA = "ollama"
 
 
 class DetectionCategory(str, Enum):
