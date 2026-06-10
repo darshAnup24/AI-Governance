@@ -14,8 +14,10 @@ RUN poetry config virtualenvs.create false && \
     poetry install --no-interaction --no-ansi --only main 2>/dev/null || \
     poetry install --no-interaction --no-ansi
 
-# Install dns-sinkhole optional dependency
+# Install dns-sinkhole and onnx runtime deps (transformers tokenizer + onnxruntime)
 RUN pip install --no-cache-dir dnslib
+RUN poetry install --no-interaction --no-ansi -E onnx 2>/dev/null || true
+RUN pip install --no-cache-dir --force-reinstall transformers onnxruntime
 
 # Download spaCy model required by NER detector
 RUN python -m spacy download en_core_web_sm

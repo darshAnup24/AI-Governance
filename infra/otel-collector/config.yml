@@ -22,7 +22,7 @@ exporters:
     sampling_initial: 5
     sampling_thereafter: 200
 
-extensions: []
+extensions: {}
 
 service:
   telemetry:

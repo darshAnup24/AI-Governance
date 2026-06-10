@@ -127,6 +127,7 @@ class AuditEventRecord(Base):
 
     __table_args__ = (
         Index("ix_audit_events_org_id", "org_id"),
+        Index("ix_audit_events_org_ts", "org_id", "timestamp"),
         Index("ix_audit_events_user_id", "user_id"),
         Index("ix_audit_events_timestamp", "timestamp"),
         Index("ix_audit_events_risk_score", "risk_score"),

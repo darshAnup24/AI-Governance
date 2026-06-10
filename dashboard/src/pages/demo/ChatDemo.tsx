@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import {
   MessageSquare, Send, Loader2, Shield, CheckCircle2,
   AlertTriangle, Info, ArrowRight, User, Bot, RefreshCw, Sparkles,
+  Activity, Scan,
 } from 'lucide-react'
 import { GOLDEN_DEMO_PROMPT, useDemoFlow } from './DemoFlowContext'
 
@@ -103,7 +104,7 @@ function MessageBubble({ msg }: { msg: Message }) {
 const PROXY_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export default function ChatDemo() {
-  const { flowRunning, lastRun, runGoldenFlow } = useDemoFlow()
+  const { flowRunning, lastRun, runGoldenFlow, steps } = useDemoFlow()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState(GOLDEN_DEMO_PROMPT)
   const [liveMode, setLiveMode] = useState(false)
@@ -114,7 +115,7 @@ export default function ChatDemo() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Real round-trip: prompt -> proxy -> detection -> Ollama -> response inspection.
+  // Real round-trip: prompt -> proxy -> detection -> Groq -> response inspection.
   // The reply shown is the post-inspection content (proxy redacts/blocks the LLM output).
   const sendLive = async (content: string, userMsgId: string, startedAt: number) => {
     const resp = await fetch(`${PROXY_URL}/v1/chat/completions`, {
@@ -123,10 +124,10 @@ export default function ChatDemo() {
         'Content-Type': 'application/json',
         Authorization: 'Bearer dev-demo-token',
         'X-LLM-Provider': 'ollama',
-        'X-API-Key': 'ollama-local',
+        'X-API-Key': import.meta.env.VITE_GROQ_API_KEY || '',
       },
       body: JSON.stringify({
-        model: 'llama3.2:3b',
+        model: 'llama3-70b-8192',
         messages: [{ role: 'user', content }],
         stream: false,
       }),
@@ -139,7 +140,7 @@ export default function ChatDemo() {
     if (resp.status === 403) {
       const detail = data?.detail || 'Blocked by policy before reaching the model.'
       setMessages(prev => prev.map(m => m.id === userMsgId ? {
-        ...m, status: 'blocked', riskScore, latencyMs, policyDetail: 'blocked · live Ollama',
+        ...m, status: 'blocked', riskScore, latencyMs, policyDetail: 'blocked · live Groq',
       } : m))
       setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: detail }])
       return
@@ -148,7 +149,7 @@ export default function ChatDemo() {
     const reply = data?.choices?.[0]?.message?.content || '(no response from model)'
     const status: Message['status'] = action === 'BLOCK' ? 'blocked' : action === 'WARN' || action === 'REDACT' ? 'warn' : 'allowed'
     setMessages(prev => prev.map(m => m.id === userMsgId ? {
-      ...m, status, riskScore, latencyMs, policyDetail: `action ${action} · live Ollama (response inspected)`,
+      ...m, status, riskScore, latencyMs, policyDetail: `action ${action} · live Groq (response inspected)`,
     } : m))
     setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: reply }])
   }
@@ -194,7 +195,7 @@ export default function ChatDemo() {
       }])
     } catch {
       setMessages(prev => prev.map(m => m.id === userMsgId ? {
-        ...m, status: 'blocked', policyDetail: liveMode ? 'Proxy/Ollama unreachable' : 'Proxy unreachable',
+        ...m, status: 'blocked', policyDetail: liveMode ? 'Proxy/Groq unreachable' : 'Proxy unreachable',
       } : m))
     } finally {
       setSending(false)
@@ -217,11 +218,11 @@ export default function ChatDemo() {
             className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${liveMode ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-500' : 'border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]'}`}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${liveMode ? 'bg-emerald-500' : 'bg-[var(--muted-foreground)]'}`} />
-            {liveMode ? 'Live: Ollama (real round-trip)' : 'Simulated (click for live)'}
+              {liveMode ? 'Live: Groq (real round-trip)' : 'Simulated (click for live)'}
           </button>
         </div>
         <div className="flex items-center gap-2 flex-wrap text-xs text-[var(--muted-foreground)]">
-          {['Your message', 'Proxy :8000', 'Detection engine', 'Policy evaluation', liveMode ? 'Ollama + response check' : 'LLM (if allowed)'].map((s, i, arr) => (
+              {['Your message', 'Proxy :8000', 'Detection engine', 'Policy evaluation', liveMode ? 'Groq + response check' : 'LLM (if allowed)'].map((s, i, arr) => (
             <span key={s} className="flex items-center gap-2">
               <span className="px-2 py-1 rounded bg-[var(--muted)] border border-[var(--border)] text-[var(--foreground)]">{s}</span>
               {i < arr.length - 1 && <ArrowRight className="w-3 h-3 text-[var(--muted-foreground)]/70" />}
@@ -235,26 +236,66 @@ export default function ChatDemo() {
         </p>
       </div>
 
-      {lastRun ? (
-        <div className="grid gap-3 lg:grid-cols-[1fr_1fr]">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--background)]/80 p-4">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-[var(--accent)]" />
-              <span className="text-sm font-semibold text-[var(--foreground)]">Latest gateway outcome</span>
+      <div className="grid gap-3 lg:grid-cols-[1fr_1fr]">
+        <div>
+          {lastRun ? (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--background)]/80 p-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-[var(--accent)]" />
+                <span className="text-sm font-semibold text-[var(--foreground)]">Latest gateway outcome</span>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-[var(--foreground)]">{lastRun.action}</p>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                Risk score {lastRun.riskScore} · {lastRun.categories.join(', ') || 'No categories'} · {lastRun.provider}
+              </p>
             </div>
-            <p className="mt-3 text-2xl font-semibold text-[var(--foreground)]">{lastRun.action}</p>
-            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-              Risk score {lastRun.riskScore} · {lastRun.categories.join(', ') || 'No categories'} · {lastRun.provider}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Advisor summary</p>
-            <p className="mt-3 text-sm leading-6 text-[var(--foreground)]">
-              {lastRun.advisor?.summary || 'Advisor response will appear after the first run.'}
-            </p>
+          ) : null}
+          {lastRun ? (
+            <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Advisor summary</p>
+              <p className="mt-3 text-sm leading-6 text-[var(--foreground)]">
+                {lastRun.advisor?.summary || 'Advisor response will appear after the first run.'}
+              </p>
+            </div>
+          ) : null}
+        </div>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--background)]/80 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Pipeline Trace</p>
+          <div className="mt-3 space-y-2">
+            {[
+              ['Gateway', steps.gateway, Activity],
+              ['Detection', steps.detection, Scan],
+              ['Policy', steps.policy, Shield],
+              ['Incident', steps.incident, AlertTriangle],
+              ['Advisor', steps.advisor, CheckCircle2],
+            ].map(([label, step, Icon]: any) => (
+              <div key={label} className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)]/60 px-3 py-2">
+                <div className={`flex h-7 w-7 items-center justify-center rounded-full ${
+                  step.status === 'done'
+                    ? 'bg-emerald-500/10 text-emerald-400'
+                    : step.status === 'running'
+                      ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
+                      : step.status === 'error'
+                        ? 'bg-red-500/10 text-red-400'
+                        : 'bg-[var(--muted)] text-[var(--muted-foreground)]'
+                }`}>
+                  <Icon className="h-3.5 w-3.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-[var(--foreground)]">{label}</p>
+                  <p className="text-[11px] leading-4 text-[var(--muted-foreground)] truncate">{step.detail || 'Waiting…'}</p>
+                </div>
+                <div className={`h-1.5 w-1.5 rounded-full ${
+                  step.status === 'done' ? 'bg-emerald-400' :
+                  step.status === 'running' ? 'bg-[var(--accent)] animate-pulse' :
+                  step.status === 'error' ? 'bg-red-400' :
+                  'bg-[var(--muted-foreground)]/30'
+                }`} />
+              </div>
+            ))}
           </div>
         </div>
-      ) : null}
+      </div>
 
       {/* Quick send buttons */}
       <div className="flex gap-2 flex-wrap items-center">

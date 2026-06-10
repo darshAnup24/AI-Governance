@@ -4,12 +4,10 @@ import { publishEnrichmentJob } from "../engine/redisEnrichment";
 
 export const complianceRouter = Router();
 
-const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://ollama:11434";
-const PRIMARY_ADVISOR_MODEL = process.env.PRIMARY_ADVISOR_MODEL || "llama3.2:3b";
-const FALLBACK_MODEL = process.env.FALLBACK_MODEL || "tinyllama";
+const GROQ_MODEL = process.env.PRIMARY_ADVISOR_MODEL || "llama3-70b-8192";
 
 function getModel(): string {
-  return PRIMARY_ADVISOR_MODEL;
+  return GROQ_MODEL;
 }
 
 const FRAMEWORK_QUESTIONS: Record<string, string[]> = {

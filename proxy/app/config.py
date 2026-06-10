@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     detection_service_url: str = "http://detection:8001"
     detection_timeout_ms: int = 5000
     runtime_security_mode: str = "STANDARD"
-    stream_heartbeat_interval_ms: int = 5000
+    stream_heartbeat_interval_ms: int = 10000
     stream_replay_limit: int = 25
 
     # ─── Auth ─────────────────────────────────────────────
@@ -65,13 +65,12 @@ class Settings(BaseSettings):
     audit_claim_idle_ms: int = 30_000
     audit_fallback_file: str = "/var/log/airlock/audit_fallback.jsonl"
 
-    # ─── Ollama (lightweight, async-only) ───────────────────
-    ollama_url: str = "http://ollama:11434"
-    primary_advisor_model: str = "llama3.2:3b"
-    fallback_model: str = "tinyllama"
+    # ─── LLM Backend (Groq replaces Ollama) ─────────────────
+    groq_api_key: str = ""
+    ollama_url: str = "https://api.groq.com/openai/v1"
+    primary_advisor_model: str = "llama3-70b-8192"
+    fallback_model: str = "llama3-8b-8192"
     use_onnx_detection: bool = True
-    use_ollama_in_sync_path: bool = False
-    use_ollama_async_only: bool = True
 
     # ─── Rate Limits ──────────────────────────────────────
     rate_limit_user_rpm: int = 100

@@ -75,8 +75,8 @@ class LlamaClassifier:
         "SAFE": (DetectionCategory.CONFIDENTIAL, 0.0),
     }
 
-    def __init__(self, ollama_url: str = "http://ollama:11434", model: str = "llama3.2:3b") -> None:
-        self.ollama_url = ollama_url
+    def __init__(self, groq_url: str = "https://api.groq.com/openai/v1", model: str = "llama3-70b-8192") -> None:
+        self.groq_url = groq_url
         self.model = model
 
     def _hash_text(self, text: str) -> str:
@@ -120,28 +120,26 @@ class LlamaClassifier:
             duration_ms = (time.perf_counter() - start) * 1000
             return self._build_result(cached, duration_ms, from_cache=True)
 
-        # Call Ollama
+        # Call Groq API
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    f"{self.ollama_url}/api/generate",
+                    f"{self.groq_url}/chat/completions",
                     json={
                         "model": self.model,
-                        "system": SYSTEM_PROMPT,
-                        "prompt": USER_PROMPT_TEMPLATE.format(text=text[:2000]),
+                        "messages": [
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": USER_PROMPT_TEMPLATE.format(text=text[:2000])},
+                        ],
                         "stream": False,
-                        "format": "json",
-                        "options": {
-                            "temperature": 0,
-                            "num_predict": 100,
-                            "stop": ["\n\n", "```"],
-                        },
+                        "temperature": 0,
+                        "max_tokens": 100,
                     },
                     timeout=self.TIMEOUT,
                 )
                 resp.raise_for_status()
                 response_data = resp.json()
-                response_text = response_data.get("response", "").strip()
+                response_text = response_data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
                 # Parse the JSON response
                 classification = self._parse_response(response_text)

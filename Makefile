@@ -105,7 +105,7 @@ help:
 	@printf "\n$(BOLD)Utilities$(RESET)\n"
 	@printf "  $(GREEN)make fix-pg-port$(RESET)    Patch docker-compose to use port 5434 (conflict fix)\n"
 	@printf "  $(GREEN)make install-sdk$(RESET)    Install airlock-sdk in editable mode\n"
-	@printf "  $(GREEN)make pull-models$(RESET)    Pull Ollama LLM models\n"
+	@printf "  $(GREEN)make pull-models$(RESET)    Show Groq API instructions (Ollama removed)\n"
 	@printf "  $(GREEN)make clean$(RESET)          Remove build artifacts\n"
 	@printf "  $(GREEN)make clean-volumes$(RESET)  Remove containers + volumes (DESTRUCTIVE)\n"
 	@printf "  $(GREEN)make proxy-shell$(RESET)    Shell into proxy container\n"
@@ -138,11 +138,11 @@ up: fix-pg-port
 	$(COMPOSE) up -d
 	@$(MAKE) --no-print-directory status
 
-## Start core infra only (postgres + redis + ollama) — useful for local dev
+## Start core infra only (postgres + redis) — useful for local dev
 up-core: fix-pg-port
 	$(call INFO,Starting core infrastructure…)
-	$(COMPOSE) up -d postgres redis ollama
-	$(call OK,Core infra running — postgres redis ollama)
+	$(COMPOSE) up -d postgres redis
+	$(call OK,Core infra running — postgres redis )
 
 ## Start all services with live build (rebuild changed images)
 up-build: fix-pg-port
@@ -384,12 +384,7 @@ seed:
 # MODELS + SDK
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 pull-models:
-	$(call INFO,Pulling Ollama models (llama3.1:8b + mistral:7b)…)
-	docker exec $$($(COMPOSE) ps -q ollama) ollama pull llama3.1:8b
-	docker exec $$($(COMPOSE) ps -q ollama) ollama pull mistral:7b
-
-pull-llama:
-	docker exec $$($(COMPOSE) ps -q ollama) ollama pull llama3.1:8b
+	$(call WARN,Ollama removed — using Groq API. Set GROQ_API_KEY in .env)
 
 install-sdk:
 	$(call INFO,Installing airlock-sdk in editable mode…)

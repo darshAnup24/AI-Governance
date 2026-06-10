@@ -87,9 +87,9 @@ export function useDashboardStats() {
     queryFn: () =>
       govApi.get('/api/dashboard/stats').then(r => r.data),
     retry: 2,
-    staleTime: 30_000,
+    staleTime: 15_000,
     gcTime: 300_000,
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
     refetchIntervalInBackground: true,
   })
 }
@@ -101,9 +101,9 @@ export function useProxyStats() {
     queryFn: () =>
       api.get('/api/v1/stats').then(r => r.data),
     retry: 2,
-    staleTime: 5_000,
+    staleTime: 15_000,
     gcTime: 60_000,
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
     refetchIntervalInBackground: true,
   })
 }
@@ -113,9 +113,9 @@ export function useGovernanceProxyStats() {
     queryKey: ['governanceProxyStats'],
     queryFn: () => govApi.get('/api/proxy/stats').then(r => r.data),
     retry: 2,
-    staleTime: 2_000,
+    staleTime: 15_000,
     gcTime: 60_000,
-    refetchInterval: 2_000,
+    refetchInterval: 15_000,
     refetchIntervalInBackground: true,
   })
 }
@@ -125,9 +125,9 @@ export function useGovernanceProxyFeed() {
     queryKey: ['governanceProxyFeed'],
     queryFn: () => govApi.get('/api/proxy/feed').then(r => r.data),
     retry: 2,
-    staleTime: 2_000,
+    staleTime: 15_000,
     gcTime: 60_000,
-    refetchInterval: 2_000,
+    refetchInterval: 15_000,
     refetchIntervalInBackground: true,
   })
 }
@@ -348,8 +348,8 @@ export function useRuntimeMode() {
     queryKey: ['runtimeMode'],
     queryFn: () => api.get('/api/v1/runtime-mode').then(r => r.data),
     retry: 2,
-    staleTime: 5_000,
-    refetchInterval: 5_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 }
 

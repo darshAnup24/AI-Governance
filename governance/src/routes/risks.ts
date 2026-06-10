@@ -4,10 +4,8 @@ import { publishEnrichmentJob } from "../engine/redisEnrichment";
 
 export const risksRouter = Router();
 
-const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://ollama:11434";
-
 function getModel(): string {
-  return process.env.PRIMARY_ADVISOR_MODEL || "llama3.2:3b";
+  return process.env.PRIMARY_ADVISOR_MODEL || "llama3-70b-8192";
 }
 
 // GET /api/risks

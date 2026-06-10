@@ -89,6 +89,7 @@ function DemoLayoutInner() {
   const runtimeStatsQ = useGovernanceProxyStats()
   const { flowRunning, lastRun, runGoldenFlow, seedReady, seeding, steps, isDemoMode } = useDemoFlow()
   const runtimeStats = runtimeStatsQ.data ?? {}
+  const [demoPrompt, setDemoPrompt] = useState(GOLDEN_DEMO_PROMPT)
 
   if (pathname === '/live-demo' || pathname === '/live-demo/') {
     return <Navigate to="/live-demo/detection" replace />
@@ -127,7 +128,7 @@ function DemoLayoutInner() {
               </div>
             ))}
             <button
-              onClick={() => void runGoldenFlow(GOLDEN_DEMO_PROMPT)}
+              onClick={() => void runGoldenFlow(demoPrompt)}
               disabled={flowRunning || !seedReady}
               className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--accent)]/30 hover:bg-[var(--accent)]/5 disabled:opacity-50"
             >
@@ -163,7 +164,13 @@ function DemoLayoutInner() {
 
             <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Golden Prompt</p>
-              <pre className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[var(--foreground)]">{GOLDEN_DEMO_PROMPT}</pre>
+              <textarea
+                value={demoPrompt}
+                onChange={e => setDemoPrompt(e.target.value)}
+                disabled={flowRunning}
+                className="mt-3 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)]/40 focus:outline-none focus:border-brand-500/50 disabled:opacity-50"
+                rows={3}
+              />
             </div>
 
             <div className="mt-4 grid gap-3 md:grid-cols-4">

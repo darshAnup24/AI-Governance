@@ -198,8 +198,8 @@ class ProviderAdapter:
                 "Content-Type": "application/json",
             }
         elif provider == LLMProvider.OLLAMA:
-            # Local Ollama needs no auth — runs on the machine, no API key.
             return {
+                "Authorization": f"Bearer {settings.groq_api_key}",
                 "Content-Type": "application/json",
             }
         raise ValueError(f"Unsupported provider: {provider}")
@@ -211,7 +211,6 @@ class ProviderAdapter:
             LLMProvider.OPENAI: settings.upstream_openai_url,
             LLMProvider.ANTHROPIC: settings.upstream_anthropic_url,
             LLMProvider.AZURE_OPENAI: settings.upstream_azure_openai_url,
-            # Ollama exposes an OpenAI-compatible API locally.
             LLMProvider.OLLAMA: settings.ollama_url,
         }
         base = urls.get(provider, settings.upstream_openai_url)

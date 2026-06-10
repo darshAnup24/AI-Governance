@@ -48,6 +48,9 @@ htmlcov/
 .pytest_cache/
 coverage/
 
+# Generated test cases (regenerate via generate_test_cases.py)
+tests/test_cases_extended.py
+
 # Misc
 *.log
 *.pid

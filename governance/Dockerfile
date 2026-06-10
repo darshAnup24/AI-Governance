@@ -12,10 +12,7 @@ RUN npx prisma generate
 
 COPY . .
 
-# Build TypeScript → JS
-RUN npx tsc || true
-
 EXPOSE 4000
 
 # Push schema to DB (idempotent) then start compiled server
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && npx tsc && node dist/index.js"]

@@ -30,8 +30,8 @@ class _NoopSpan:
 
 
 class _NoopTracer:
-    def start_as_current_span(self, name: str) -> _NoopSpan:
-        del name
+    def start_as_current_span(self, name: str, **kwargs: Any) -> _NoopSpan:
+        del name, kwargs
         return _NoopSpan()
 
 
@@ -43,8 +43,8 @@ def get_tracer() -> _NoopTracer:
 
 
 @contextmanager
-def span(name: str) -> Iterator[_NoopSpan]:
-    yield _TRACER.start_as_current_span(name)
+def span(name: str, **kwargs: Any) -> Iterator[_NoopSpan]:
+    yield _TRACER.start_as_current_span(name, **kwargs)
 
 
 def add_span_event(name: str, attributes: dict[str, Any] | None = None) -> None:

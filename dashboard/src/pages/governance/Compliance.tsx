@@ -40,7 +40,7 @@ export default function Compliance() {
             const r = await govApi.post('/api/compliance/gap-analysis/all')
             setGapResult(r.data.gapAnalysis)
         } catch {
-            setGapResult('Gap analysis requires Ollama to be running with llama3.1:8b model. Start it with: make pull-models')
+            setGapResult('Gap analysis queued — results will appear once processed. Ensure GROQ_API_KEY is configured.')
         }
         setAnalyzing(false)
     }

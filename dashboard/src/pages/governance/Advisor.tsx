@@ -66,7 +66,7 @@ export default function Advisor() {
             )
 
             if (!res.ok || !res.body) {
-                setMessages(prev => [...prev, { role: 'ASSISTANT', content: 'Advisor requires Ollama running with llama3.1:8b. Start with: make pull-models && docker compose up' }])
+                setMessages(prev => [...prev, { role: 'ASSISTANT', content: 'Advisor requires the Groq API key to be configured in .env as GROQ_API_KEY.' }])
                 setStreaming(false)
                 return
             }
@@ -99,7 +99,7 @@ export default function Advisor() {
                 }
             }
         } catch {
-            setMessages(prev => [...prev, { role: 'ASSISTANT', content: '⚠️ Could not connect to advisor. Ensure the governance service and Ollama are running.' }])
+            setMessages(prev => [...prev, { role: 'ASSISTANT', content: '⚠️ Could not connect to advisor. Ensure the governance service is running and GROQ_API_KEY is set.' }])
         }
 
         setStreaming(false)

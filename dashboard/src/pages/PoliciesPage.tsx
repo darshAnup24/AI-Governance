@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus, Trash2, Edit, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react'
 import { usePolicies, useCreatePolicy, useUpdatePolicy, useDeletePolicy, useTogglePolicy } from '../lib/hooks'
+import api from '../lib/api'
 import { SkeletonTable } from '../components/Skeletons'
 import { InlineError } from '../components/ErrorBoundary'
 import { PageHeader, PageShell, StatusPill, SurfaceSection } from '../components/ui/page-shell'
@@ -34,6 +35,7 @@ export default function PoliciesPage() {
     const [showCreate, setShowCreate] = useState(false)
     const [testResult, setTestResult] = useState<string | null>(null)
     const [testScore, setTestScore] = useState(75)
+    const [testLoading, setTestLoading] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
     const [form, setForm] = useState({
         name: '',
@@ -83,19 +85,20 @@ export default function PoliciesPage() {
         setForm({ name: '', description: '', action: 'WARN', priority: 100, conditions: [{ field: 'riskScore', op: 'gte', value: '60' }], enabled: true })
     }
 
-    const runTest = () => {
-        let result = 'ALLOW'
-        const activePolicies = (policies || [])
-            .filter((p: PolicyRule) => p.enabled)
-            .sort((a: PolicyRule, b: PolicyRule) => a.priority - b.priority)
-        for (const policy of activePolicies) {
-            const scoreCondition = policy.conditions?.find((c: any) => c.field === 'riskScore' || c.field === 'risk_score')
-            if (scoreCondition && testScore >= Number(scoreCondition.value)) {
-                result = policy.action
-                break
-            }
+    const runTest = async () => {
+        setTestLoading(true)
+        setTestResult(null)
+        try {
+            const resp = await api.post('/api/v1/policies/test', {
+                risk_score: testScore,
+                detection_categories: [],
+            })
+            setTestResult(resp.data.action || 'ALLOW')
+        } catch {
+            setTestResult('ERROR')
+        } finally {
+            setTestLoading(false)
         }
-        setTestResult(result)
     }
 
     return (
@@ -135,12 +138,13 @@ export default function PoliciesPage() {
                             <span className="text-lg font-bold text-[var(--foreground)] tabular-nums w-10 text-right">{testScore}</span>
                         </div>
                     </div>
-                    <button onClick={runTest} className="btn-primary">
+                    <button onClick={runTest} disabled={testLoading} className="btn-primary flex items-center gap-2">
+                        {testLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                         Test Rules
                     </button>
                     {testResult && (
-                        <div className={`px-4 py-2 rounded-lg ${testResult === 'BLOCK' ? 'bg-red-500/10 text-red-400' : testResult === 'REDACT' ? 'bg-orange-500/10 text-orange-400' : testResult === 'WARN' ? 'bg-yellow-500/10 text-yellow-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                            Result: <span className="font-bold">{testResult}</span>
+                        <div className={`px-4 py-2 rounded-lg ${testResult === 'BLOCK' ? 'bg-red-500/10 text-red-400' : testResult === 'REDACT' ? 'bg-orange-500/10 text-orange-400' : testResult === 'WARN' ? 'bg-yellow-500/10 text-yellow-400' : testResult === 'ERROR' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                            Result: <span className="font-bold">{testResult === 'ERROR' ? 'Test failed' : testResult}</span>
                         </div>
                     )}
                 </div>
@@ -163,6 +167,55 @@ export default function PoliciesPage() {
                             <option value="REDACT">REDACT</option>
                             <option value="BLOCK">BLOCK</option>
                         </select>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <input type="number" className="input" placeholder="Priority" value={form.priority} onChange={e => setForm({ ...form, priority: Number(e.target.value) })} />
+                        <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+                            <input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} className="accent-brand-500" />
+                            Enabled
+                        </label>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="block text-xs text-[var(--muted-foreground)]">Conditions</label>
+                        {form.conditions.map((cond, i) => (
+                            <div key={i} className="flex gap-2 items-center">
+                                <select className="input flex-1" value={cond.field} onChange={e => {
+                                    const updated = [...form.conditions]
+                                    updated[i] = { ...updated[i], field: e.target.value }
+                                    setForm({ ...form, conditions: updated })
+                                }}>
+                                    <option value="riskScore">Risk Score</option>
+                                    <option value="category">Category</option>
+                                    <option value="provider">Provider</option>
+                                    <option value="department">Department</option>
+                                    <option value="role">Role</option>
+                                </select>
+                                <select className="input w-24" value={(cond as any).op || (cond as any).operator || 'gte'} onChange={e => {
+                                    const updated = [...form.conditions]
+                                    updated[i] = { ...updated[i], op: e.target.value }
+                                    setForm({ ...form, conditions: updated })
+                                }}>
+                                    <option value="gte">&ge; (gte)</option>
+                                    <option value="lte">&le; (lte)</option>
+                                    <option value="eq">= (eq)</option>
+                                    <option value="neq">!= (neq)</option>
+                                    <option value="contains">contains</option>
+                                </select>
+                                <input className="input flex-1" placeholder="Value" value={cond.value} onChange={e => {
+                                    const updated = [...form.conditions]
+                                    updated[i] = { ...updated[i], value: e.target.value }
+                                    setForm({ ...form, conditions: updated })
+                                }} />
+                                <button onClick={() => {
+                                    setForm({ ...form, conditions: form.conditions.filter((_, j) => j !== i) })
+                                }} className="text-red-400 hover:text-red-300 p-1">
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ))}
+                        <button onClick={() => setForm({ ...form, conditions: [...form.conditions, { field: 'riskScore', op: 'gte', value: '60' }] })} className="text-xs text-[var(--accent)] hover:underline">
+                            + Add condition
+                        </button>
                     </div>
                     <div className="flex gap-2">
                         <button onClick={handleSave} disabled={!form.name.trim() || createMutation.isPending || updateMutation.isPending} className="btn-primary flex items-center gap-2">

@@ -27,7 +27,8 @@ from proxy.app.routes import router as proxy_router
 from proxy.app.policy_engine import router as policy_router
 from proxy.app.governance_api import router as governance_router
 from proxy.app.api_key_routes import router as api_key_router
-from proxy.app.database import engine
+from proxy.app.database import engine, async_session
+from proxy.app.db_models import Base
 from proxy.app.tracing import get_tracer, force_flush, shutdown as otel_shutdown, add_span_event, record_exception
 from proxy.app.metrics import (
     PROM_REGISTRY,
@@ -60,6 +61,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         environment=settings.environment,
         upstream_openai=settings.upstream_openai_url,
     )
+
+    # Ensure database tables exist
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        log.info("proxy.database_tables_ready")
+    except Exception as e:
+        log.warning("proxy.database_init_failed", error=str(e))
 
     # Initialize OpenTelemetry
     tracer = get_tracer()

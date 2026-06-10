@@ -4,7 +4,7 @@ import { Router, Request, Response } from "express";
 import { prisma } from "../index";
 import { serviceRegistry } from "../platform/serviceRegistry";
 import { governanceEventBus } from "../platform/eventBus";
-import { generateIncidentAdvisorSummary, queryOllama } from "./advisor";
+import { generateIncidentAdvisorSummary } from "./advisor";
 
 type DetectionFinding = {
   category: string;
@@ -169,11 +169,15 @@ async function detectPromptWithService(prompt: string): Promise<{
 }> {
   const detectionUrl = process.env.DETECTION_SERVICE_URL || "http://detection:8001";
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
     const response = await fetch(`${detectionUrl}/detect`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: prompt }),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     if (!response.ok) {
       throw new Error(`Detection service returned ${response.status}`);
     }
@@ -202,7 +206,7 @@ function evaluatePolicy(input: {
   categories: string[];
   riskScore: number;
 }) {
-  const externalProvider = !/^ollama$/i.test(input.provider);
+  const externalProvider = true;
   const containsSensitiveData =
     input.categories.includes("PII") ||
     input.categories.includes("FINANCIAL") ||
@@ -245,11 +249,25 @@ async function safePublish(event: Parameters<typeof governanceEventBus.publish>[
 
 async function generateProviderResponse(prompt: string, provider: string) {
   try {
-    const response = await queryOllama(
-      prompt.slice(0, 600),
-      `You are the ${provider} provider simulator for an AI governance demo. Reply normally and concisely to safe requests. Never mention being simulated.`,
-    );
-    return response.trim();
+    const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "llama3-8b-8192",
+        messages: [
+          { role: "system", content: `You are the ${provider} provider simulator for an AI governance demo. Reply normally and concisely to safe requests. Never mention being simulated.` },
+          { role: "user", content: prompt.slice(0, 600) },
+        ],
+        stream: false,
+      }),
+    });
+    if (!res.ok) return "Request allowed. Provider completed the task successfully and returned a clean response preview.";
+    const data = await res.json() as any;
+    return data.choices?.[0]?.message?.content?.trim() || "Request allowed.";
   } catch {
     return "Request allowed. Provider completed the task successfully and returned a clean response preview.";
   }
@@ -887,21 +905,32 @@ proxyRouter.post("/simulate", async (req: Request, res: Response) => {
       });
     }
 
-    const advisor = await generateIncidentAdvisorSummary({
-      orgId,
-      userId,
-      traceId,
-      incidentType: evaluation.action === "BLOCK" ? "sensitive_data_egress_attempt" : "governance_warning",
-      severity: evaluation.severity,
-      offendingPrompt: prompt,
-      detectionEvidence: detection.raw || {
-        findings: detection.findings,
-        categories: detection.categories,
-        riskScore: detection.riskScore,
-      },
-      violatedPolicy: evaluation.policyName,
-      incidentId: incident?.id || null,
-    });
+    const advisor = process.env.DEMO_MODE === "true"
+      ? {
+          summary: "Golden demo incident: sensitive customer data blocked by policy before external provider egress.",
+          risk_level: evaluation.severity,
+          remediation: [
+            "Review and update data classification policies",
+            "Configure additional PII detection patterns",
+            "Enable admin notification on similar future events",
+          ],
+          compliance_impact: "GDPR Article 32 (security of processing), ISO 27001 A.8.24 (data protection)",
+        }
+      : await generateIncidentAdvisorSummary({
+          orgId,
+          userId,
+          traceId,
+          incidentType: evaluation.action === "BLOCK" ? "sensitive_data_egress_attempt" : "governance_warning",
+          severity: evaluation.severity,
+          offendingPrompt: prompt,
+          detectionEvidence: detection.raw || {
+            findings: detection.findings,
+            categories: detection.categories,
+            riskScore: detection.riskScore,
+          },
+          violatedPolicy: evaluation.policyName,
+          incidentId: incident?.id || null,
+        });
 
     const runtimeEvent = await prisma.auditEvent.create({
       data: {

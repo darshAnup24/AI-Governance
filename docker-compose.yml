@@ -20,7 +20,8 @@ services:
       - DATABASE_URL=postgresql+asyncpg://aigw:aigw_password@postgres:5432/ai_governance
       - REDIS_URL=redis://redis:6379/0
       - CLICKHOUSE_URL=http://clickhouse:8123
-      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_URL=https://api.groq.com/openai/v1
+      - GROQ_API_KEY=${GROQ_API_KEY}
       - JWT_SECRET=airlock-dev-secret-change-me
       - DEV_JWT_SECRET=dev-secret-change-in-production
       - DEV_ORG_ID=c57e3fb1-505e-4248-8bd5-fea69ffb565d
@@ -61,7 +62,8 @@ services:
       - ENVIRONMENT=development
       - LOG_LEVEL=DEBUG
       - REDIS_URL=redis://redis:6379/0
-      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_URL=https://api.groq.com/openai/v1
+      - GROQ_API_KEY=${GROQ_API_KEY}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - OTEL_SERVICE_NAME=airlock-detection
     command: uvicorn detection.app.main:app --host 0.0.0.0 --port 8001 --reload
@@ -93,12 +95,10 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - CLICKHOUSE_URL=http://clickhouse:8123
       - DETECTION_SERVICE_URL=http://detection:8001
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - PRIMARY_ADVISOR_MODEL=llama3.2:3b
-      - FALLBACK_MODEL=tinyllama
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - PRIMARY_ADVISOR_MODEL=llama3-70b-8192
+      - FALLBACK_MODEL=llama3-8b-8192
       - USE_ONNX_DETECTION=true
-      - USE_OLLAMA_IN_SYNC_PATH=false
-      - USE_OLLAMA_ASYNC_ONLY=true
       - ALLOW_INSECURE_DEFAULT_SECRETS=true
       - JWT_SECRET=airlock-dev-secret-change-me
       - INTERNAL_SERVICE_TOKEN=internal-service-token-change-me
@@ -204,14 +204,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    networks:
-      - ai-gateway-net
-
-  # ─── Ollama (LLM inference) ────────────────────────────
-  ollama:
-    image: ollama/ollama:latest
-    volumes:
-      - ollama_data:/root/.ollama
     networks:
       - ai-gateway-net
 
@@ -343,7 +335,7 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  ollama_data:
+  # ollama_data removed — using Groq API
   clickhouse_data:
   prometheus_data:
   alertmanager_data:

@@ -28,7 +28,13 @@ class AirlockErrorMiddleware(BaseHTTPMiddleware):
         self.is_dev = is_dev
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            response = JSONResponse(
+                status_code=500,
+                content={"detail": "Internal server error"},
+            )
         return await self._maybe_enrich_response(request, response)
 
     async def _maybe_enrich_response(self, request: Request, response: Response) -> Response:

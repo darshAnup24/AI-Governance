@@ -17,6 +17,7 @@ Run:
 """
 from __future__ import annotations
 
+import random
 import statistics
 import sys
 import time
@@ -27,6 +28,12 @@ from typing import Any, Callable
 sys.path.insert(0, ".")
 
 from tests.sample_feed_runner import SAMPLES, Case
+try:
+    from tests.test_cases_extended import EXTENDED_SAMPLES
+    _HAS_EXTENDED = True
+except ImportError:
+    EXTENDED_SAMPLES = []
+    _HAS_EXTENDED = False
 from detection.app.regex_detector import RegexDetector
 from detection.app.preprocessor import fast_path_route
 from detection.app.risk_scorer import RiskScoreAggregator
@@ -376,12 +383,14 @@ def print_report(
         print(f"│  {act:<8s} {n:>4d}  {_fmt_pct(pct)}  {_bar(pct, 30)}")
     print("└──────────────────────────────────────────────────────────────────────────┘")
 
-    # ── Misclassifications ──
+    # ── Misclassifications (show up to 5 or all if summary) ──
     fails = [r for r in results if not _case_passed(r)]
     if fails:
-        print("\n┌─ MISCLASSIFICATIONS ─────────────────────────────────────────────────────┐")
-        for r in fails:
-            kind = "FP (safe→harmful)" if r.expect_safe else "FN (missing)"
+        show_all = len(fails) <= 5
+        max_show = len(fails) if show_all else 5
+        print(f"\n┌─ MISCLASSIFICATIONS ({len(fails)} total, showing {max_show}) ──────────────────────────────────────┐")
+        for r in fails[:max_show]:
+            kind = "FP" if r.expect_safe else "FN"
             missing = sorted(r.expected - r.predicted)
             extra   = sorted(r.predicted - r.expected)
             print(f"│  [{kind}]  {r.name}")
@@ -390,7 +399,17 @@ def print_report(
             if missing:
                 print(f"│      missing:  {missing}")
             if extra and r.expect_safe:
-                print(f"│      false positives: {extra}")
+                print(f"│      extras: {extra}")
+        if not show_all:
+            # Summarise remaining
+            fn_by_cat: dict[str, int] = {}
+            for r in fails[5:]:
+                for cat in r.expected:
+                    fn_by_cat[cat] = fn_by_cat.get(cat, 0) + 1
+            if fn_by_cat:
+                print(f"│  ...")
+                for cat, n in sorted(fn_by_cat.items(), key=lambda x: -x[1]):
+                    print(f"│      {cat}: {n} more FN")
         print("└──────────────────────────────────────────────────────────────────────────┘")
     else:
         print("\n  ✓ Zero misclassifications across the full evaluation set.")
@@ -410,7 +429,52 @@ def _case_passed(r: CaseResult) -> bool:
 
 # ─── Entry point ─────────────────────────────────────────────────────────────
 
+def get_test_cases(count: int = 2000) -> list[Case]:
+    """Return a balanced sample of test cases from both original and extended sets."""
+    import random
+    rng = random.Random(42)
+
+    # Always include the hand-crafted originals
+    cases = list(SAMPLES)
+
+    if EXTENDED_SAMPLES and count > len(SAMPLES):
+        # Sample remaining from extended set, keeping category balance
+        needed = count - len(cases)
+        # Try to balance across tags
+        by_tag: dict[str, list[Case]] = {}
+        for c in EXTENDED_SAMPLES:
+            for t in c.tags:
+                by_tag.setdefault(t, []).append(c)
+        selected: list[Case] = []
+        per_tag = max(1, needed // max(len(by_tag), 1))
+        for tag, tagged in by_tag.items():
+            rng.shuffle(tagged)
+            selected.extend(tagged[:per_tag])
+        # Fill remaining with random extraction
+        remaining = [c for c in EXTENDED_SAMPLES if c not in selected]
+        rng.shuffle(remaining)
+        selected.extend(remaining[:needed - len(selected)])
+        cases.extend(selected[:needed])
+
+    rng.shuffle(cases)
+    return cases
+
+
 def main() -> int:
+    import argparse
+    parser = argparse.ArgumentParser(description="Detection accuracy evaluation")
+    parser.add_argument("--extended", "-e", type=int, nargs="?",
+                        const=2000, default=None,
+                        help="Use extended test cases (default: 2000 sample). "
+                             "Pass a number to control sample size.")
+    parser.add_argument("--basic", "-b", action="store_true",
+                        help="Run only the original hand-crafted cases")
+    args = parser.parse_args()
+
+    use_count = args.extended if args.extended is not None else (0 if args.basic else 2000)
+
+    test_cases = get_test_cases(count=use_count) if use_count else SAMPLES
+
     print("Loading detectors...")
     regex_det      = RegexDetector()
     pi_det         = PromptInjectionDetector()
@@ -436,12 +500,12 @@ def main() -> int:
 
     aggregator = RiskScoreAggregator()
 
-    print(f"Running {len(SAMPLES)} cases through {len(detectors)} detectors...\n")
+    print(f"Running {len(test_cases)} cases through {len(detectors)} detectors...\n")
 
     # Warm-up pass (skip first call's import / model-load latency)
-    _ = evaluate_case(SAMPLES[0], detectors, aggregator)
+    _ = evaluate_case(test_cases[0], detectors, aggregator)
 
-    results = [evaluate_case(c, detectors, aggregator) for c in SAMPLES]
+    results = [evaluate_case(c, detectors, aggregator) for c in test_cases]
 
     print_report(results, list(detectors.keys()))
 

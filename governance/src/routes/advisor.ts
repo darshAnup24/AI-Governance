@@ -6,10 +6,10 @@ import { sendRouteError } from "./routeUtils";
 
 export const advisorRouter = Router();
 
-const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://ollama:11434";
-const PRIMARY_ADVISOR_MODEL = process.env.PRIMARY_ADVISOR_MODEL || "llama3.2:3b";
-const FALLBACK_MODEL = process.env.FALLBACK_MODEL || "tinyllama";
-const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "nomic-embed-text";
+const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+const PRIMARY_MODEL = process.env.PRIMARY_ADVISOR_MODEL || "llama3-70b-8192";
+const FALLBACK_MODEL = process.env.FALLBACK_MODEL || "llama3-8b-8192";
 
 type IncidentAdvisorInput = {
   orgId: string;
@@ -68,30 +68,28 @@ function normalizeAdvisorPayload(payload: Record<string, unknown>) {
   };
 }
 
-async function getAvailableModel(): Promise<string> {
-  try {
-    const res = await fetch(`${OLLAMA_URL}/api/tags`);
-    if (!res.ok) return FALLBACK_MODEL;
-    const data = await res.json() as any;
-    const models: string[] = (data.models || []).map((m: any) => m.name);
-    if (models.some((m) => m.startsWith(PRIMARY_ADVISOR_MODEL))) return PRIMARY_ADVISOR_MODEL;
-    if (models.some((m) => m.startsWith(FALLBACK_MODEL))) return FALLBACK_MODEL;
-    return models[0] || PRIMARY_ADVISOR_MODEL;
-  } catch {
-    return FALLBACK_MODEL;
-  }
-}
-
-export async function queryOllama(prompt: string, system?: string): Promise<string> {
-    const model = await getAvailableModel();
-    const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+async function queryGroq(prompt: string, system?: string): Promise<string> {
+    const res = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, system: system || "", prompt, stream: false }),
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+            model: PRIMARY_MODEL,
+            messages: [
+                ...(system ? [{ role: "system" as const, content: system }] : []),
+                { role: "user" as const, content: prompt },
+            ],
+            stream: false,
+        }),
     });
-    if (!res.ok) throw new Error("Ollama unavailable");
-    const data = (await res.json()) as any;
-    return data.response || "";
+    if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`Groq unavailable: ${res.status} ${errText}`);
+    }
+    const data = await res.json() as any;
+    return data.choices?.[0]?.message?.content || "";
 }
 
 export async function generateIncidentAdvisorSummary(input: IncidentAdvisorInput) {
@@ -114,7 +112,7 @@ Policy violated: ${input.violatedPolicy}`;
 
     let responseText = "";
     try {
-      responseText = await queryOllama(prompt, "Return strict JSON only.");
+      responseText = await queryGroq(prompt, "Return strict JSON only.");
     } catch {
       responseText = "";
     }
@@ -142,17 +140,6 @@ Policy violated: ${input.violatedPolicy}`;
     });
 
     return normalized;
-}
-
-async function getEmbedding(text: string): Promise<number[]> {
-    const res = await fetch(`${OLLAMA_URL}/api/embeddings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: EMBEDDING_MODEL, prompt: text }),
-    });
-    if (!res.ok) throw new Error("Embedding service unavailable");
-    const data = (await res.json()) as any;
-    return data.embedding || [];
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -191,7 +178,7 @@ async function buildOrgContext(orgId: string) {
     return { incidents, models, complianceChecks, recentThreats, recentAudits };
 }
 
-// POST /api/advisor/chat — Streaming response from Ollama
+// POST /api/advisor/chat — Streaming response from Groq
 advisorRouter.post("/chat", async (req: Request, res: Response) => {
     try {
         const { message, sessionId } = req.body;
@@ -244,21 +231,26 @@ Current org context:
             data: { orgId, userId, sessionId: sid, role: "USER", content: message },
         });
 
-        // Stream from Ollama (async-only, non-blocking)
-        const activeModel = await getAvailableModel();
-        const ollamaRes = await fetch(`${OLLAMA_URL}/api/generate`, {
+        // Stream from Groq
+        const groqRes = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${GROQ_API_KEY}`,
+            },
             body: JSON.stringify({
-                model: activeModel,
-                system: systemPrompt,
-                prompt: messages,
+                model: PRIMARY_MODEL,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    ...history.map((m) => ({ role: m.role === "USER" ? "user" as const : "assistant" as const, content: m.content })),
+                    { role: "user" as const, content: message },
+                ],
                 stream: true,
             }),
         });
 
-        if (!ollamaRes.ok || !ollamaRes.body) {
-            res.status(502).json({ error: "Ollama unavailable" });
+        if (!groqRes.ok || !groqRes.body) {
+            res.status(502).json({ error: "Groq unavailable" });
             return;
         }
 
@@ -269,7 +261,7 @@ Current org context:
         res.setHeader("X-Session-Id", sid);
 
         let fullResponse = "";
-        const reader = ollamaRes.body.getReader();
+        const reader = groqRes.body.getReader();
         const decoder = new TextDecoder();
 
         try {
@@ -281,13 +273,17 @@ Current org context:
                 const lines = chunk.split("\n").filter((l) => l.trim());
 
                 for (const line of lines) {
+                    if (!line.startsWith("data: ")) continue;
+                    const payload = line.slice(6).trim();
+                    if (payload === "[DONE]") continue;
                     try {
-                        const data = JSON.parse(line);
-                        if (data.response) {
-                            fullResponse += data.response;
-                            res.write(`data: ${JSON.stringify({ token: data.response, sessionId: sid })}\n\n`);
+                        const data = JSON.parse(payload);
+                        const token = data.choices?.[0]?.delta?.content || "";
+                        if (token) {
+                            fullResponse += token;
+                            res.write(`data: ${JSON.stringify({ token, sessionId: sid })}\n\n`);
                         }
-                        if (data.done) {
+                        if (data.choices?.[0]?.finish_reason === "stop") {
                             res.write(`data: ${JSON.stringify({ done: true, sessionId: sid })}\n\n`);
                         }
                     } catch {
@@ -384,7 +380,7 @@ For each recommendation provide:
 
 Format as JSON array.`;
 
-        const response = await queryOllama(prompt);
+        const response = await queryGroq(prompt);
         // Try to parse as JSON, fall back to text
         try {
             const parsed = JSON.parse(response);
@@ -497,7 +493,7 @@ advisorRouter.post("/demo-summary", async (req: Request, res: Response) => {
     }
 });
 
-// POST /api/advisor/embed-search — Semantic search across telemetry
+// POST /api/advisor/embed-search — Keyword-based search (Groq doesn't support embeddings)
 advisorRouter.post("/embed-search", async (req: Request, res: Response) => {
     try {
         const { query } = req.body;
@@ -524,20 +520,13 @@ advisorRouter.post("/embed-search", async (req: Request, res: Response) => {
             corpus.push({ text: `Audit: action ${a.actionTaken} risk ${a.riskScore} provider ${a.llmProvider} tool ${a.toolName}`, source: "audit", id: a.id, severity: String(a.riskScore), date: a.timestamp });
         }
 
-        // Get query embedding
-        const queryEmb = await getEmbedding(query);
-
-        // Score and rank by cosine similarity
-        const scored = await Promise.all(
-            corpus.map(async (item) => {
-                let score = 0;
-                try {
-                    const itemEmb = await getEmbedding(item.text.substring(0, 500));
-                    score = cosineSimilarity(queryEmb, itemEmb);
-                } catch { /* skip items that fail embedding */ }
-                return { ...item, score };
-            })
-        );
+        // Simple keyword scoring (no embedding model needed)
+        const queryTerms: string[] = query.toLowerCase().split(/\s+/).filter(Boolean);
+        const scored = corpus.map((item) => {
+            const text = item.text.toLowerCase();
+            const matches = queryTerms.filter((t: string) => text.includes(t)).length;
+            return { ...item, score: queryTerms.length > 0 ? matches / queryTerms.length : 0 };
+        });
 
         const results = scored
             .filter(r => r.score > 0.3)
