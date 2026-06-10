@@ -8,14 +8,12 @@ import {
   Boxes,
   CheckCircle,
   ChevronDown,
-  FileText,
+  Gauge,
   LayoutDashboard,
   LogOut,
   Menu,
-  Settings,
+  PlayCircle,
   Shield,
-  Users,
-  Wifi,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/ui/button'
@@ -25,21 +23,14 @@ import { useRuntimeMode } from '../lib/hooks'
 
 const navItems: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/shadow-ai', label: 'Runtime Monitor', icon: Wifi },
+  { to: '/gateway-security', label: 'Gateway Security', icon: Gauge },
+  { to: '/live-demo/detection', label: 'Live Demo', icon: PlayCircle },
   { to: '/incidents', label: 'Incidents', icon: AlertTriangle },
   { to: '/reports', label: 'Audit Logs', icon: BarChart3 },
   { to: '/policies', label: 'Policies', icon: Shield },
-  { to: '/governance/compliance', label: 'Compliance', icon: CheckCircle },
-  { to: '/governance', label: 'AI Inventory', icon: Boxes },
   { to: '/governance/models', label: 'Models', icon: Boxes },
-  { to: '/governance/vendors', label: 'Vendor Risk', icon: Users },
-  { to: '/governance/heatmap', label: 'Use Cases', icon: Activity },
-  { to: '/governance/threats', label: 'Assessments', icon: AlertTriangle },
+  { to: '/governance/compliance', label: 'Compliance', icon: CheckCircle },
   { to: '/governance/advisor', label: 'AI Advisor', icon: Bot },
-  { to: '/governance/incidents', label: 'Governance Incidents', icon: AlertTriangle },
-  { to: '/governance/policies', label: 'Policy Builder', icon: Shield },
-  { to: '/governance/reports', label: 'Governance Reports', icon: FileText },
-  { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
 const titles: Record<string, { eyebrow: string; title: string; subtitle: string }> = {
@@ -93,10 +84,8 @@ export default function AppLayout() {
 
   const navSections: NavSection[] = useMemo(() => {
     const sectionMap: Array<{ title: string; paths: string[] }> = [
-      { title: 'Monitoring', paths: ['/dashboard', '/shadow-ai', '/incidents', '/reports'] },
-      { title: 'Governance', paths: ['/policies', '/governance', '/governance/compliance', '/governance/models', '/governance/policies', '/governance/advisor'] },
-      { title: 'Risk', paths: ['/governance/vendors', '/governance/heatmap', '/governance/threats', '/governance/incidents'] },
-      { title: 'Admin', paths: ['/governance/reports', '/settings'] },
+      { title: 'Monitoring', paths: ['/dashboard', '/gateway-security', '/live-demo/detection', '/incidents', '/reports'] },
+      { title: 'Governance', paths: ['/policies', '/governance/models', '/governance/compliance', '/governance/advisor'] },
     ]
 
     return sectionMap

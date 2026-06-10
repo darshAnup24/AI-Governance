@@ -1,0 +1,5 @@
+# Force LF on shell scripts so they run in Linux containers regardless of
+# the OS that checked them out. Prevents the "exec /entrypoint.sh: no such
+# file or directory" failure caused by Windows CRLF line endings.
+*.sh text eol=lf
+entrypoint.sh text eol=lf

@@ -6,6 +6,7 @@ import InstallPWA from './components/InstallPWA'
 import AppLayout from './layouts/AppLayout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
+import GatewaySecurityPage from './pages/GatewaySecurityPage'
 import IncidentsPage from './pages/IncidentsPage'
 import PoliciesPage from './pages/PoliciesPage'
 import ShadowAIPage from './pages/ShadowAIPage'
@@ -50,6 +51,7 @@ export default function App() {
                     >
                         {/* Existing proxy monitoring routes */}
                         <Route path="/dashboard" element={<Wrap><DashboardPage /></Wrap>} />
+                        <Route path="/gateway-security" element={<Wrap><GatewaySecurityPage /></Wrap>} />
                         <Route path="/incidents" element={<Wrap><IncidentsPage /></Wrap>} />
                         <Route path="/policies" element={<Wrap><PoliciesPage /></Wrap>} />
                         <Route path="/shadow-ai" element={<Wrap><ShadowAIPage /></Wrap>} />

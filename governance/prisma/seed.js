@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@prisma/client");
-const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const argon2_1 = __importDefault(require("argon2"));
 const prisma = new client_1.PrismaClient();
 async function main() {
     console.log("🌱 Seeding Airlock database...\n");
@@ -14,6 +14,7 @@ async function main() {
         update: {},
         create: {
             name: "Acme Corp",
+            slug: "acme-corp",
             plan: "BUSINESS",
             settings: {
                 industry: "Technology",
@@ -24,10 +25,10 @@ async function main() {
     });
     console.log(`✅ Organization: ${org.name} (${org.plan})`);
     // ─── Users ─────────────────────────────────────────────────
-    const passwordHash = await bcryptjs_1.default.hash("Airlock123!", 12);
+    const passwordHash = await argon2_1.default.hash("Airlock123!", { type: argon2_1.default.argon2id });
     const users = [
         { email: "admin@acme.com", name: "Alice Admin", role: "ADMIN" },
-        { email: "manager@acme.com", name: "Mike Manager", role: "MANAGER" },
+        { email: "manager@acme.com", name: "Mike Manager", role: "SECURITY_ADMIN" },
         { email: "viewer@acme.com", name: "Vera Viewer", role: "VIEWER" },
     ];
     for (const u of users) {
