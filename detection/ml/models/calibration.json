@@ -1,0 +1,15 @@
+{
+  "temperature": 0.734234,
+  "platt_a": 0.0,
+  "platt_b": -0.045226,
+  "baseline_ece": 0.012041,
+  "calibrated_ece": 0.004959,
+  "platt_ece": 0.003368,
+  "baseline_nll": 0.029566,
+  "calibrated_nll": 0.022934,
+  "platt_nll": 0.693044,
+  "ece_improvement_pct": 58.81,
+  "platt_ece_improvement_pct": 72.03,
+  "cal_set_size": 756,
+  "dataset_size": 5040
+}

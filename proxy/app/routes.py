@@ -690,7 +690,7 @@ async def chat_completions(
     # Get upstream URL and headers
     upstream_url = ProviderAdapter.get_upstream_url(provider, settings)
     api_key = request.headers.get("X-API-Key", request.headers.get("Authorization", "").replace("Bearer ", ""))
-    upstream_headers = ProviderAdapter.get_headers(provider, api_key)
+    upstream_headers = ProviderAdapter.get_headers(provider, api_key, settings)
 
     # ─── Forward to Upstream ──────────────────────────────
 
@@ -1073,7 +1073,7 @@ async def list_audit_events(
     total = (await db.execute(total_sql, params)).scalar() or 0
 
     data_sql = text(f"""
-        SELECT event_id, trace_id, timestamp, user_id, llm_provider, tool_name,
+        SELECT event_id, timestamp, user_id, llm_provider, tool_name,
                risk_score, action_taken, prompt_hash, detection_results
         FROM audit_events
         WHERE {base_where}
@@ -1086,7 +1086,6 @@ async def list_audit_events(
         "data": [
             {
                 "event_id":          str(r.event_id),
-                "trace_id":          str(r.trace_id) if r.trace_id else None,
                 "timestamp":         r.timestamp.isoformat() if r.timestamp else None,
                 "user_id":           str(r.user_id),
                 "llm_provider":      r.llm_provider,
@@ -1367,11 +1366,43 @@ async def inspect_prompt(
     detection_result = await _call_detection(http_client, body.text, user, settings)
 
     risk_score: int = detection_result.get("risk_score", 0)
-    action: str = detection_result.get("action", "ALLOW")
+    detection_action: str = detection_result.get("action", "ALLOW")
     detected_spans: list = detection_result.get("detected_spans", [])
     detection_results: list = detection_result.get("detection_results", [])
 
     categories = list({s.get("category") for s in detected_spans if s.get("category")})
+
+    # ── Policy Evaluation ─────────────────────────────────────────────
+    policy_decision = None
+    try:
+        gov_client = _get_governance_client(settings)
+        gov_policies = await gov_client.fetch_policies(user.org_id)
+        if gov_policies:
+            policy_ctx = RequestContext(
+                user_id=user.user_id,
+                role=user.role,
+                department=user.department,
+                org_id=user.org_id,
+                risk_score=risk_score,
+                detection_categories=categories,
+                tool_name="",
+                prompt_length=len(body.text),
+            )
+            policy_decision = policy_engine.evaluate(policy_ctx, rules=gov_policies)
+            if policy_decision and policy_decision.action != ActionType.ALLOW:
+                log.info(
+                    "inspect.policy_matched",
+                    rule=policy_decision.matched_rule_id,
+                    reason=policy_decision.reason,
+                    action=policy_decision.action.value,
+                )
+    except Exception as exc:
+        log.warning("inspect.policy_eval_failed", error=str(exc))
+
+    if policy_decision and policy_decision.action != ActionType.ALLOW:
+        action = policy_decision.action.value
+    else:
+        action = detection_action
 
     # Build highlighted segments for the frontend
     segments: list[dict] = []
@@ -1398,8 +1429,10 @@ async def inspect_prompt(
         "inspect.completed",
         risk_score=risk_score,
         action=action,
+        detection_action=detection_action,
         categories=categories,
         duration_ms=duration_ms,
+        policy_matched=policy_decision.matched_rule_id if policy_decision else None,
     )
 
     detection_id = detection_result.get("detection_id", "") if isinstance(detection_result, dict) else ""
@@ -1408,6 +1441,12 @@ async def inspect_prompt(
         "detection_id": detection_id,
         "risk_score": risk_score,
         "action": action,
+        "detection_action": detection_action,
+        "policy_decision": {
+            "action": policy_decision.action.value if policy_decision else None,
+            "matched_rule_id": policy_decision.matched_rule_id if policy_decision else None,
+            "reason": policy_decision.reason if policy_decision else "",
+        } if policy_decision else None,
         "categories": categories,
         "detected_spans": detected_spans,
         "detection_results": detection_results,

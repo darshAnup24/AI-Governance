@@ -1,0 +1,119 @@
+{
+  "global": {
+    "warn": 53,
+    "redact": 78,
+    "block": 96
+  },
+  "per_category": {
+    "API_KEY": {
+      "warn": 48,
+      "redact": 78,
+      "block": 96,
+      "precision": 0.7736,
+      "recall": 0.4982,
+      "f1": 0.6061,
+      "support": 542,
+      "reasons": [
+        "recall=0.498<0.65 \u2192 warn-5"
+      ]
+    },
+    "BIAS": {
+      "warn": 48,
+      "redact": 78,
+      "block": 96,
+      "precision": 1.0,
+      "recall": 0.3455,
+      "f1": 0.5135,
+      "support": 55,
+      "reasons": [
+        "recall=0.345<0.65 \u2192 warn-5"
+      ]
+    },
+    "CREDENTIALS": {
+      "warn": 48,
+      "redact": 78,
+      "block": 96,
+      "precision": 1.0,
+      "recall": 0.3134,
+      "f1": 0.4773,
+      "support": 335,
+      "reasons": [
+        "recall=0.313<0.65 \u2192 warn-5"
+      ]
+    },
+    "HALLUCINATION": {
+      "warn": 53,
+      "redact": 78,
+      "block": 96,
+      "precision": 0.9783,
+      "recall": 0.8182,
+      "f1": 0.8911,
+      "support": 55,
+      "reasons": []
+    },
+    "PII": {
+      "warn": 53,
+      "redact": 78,
+      "block": 96,
+      "precision": 0.7716,
+      "recall": 0.7214,
+      "f1": 0.7456,
+      "support": 707,
+      "reasons": []
+    },
+    "PROMPT_INJECTION": {
+      "warn": 48,
+      "redact": 78,
+      "block": 96,
+      "precision": 0.8367,
+      "recall": 0.6406,
+      "f1": 0.7257,
+      "support": 64,
+      "reasons": [
+        "recall=0.641<0.65 \u2192 warn-5"
+      ]
+    },
+    "REGULATORY": {
+      "warn": 53,
+      "redact": 78,
+      "block": 96,
+      "precision": 0.9091,
+      "recall": 0.7692,
+      "f1": 0.8333,
+      "support": 65,
+      "reasons": []
+    },
+    "SECURITY_VULN": {
+      "warn": 53,
+      "redact": 78,
+      "block": 96,
+      "precision": 0.9592,
+      "recall": 0.7966,
+      "f1": 0.8704,
+      "support": 59,
+      "reasons": []
+    },
+    "SOURCE_CODE": {
+      "warn": 53,
+      "redact": 78,
+      "block": 96,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 0,
+      "reasons": []
+    }
+  },
+  "metrics_before": {
+    "micro_precision": 0.7993,
+    "micro_recall": 0.5776,
+    "micro_f1": 0.6706,
+    "objective": 0.6906
+  },
+  "metrics_after": {
+    "micro_precision": 0.7993,
+    "micro_recall": 0.5776,
+    "micro_f1": 0.6706,
+    "objective": 0.6906
+  }
+}

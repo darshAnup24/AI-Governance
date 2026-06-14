@@ -9,6 +9,24 @@ from typing import Any, Awaitable, Callable
 from detection.app.preprocessor import fast_path_route, length_defense, sanitize
 from proxy.app.models import ActionType, DetectionCategory, DetectionResult, DetectedSpan
 
+try:
+    from detection.config import CALIBRATION
+except ImportError:
+    from dataclasses import dataclass as _dc
+
+    @_dc(frozen=True)
+    class _RecallFallback:
+        enabled: bool = True
+        low_threshold: float = 0.45
+        soft_vote_min_detectors: int = 2
+        soft_vote_threshold: float = 0.40
+
+    @_dc(frozen=True)
+    class _CalFallback:
+        recall: _RecallFallback = _RecallFallback()
+
+    CALIBRATION = _CalFallback()
+
 
 @dataclass
 class PipelineResponse:
@@ -118,6 +136,27 @@ class DetectionPipeline:
             if isinstance(result, DetectionResult):
                 detection_results.append(result)
 
+        # ── Recall Gate: OR-gate + Soft Vote escalation ───────────────────────
+        # If RECALL_MODE is enabled and any tier scores above low_threshold
+        # (or 2+ detectors agree above soft_vote_threshold), ensure ONNX runs
+        # to validate — even if it was disabled or wouldn't normally fire.
+        recall_escalated = False
+        if CALIBRATION.recall.enabled and self.onnx_enabled:
+            if self._recall_gate_positive(detection_results):
+                recall_escalated = True
+                # If ONNX wasn't in the results yet (e.g. onnx_enabled was
+                # toggled mid-flight), run it now
+                has_onnx = any(r.detector_name == "onnx_micro_model" for r in detection_results)
+                if not has_onnx:
+                    onnx_result = await self.cpu_runner(
+                        self.onnx_classifier,
+                        defended_text,
+                        detector_name="onnx_micro_model",
+                        timeout=10.0,
+                        pool="thread",
+                    )
+                    detection_results.append(self._onnx_to_result(onnx_result))
+
         if self.onnx_enabled:
             onnx_result = await self.cpu_runner(
                 self.onnx_classifier,
@@ -197,3 +236,51 @@ class DetectionPipeline:
             risk_score=confidence * 100,
             processing_time_ms=float(onnx_result.get("latency_ms", 0.0) or 0.0),
         )
+
+    # ─── Recall Gate (OR-gate + Soft Vote) ────────────────────────────────────
+
+    @staticmethod
+    def _tier_max_score(result: DetectionResult) -> float:
+        """Return the maximum confidence across all spans in a detection result."""
+        if not result.spans:
+            return 0.0
+        return max(s.confidence for s in result.spans)
+
+    def _or_gate_escalation(
+        self, tier_results: list[DetectionResult]
+    ) -> bool:
+        """OR-gate: return True if ANY tier result scores above low_threshold.
+
+        This catches edge cases where one detector finds something suspicious
+        even though its own threshold wouldn't trigger a positive — the next
+        tier (ONNX) gets a chance to validate.
+        """
+        threshold = CALIBRATION.recall.low_threshold
+        for result in tier_results:
+            if self._tier_max_score(result) >= threshold:
+                return True
+        return False
+
+    def _soft_vote_positive(
+        self, tier_results: list[DetectionResult]
+    ) -> bool:
+        """Soft vote: return True if 2+ detectors agree with score > threshold.
+
+        Even if no single detector crosses its own threshold, unanimous
+        mild suspicion from multiple detectors is a strong signal.
+        """
+        min_detectors = CALIBRATION.recall.soft_vote_min_detectors
+        vote_threshold = CALIBRATION.recall.soft_vote_threshold
+        agreeing = sum(
+            1 for r in tier_results
+            if self._tier_max_score(r) >= vote_threshold
+        )
+        return agreeing >= min_detectors
+
+    def _recall_gate_positive(
+        self, tier_results: list[DetectionResult]
+    ) -> bool:
+        """Combined recall gate: OR-gate OR soft-vote triggers escalation."""
+        if not CALIBRATION.recall.enabled:
+            return False
+        return self._or_gate_escalation(tier_results) or self._soft_vote_positive(tier_results)

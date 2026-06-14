@@ -50,7 +50,13 @@ class AirlockErrorMiddleware(BaseHTTPMiddleware):
         if "application/problem+json" in content_type:
             return response
 
-        body = await response.body()
+        raw = response.body
+        if callable(raw):
+            body = await raw()
+        elif isinstance(raw, bytes):
+            body = raw
+        else:
+            body = b""
         payload = _safe_json_loads(body)
 
         if isinstance(payload, dict) and {"title", "status", "type"}.issubset(payload):

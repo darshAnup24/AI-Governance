@@ -21,6 +21,7 @@ class SecurityPattern:
     confidence: float
     cwe_id: str
     recommendation: str
+    category: DetectionCategory = DetectionCategory.SOURCE_CODE
 
 
 class SecurityCodeDetector:
@@ -53,18 +54,21 @@ class SecurityCodeDetector:
             re.compile(r"""(?:password|passwd|pwd)\s*[:=]\s*['\"][^'\"]{4,}['\"]""", re.I),
             0.88, "CWE-798",
             "Never hardcode passwords; use environment variables or secret managers",
+            category=DetectionCategory.CREDENTIALS,
         ),
         SecurityPattern(
             "hardcoded_api_key",
-            re.compile(r"""(?:api_key|apikey|api_secret|secret_key|access_token)\s*[:=]\s*['\"][^'\"]{8,}['\"]""", re.I),
+            re.compile(r"""(?:api_key|apikey|api_secret|secret_key|access_token)\s*[:=]\s*['\"](?!your_|placeholder|example|xxx|test|changeme|insert)[^'\"]{8,}['\"]""", re.I),
             0.90, "CWE-798",
             "Never hardcode API keys; use environment variables or vault",
+            category=DetectionCategory.API_KEY,
         ),
         SecurityPattern(
             "hardcoded_connection_string",
             re.compile(r"""['\"](?:postgresql|mysql|mongodb|redis)://\w+:\w+@""", re.I),
             0.88, "CWE-798",
             "Hardcoded database credentials; use environment variables",
+            category=DetectionCategory.CREDENTIALS,
         ),
 
         # Insecure Randomness
@@ -148,6 +152,84 @@ class SecurityCodeDetector:
             0.85, "CWE-502",
             "Use yaml.safe_load() instead of yaml.load()",
         ),
+        # ── Natural-language vulnerability descriptions ────────────────────
+        SecurityPattern(
+            "nl_command_injection",
+            re.compile(r"""(?:nslookup|ping|curl|wget|dig|host)\s+\S*(?:attacker|malicious|controlled)""", re.I),
+            0.85, "CWE-78",
+            "Command injection via DNS/HTTP lookup to attacker-controlled host",
+            category=DetectionCategory.SECURITY_VULN,
+        ),
+        SecurityPattern(
+            "nl_sql_injection",
+            re.compile(r"""(?:SQL\s+injection|sql\s+bypass|'\s*--\s*\)|;\s*DROP\s+TABLE)""", re.I),
+            0.85, "CWE-89",
+            "SQL injection vulnerability detected",
+            category=DetectionCategory.SECURITY_VULN,
+        ),
+        SecurityPattern(
+            "nl_ssrf_internal",
+            re.compile(r"""(?:http://(?:10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|localhost|127\.0\.0\.1)(?::\d+)?/\S*|internal[- ]?(?:url|host|server|endpoint))""", re.I),
+            0.80, "CWE-918",
+            "Server-side request forgery (SSRF) to internal host",
+            category=DetectionCategory.SECURITY_VULN,
+        ),
+        SecurityPattern(
+            "nl_injected_value",
+            re.compile(r"""(?:injected|user[- ]controlled|untrusted)\s+(?:value|input|data|payload)""", re.I),
+            0.70, "CWE-20",
+            "Untrusted input being used in security-sensitive context",
+            category=DetectionCategory.SECURITY_VULN,
+        ),
+        SecurityPattern(
+            "nl_xss_payload",
+            re.compile(r"""<(?:svg|img|body|script|iframe|object|embed|form)\s[^>]*(?:onerror|onload|onclick|onfocus|onmouseover|javascript:)""", re.I),
+            0.90, "CWE-79",
+            "Cross-site scripting (XSS) payload detected",
+            category=DetectionCategory.SECURITY_VULN,
+        ),
+        SecurityPattern(
+            "nl_javascript_uri",
+            re.compile(r"""javascript\s*:\s*alert""", re.I),
+            0.85, "CWE-79",
+            "JavaScript URI XSS vector",
+            category=DetectionCategory.SECURITY_VULN,
+        ),
+        SecurityPattern(
+            "nl_sql_select_union",
+            re.compile(r"""(?:SELECT\s+\*\s+FROM|UNION\s+SELECT|OR\s+['\"]1['\"]\s*=\s*['\"]1['\"])""", re.I),
+            0.88, "CWE-89",
+            "SQL injection pattern: SELECT/UNION/OR tautology",
+            category=DetectionCategory.SECURITY_VULN,
+        ),
+        SecurityPattern(
+            "nl_command_injection_bash",
+            re.compile(r""";\s*(?:rm\s+-rf|curl|wget|cat\s+/etc|chmod|chown|dd\s+if=|mkfs)""", re.I),
+            0.90, "CWE-78",
+            "Shell command injection: chained destructive command",
+            category=DetectionCategory.SECURITY_VULN,
+        ),
+        SecurityPattern(
+            "nl_pipe_command",
+            re.compile(r"""\|\s*(?:cat|grep|head|tail|sort|wc|id|whoami|uname|nc|ncat|bash|sh)\b""", re.I),
+            0.75, "CWE-78",
+            "Pipe to shell command may indicate injection",
+            category=DetectionCategory.SECURITY_VULN,
+        ),
+        SecurityPattern(
+            "nl_path_traversal_etc",
+            re.compile(r"""file:///etc/(?:passwd|shadow|hosts|group)""", re.I),
+            0.90, "CWE-22",
+            "Path traversal to read sensitive system files",
+            category=DetectionCategory.SECURITY_VULN,
+        ),
+        SecurityPattern(
+            "nl_xxe",
+            re.compile(r"""<!ENTITY\s+\w+\s+SYSTEM""", re.I),
+            0.88, "CWE-611",
+            "XML External Entity (XXE) injection",
+            category=DetectionCategory.SECURITY_VULN,
+        ),
     ]
 
     def detect(self, text: str) -> DetectionResult:
@@ -162,7 +244,7 @@ class SecurityCodeDetector:
                 spans.append(DetectedSpan(
                     start=match.start(),
                     end=match.end(),
-                    category=DetectionCategory.SOURCE_CODE,
+                    category=pat.category,
                     confidence=pat.confidence,
                     matched_text=match.group()[:80],
                     detector=f"security_{pat.name}",

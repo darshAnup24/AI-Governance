@@ -29,6 +29,28 @@ _CUSTOM_NER_PATTERNS: list[tuple[re.Pattern[str], str, DetectionCategory, float]
     (re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b"),               "PAN",          DetectionCategory.PII,          0.95),
     (re.compile(r"[\w.-]+@[a-zA-Z]+"),                    "UPI",          DetectionCategory.PII,          0.90),
     (re.compile(r"(\+91[\-\s]?)?\d{5}[\-\s]?\d{5}"),      "IN_PHONE",     DetectionCategory.PII,          0.85),
+
+    # ── Extended patterns (recall improvement) ──────────────────────────────
+    # Partial US phone numbers (7-digit local format: 555-0192, 555.0192)
+    (re.compile(r"\b\d{3}[-.]?\d{4}\b"),                  "US_PHONE_7",   DetectionCategory.PII,          0.60),
+    # Emails with unusual / modern TLDs
+    (re.compile(
+        r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(?:io|ai|dev|tech|co|app|xyz|me)\b"
+    ),                                                     "EMAIL_EXT_TLD", DetectionCategory.PII,         0.75),
+    # Indirect name references ("sent to John's account", "forwarded to Sarah's email")
+    (re.compile(
+        r"(?i)\b(?:sent|forwarded|addressed|delivered|assigned|routed|given)\s+"
+        r"(?:to|for)\s+(?:[\w']+(?:'s)?)\s+"
+        r"(?:account|email|inbox|address|folder|profile|ticket|request)"
+    ),                                                     "INDIRECT_NAME", DetectionCategory.PII,         0.65),
+    # Numeric ID patterns: employee, patient, order, ticket IDs
+    (re.compile(
+        r"\b(?:EMP|PAT|ORD|TKT|USR|CST|REF|INV|WO)[-_]?\d{4,10}\b", re.IGNORECASE
+    ),                                                     "GENERIC_ID",   DetectionCategory.PII,          0.80),
+    # Obfuscated email addresses: j.smith[at]company[dot]com
+    (re.compile(
+        r"\b[\w.-]+\s*\[at\]\s*[\w.-]+\s*\[dot\]\s*[\w.-]+\b", re.IGNORECASE
+    ),                                                     "OBFUSCATED_EMAIL", DetectionCategory.PII,      0.85),
 ]
 
 
@@ -88,6 +110,11 @@ class SpacyNERDetector:
         "PAN": DetectionCategory.PII,
         "UPI": DetectionCategory.PII,
         "IN_PHONE": DetectionCategory.PII,
+        "US_PHONE_7": DetectionCategory.PII,
+        "EMAIL_EXT_TLD": DetectionCategory.PII,
+        "INDIRECT_NAME": DetectionCategory.PII,
+        "GENERIC_ID": DetectionCategory.PII,
+        "OBFUSCATED_EMAIL": DetectionCategory.PII,
     }
 
     BASE_CONFIDENCE = {
@@ -100,6 +127,11 @@ class SpacyNERDetector:
         "PAN": 0.95,
         "UPI": 0.90,
         "IN_PHONE": 0.85,
+        "US_PHONE_7": 0.60,
+        "EMAIL_EXT_TLD": 0.75,
+        "INDIRECT_NAME": 0.65,
+        "GENERIC_ID": 0.80,
+        "OBFUSCATED_EMAIL": 0.85,
     }
 
     def __init__(self) -> None:
@@ -115,7 +147,12 @@ class SpacyNERDetector:
             {"label": "AADHAAR", "pattern": [{"TEXT": {"REGEX": r"\b\d{4}\s\d{4}\s\d{4}\b"}}]},
             {"label": "PAN", "pattern": [{"TEXT": {"REGEX": r"\b[A-Z]{5}\d{4}[A-Z]\b"}}]},
             {"label": "UPI", "pattern": [{"TEXT": {"REGEX": r"[\w.-]+@[a-zA-Z]+"}}]},
-            {"label": "IN_PHONE", "pattern": [{"TEXT": {"REGEX": r"(\+91[\-\s]?)?\d{5}[\-\s]?\d{5}"}}]}]
+            {"label": "IN_PHONE", "pattern": [{"TEXT": {"REGEX": r"(\+91[\-\s]?)?\d{5}[\-\s]?\d{5}"}}]},
+            {"label": "US_PHONE_7", "pattern": [{"TEXT": {"REGEX": r"\b\d{3}[-.]?\d{4}\b"}}]},
+            {"label": "EMAIL_EXT_TLD", "pattern": [{"TEXT": {"REGEX": r"\b[\w.-]+@[\w.-]+\.(?:io|ai|dev|tech|co|app|xyz|me)\b"}}]},
+            {"label": "GENERIC_ID", "pattern": [{"TEXT": {"REGEX": r"\b(?:EMP|PAT|ORD|TKT|USR|CST|REF|INV|WO)[-_]?\d{4,10}\b"}}]},
+            {"label": "OBFUSCATED_EMAIL", "pattern": [{"TEXT": {"REGEX": r"\b[\w.-]+\s*\[at\]\s*[\w.-]+\s*\[dot\]\s*[\w.-]+\b"}}]},
+        ]
 
     def _load_model(self) -> None:
         """Load spaCy model. Tries transformer, falls back to small, then blank."""
@@ -233,15 +270,46 @@ class SpacyNERDetector:
                     continue
                 ctx_start = max(0, match.start() - 50)
                 ctx_end = min(len(text), match.end() + 50)
+
+                # For INDIRECT_NAME, extract just the person name from the match
+                matched_text = match.group()
+                if label == "INDIRECT_NAME":
+                    name = self._extract_indirect_name(match.group())
+                    if name:
+                        matched_text = name
+                    else:
+                        continue  # skip if we can't extract a name
+
                 spans.append(DetectedSpan(
                     start=match.start(),
                     end=match.end(),
                     category=category,
                     confidence=confidence,
-                    matched_text=match.group(),
+                    matched_text=matched_text,
                     detector="spacy_ner_custom",
                     context=text[ctx_start:ctx_end],
                 ))
+
+    @staticmethod
+    def _extract_indirect_name(phrase: str) -> str | None:
+        """Extract person name from indirect reference phrase.
+
+        e.g. "sent to John's account" → "John"
+             "forwarded to Sarah's email" → "Sarah"
+        """
+        m = re.search(
+            r"(?:sent|forwarded|addressed|delivered|assigned|routed|given)\s+"
+            r"to\s+([\w']+?)(?:'s)?\s+"
+            r"(?:account|email|inbox|address|folder|profile|ticket|request)",
+            phrase, re.IGNORECASE,
+        )
+        if m:
+            name = m.group(1).strip()
+            # Skip common false positives (pronouns, articles)
+            if name.lower() in {"the", "a", "an", "this", "that", "it", "my", "your", "his", "her", "their"}:
+                return None
+            return name
+        return None
 
 class DebertaNERDetector:
     """

@@ -4,14 +4,15 @@
     "SAFE",
     "PII",
     "CREDENTIALS",
+    "API_KEY",
     "PROMPT_INJECTION",
     "HALLUCINATION",
     "BIAS",
     "REGULATORY"
   ],
-  "train_size": 221,
-  "n_iter": 30,
-  "best_epoch": 30,
-  "best_dev_f1_approx": 0.8113,
+  "train_size": 6278,
+  "n_iter": 20,
+  "best_epoch": 15,
+  "best_dev_f1_approx": 0.9643,
   "version": "1.0"
 }

@@ -79,12 +79,35 @@ CATEGORY_SEVERITY: dict[str, str] = {
 }
 
 ACTION_THRESHOLDS: list[tuple[int, ActionType]] = [
-    (90, ActionType.BLOCK),
+    (93, ActionType.BLOCK),
     (80, ActionType.REDACT),
     (60, ActionType.WARN),
     (30, ActionType.LOG),
     (0,  ActionType.ALLOW),
 ]
+
+# ─── Load category-specific thresholds from config ────────────────────────────
+try:
+    from detection.config import CATEGORY_THRESHOLDS as _CAT_THRESHOLDS
+except ImportError:
+    _CAT_THRESHOLDS: dict[str, dict[str, int]] = {}
+
+
+def _category_action_thresholds(category: str) -> list[tuple[int, ActionType]]:
+    """Return action thresholds for a specific category.
+
+    Falls back to global ACTION_THRESHOLDS if no category-specific override exists.
+    """
+    if category in _CAT_THRESHOLDS:
+        cat = _CAT_THRESHOLDS[category]
+        return [
+            (cat.get("block", 93), ActionType.BLOCK),
+            (cat.get("redact", 80), ActionType.REDACT),
+            (cat.get("warn", 60), ActionType.WARN),
+            (30, ActionType.LOG),
+            (0,  ActionType.ALLOW),
+        ]
+    return ACTION_THRESHOLDS
 
 REDUCED_SENSITIVITY_ROLES = {"security", "admin", "ciso"}
 
@@ -342,9 +365,18 @@ class RiskScoreAggregator:
                 final_score = max(final_score, 90)
                 break
 
-        # ── Action ────────────────────────────────────────────────────────────
+        # ── Action (per-category thresholds) ──────────────────────────────────
+        # Determine dominant category (highest contribution) and use its thresholds.
+        dominant_category = ""
+        if breakdown:
+            dominant_category = max(
+                breakdown.items(),
+                key=lambda x: x[1]["total_contribution"],
+            )[0]
+
+        cat_thresholds = _category_action_thresholds(dominant_category)
         recommended_action = ActionType.ALLOW
-        for threshold, action in ACTION_THRESHOLDS:
+        for threshold, action in cat_thresholds:
             if final_score >= threshold:
                 recommended_action = action
                 break

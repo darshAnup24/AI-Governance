@@ -4,14 +4,28 @@
     "SAFE",
     "PII",
     "CREDENTIALS",
+    "API_KEY",
     "PROMPT_INJECTION",
     "HALLUCINATION",
     "BIAS",
     "REGULATORY"
   ],
-  "train_size": 221,
-  "dev_micro_f1": 0.8571,
-  "dev_macro_f1": 0.8214,
-  "training_time_s": 2.14,
-  "version": "1.0"
+  "train_size": 6278,
+  "dev_micro_f1": 0.9825,
+  "dev_macro_f1": 0.9772,
+  "dev_weighted_f1": 0.9826,
+  "training_time_s": 5.04,
+  "class_weight": "balanced",
+  "cv_folds": 5,
+  "version": "2.0",
+  "per_category_thresholds": {
+    "SAFE": 0.50,
+    "PII": 0.60,
+    "CREDENTIALS": 0.60,
+    "API_KEY": 0.55,
+    "PROMPT_INJECTION": 0.65,
+    "HALLUCINATION": 0.55,
+    "BIAS": 0.55,
+    "REGULATORY": 0.80
+  }
 }

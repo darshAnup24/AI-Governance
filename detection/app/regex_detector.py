@@ -82,10 +82,10 @@ class RegexDetector:
         RegexPattern("credit_card_amex", re.compile(r"\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b"), DetectionCategory.PII, 0.85, "validate_luhn"),
 
         # ─── PII: Email ───────────────────────────────────
-        RegexPattern("email", re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b"), DetectionCategory.PII, 0.70, "validate_email_context"),
+        RegexPattern("email", re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b"), DetectionCategory.PII, 0.50, "validate_email_context"),
 
         # ─── PII: Phone Numbers ───────────────────────────
-        RegexPattern("us_phone", re.compile(r"\b(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"), DetectionCategory.PII, 0.65),
+        RegexPattern("us_phone", re.compile(r"\b(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"), DetectionCategory.PII, 0.65, "validate_us_phone"),
 
         # ─── PII: Indian Patterns (B5) ─────────────────────
         RegexPattern("aadhaar", re.compile(r"\b[2-9]{1}\d{3}[\s-]?\d{4}[\s-]?\d{4}\b"), DetectionCategory.PII, 0.85, "validate_aadhaar"),
@@ -167,9 +167,11 @@ class RegexDetector:
         RegexPattern(
             "confidentiality_marking",
             re.compile(
-                r"(?i)(?:strictly\s+|highly\s+)?confidential"
-                r"(?:\s*[-–—:]\s*(?:do\s+not\s+(?:share|distribute|forward|disclose|circulate)|"
-                r"for\s+(?:internal|authorized|recipient)\s+(?:use\s+)?only))?"
+                r"(?:strictly\s+|highly\s+)confidential|"
+                r"confidential"
+                r"\s*[-–—:]\s*(?:do\s+not\s+(?:share|distribute|forward|disclose|circulate)|"
+                r"for\s+(?:internal|authorized|recipient)\s+(?:use\s+)?only)",
+                re.IGNORECASE,
             ),
             DetectionCategory.REGULATORY,
             0.88,
@@ -182,6 +184,7 @@ class RegexDetector:
             ),
             DetectionCategory.REGULATORY,
             0.85,
+            "validate_do_not_share",
         ),
         # Pattern 3: M&A acquisition with monetary amount
         # Covers: "acquiring Nexus AI for $180M", "acquisition of X for $1.2B"
@@ -228,6 +231,7 @@ class RegexDetector:
             ),
             DetectionCategory.REGULATORY,
             0.82,
+            "validate_financial_figure",
         ),
         # Pattern 7: instruction to conceal material facts in communications
         # Covers: "write a press release that doesn't mention the acquisition"
@@ -578,6 +582,36 @@ class RegexDetector:
 
         return True, 0.92
 
+    def validate_do_not_share(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
+        """Only flag 'do not share' when combined with sensitive data indicators."""
+        ctx = self._slice_window(text, pos, pos + len(matched), 60).lower()
+        sensitive_indicators = ["confidential", "classified", "restricted", "internal only",
+                                "proprietary", "trade secret", "sensitive", "private",
+                                "embargo", "non-public", "personally identifiable", "pii"]
+        if any(ind in ctx for ind in sensitive_indicators):
+            return True, 0.90
+        return True, 0.40
+
+    def validate_financial_figure(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
+        """Only flag financial figures with confidentiality context nearby."""
+        ctx = self._slice_window(text, pos, pos + len(matched), 60).lower()
+        sensitivity_markers = ["confidential", "embargo", "non-public", "non public",
+                               "do not share", "insider", "material", "mnpi", "restricted"]
+        if any(mk in ctx for mk in sensitivity_markers):
+            return True, 0.90
+        return True, 0.30
+
+    def validate_us_phone(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
+        """Only flag phone numbers with phone-related keyword context."""
+        ctx = self._slice_window(text, pos, pos + len(matched), 40).lower()
+        phone_keywords = ["phone", "call", "tel", "mobile", "cell", "fax", "contact"]
+        if any(kw in ctx for kw in phone_keywords):
+            return True, 0.85
+        last_line = text[:pos].split('\n')[-1] if pos > 0 else ""
+        if re.search(r"[|]\s*$", last_line):
+            return True, 0.30
+        return True, 0.50
+
     def validate_email_context(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
         """Reduce confidence for emails in code context."""
         ctx_start = max(0, pos - 80)
@@ -591,7 +625,12 @@ class RegexDetector:
         if any(matched.endswith(f"@{d}") for d in example_domains):
             return True, 0.30
 
-        return True, 0.75
+        sensitive_domains = ["protonmail.com", "tutanota.com", "guerrillamail.com",
+                             "tempmail.com", "mailinator.com", "yopmail.com"]
+        if any(matched.endswith(f"@{d}") for d in sensitive_domains):
+            return True, 0.70
+
+        return True, 0.45
 
     def validate_aadhaar(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
         """Validate Aadhaar with context heuristics."""
@@ -599,7 +638,7 @@ class RegexDetector:
         context = text[ctx_start:pos + len(matched) + 30].lower()
         if any(w in context for w in ["aadhaar", "uidai", "aadhar", "vid"]):
             return True, 0.95
-        return True, 0.80
+        return True, 0.50
 
     def validate_pan(self, matched: str, text: str, pos: int) -> tuple[bool, float]:
         """Validate PAN context and structure."""
@@ -634,7 +673,7 @@ class RegexDetector:
         entropy = self._shannon_entropy(matched)
         if entropy < 4.5:
             return False, 0
-        if len(matched) < 24:
+        if len(matched) < 32:
             return False, 0
 
         # Common non-secret high-entropy strings

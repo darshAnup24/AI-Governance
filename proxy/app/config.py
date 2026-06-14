@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "RS256"
     jwt_audience: str = "ai-governance-firewall"
     dev_jwt_secret: str = "dev-secret-change-in-production"
-    dev_org_id: str = "org-001"  # Override with real UUID from governance DB
+    dev_org_id: str = "865e5d01-ec17-4a7a-b5b5-122fde3febe5"  # Matches seeded org in governance DB
 
     # ─── Database ─────────────────────────────────────────
     database_url: str = "postgresql+asyncpg://aigw:aigw_password@postgres:5432/ai_governance"
@@ -67,7 +67,7 @@ class Settings(BaseSettings):
 
     # ─── LLM Backend (Groq replaces Ollama) ─────────────────
     groq_api_key: str = ""
-    ollama_url: str = "https://api.groq.com/openai/v1"
+    ollama_url: str = "https://api.groq.com/openai"
     primary_advisor_model: str = "llama3-70b-8192"
     fallback_model: str = "llama3-8b-8192"
     use_onnx_detection: bool = True

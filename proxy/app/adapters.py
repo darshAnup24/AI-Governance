@@ -5,7 +5,10 @@ Normalizes requests across OpenAI, Anthropic, Azure OpenAI, and Cohere.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
+from typing import Any
+
 from typing import Any
 
 from proxy.app.models import ChatMessage, LLMProvider
@@ -174,7 +177,7 @@ class ProviderAdapter:
         raise ValueError(f"Unsupported provider: {request.provider}")
 
     @staticmethod
-    def get_headers(provider: LLMProvider, api_key: str) -> dict[str, str]:
+    def get_headers(provider: LLMProvider, api_key: str, settings: Any | None = None) -> dict[str, str]:
         """Get provider-specific authentication headers."""
         if provider == LLMProvider.OPENAI:
             return {
@@ -198,8 +201,9 @@ class ProviderAdapter:
                 "Content-Type": "application/json",
             }
         elif provider == LLMProvider.OLLAMA:
+            groq_key = settings.groq_api_key if settings else os.environ.get("GROQ_API_KEY", "")
             return {
-                "Authorization": f"Bearer {settings.groq_api_key}",
+                "Authorization": f"Bearer {groq_key}",
                 "Content-Type": "application/json",
             }
         raise ValueError(f"Unsupported provider: {provider}")

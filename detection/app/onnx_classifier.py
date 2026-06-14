@@ -29,6 +29,36 @@ import structlog
 
 log = structlog.get_logger()
 
+# ─── Load calibration config ───────────────────────────────────────────────────
+try:
+    from detection.config import CALIBRATION
+except ImportError:
+    # Fallback: construct inline if config.py unavailable
+    from dataclasses import dataclass
+
+    @dataclass(frozen=True)
+    class _PlattFallback:
+        a: float = -1.5
+        b: float = 0.5
+        enabled: bool = True
+
+    @dataclass(frozen=True)
+    class _TempFallback:
+        temperature: float = 1.8
+
+    @dataclass(frozen=True)
+    class _EnsembleFallback:
+        distilbert_weight: float = 0.65
+        tinybert_weight: float = 0.35
+
+    @dataclass(frozen=True)
+    class _CalFallback:
+        platt: _PlattFallback = _PlattFallback()
+        temperature: _TempFallback = _TempFallback()
+        ensemble: _EnsembleFallback = _EnsembleFallback()
+
+    CALIBRATION = _CalFallback()
+
 ONNX_MODEL_PATH = os.getenv("ONNX_MODEL_PATH", "/tmp/airlock_classifier_finetuned.onnx")
 ONNX_ENABLED    = os.getenv("ONNX_ENABLED", "true").lower() == "true"
 HF_MODEL_NAME   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../models/fine_tuned_distilbert")
@@ -158,19 +188,26 @@ def _sigmoid(x: float) -> float:
     return 1.0 / (1.0 + math.exp(-x))
 
 
+def _platt_scale(score: float) -> float:
+    """Apply Platt scaling: P_calibrated = sigmoid(a * score + b).
+
+    Parameters a and b are loaded from config (detection/config.py) and can be
+    overridden via PLATT_A / PLATT_B env vars or calibration.json.
+    """
+    import math
+    a = CALIBRATION.platt.a
+    b = CALIBRATION.platt.b
+    return 1.0 / (1.0 + math.exp(-(a * score + b)))
+
+
 # ─── Temperature Scaling (Calibration Layer) ──────────────────────────────────
 # Temperature T is loaded from calibration.json (set by train_calibration.py).
 # Falls back to ONNX_TEMPERATURE env var, then hardcoded 1.8.
 
-_TEMPERATURE: float = float(
-    _CALIBRATION.get("temperature")
-    or os.getenv("ONNX_TEMPERATURE", "1.8")
-)
+_TEMPERATURE: float = CALIBRATION.temperature.temperature
 # Ensemble weights can also be overridden by calibration.json
-if "ensemble_weights" in _CALIBRATION:
-    _ew = _CALIBRATION["ensemble_weights"]
-    _DISTILBERT_WEIGHT = float(_ew.get("distilbert", _DISTILBERT_WEIGHT))
-    _TINYBERT_WEIGHT   = float(_ew.get("tinybert",   _TINYBERT_WEIGHT))
+_DISTILBERT_WEIGHT = CALIBRATION.ensemble.distilbert_weight
+_TINYBERT_WEIGHT   = CALIBRATION.ensemble.tinybert_weight
 
 def _calibrated_score(logit: float) -> float:
     """Apply temperature scaling then sigmoid to get a calibrated probability."""
@@ -287,7 +324,7 @@ def _clean_noise(text: str) -> str:
 # call caused repeated re.compile() overhead. Moved to module level.
 
 _DIRECT_FRAMING_RE = re.compile(
-    r'(?i)(?:pretend|ignore\s+(?:previous|above|prior|all)\s+(?:instructions?|prompts?|rules?)|'
+    r'(?i)(?:pretend|ignore\s+(?:(?:previous|above|prior|all)\s+){0,2}(?:instructions?|prompts?|rules?)|'
     r'act\s+as|roleplay|you\s+are\s+now|forget\s+(?:everything|your\s+training)|'
     r'jailbreak|DAN\s+mode|developer\s+mode|unrestricted\s+mode)',
 )
@@ -305,7 +342,8 @@ _ESCALATION_RE = re.compile(
     r'must\s+comply|you\s+must\s+answer|no\s+restrictions)',
 )
 _SENSITIVE_KEYWORD_RE = re.compile(
-    r'(?i)(?:password|secret|api.key|private.key|credentials?|token|ssn|social.security)',
+    r'(?i)(?:password|secret|api.key|private.key|credentials?|token|ssn|social.security)'
+    r'\w*\s*[:=]',
 )
 
 
@@ -329,7 +367,7 @@ def _heuristic_score(text: str) -> float:
         score += 0.4
     if re.search(r'\b\d{3}[-.]?\d{2}[-.]?\d{4}\b', text):   # SSN
         score += 0.4
-    if re.search(r'(?:api[_-]?key|password|secret|private[_-]?key|bearer)\s*[:=]', text_lower):
+    if re.search(r'(?:api[_-]?key|password|secret|private[_-]?key|bearer)\w*\s*[:=]', text_lower):
         score += 0.35
     if re.search(r'\b(?:AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}\b', text):  # AWS key ID
         score += 0.5
@@ -481,6 +519,12 @@ def classify_sensitivity(text: str) -> dict[str, Any]:
             base_onnx_score = distilbert_score
             ensemble_note   = f"distilbert={distilbert_score:.3f} (tinybert unavail)"
 
+        # ── Platt scaling (sigmoid calibration) ─────────────────────────────
+        # Applied to the raw ensemble output BEFORE heuristic/intent.
+        # This recalibrates the ONNX probability as trained on the calibration set.
+        if CALIBRATION.platt.enabled:
+            base_onnx_score = _platt_scale(base_onnx_score)
+
         # ── Heuristic boost (structured secrets) ────────────────────────────
         heuristic_boost = _heuristic_score(clean_text)
 
@@ -505,13 +549,14 @@ def classify_sensitivity(text: str) -> dict[str, Any]:
         else:
             classification = "SAFE"
 
+        platt_note = f" platt(a={CALIBRATION.platt.a},b={CALIBRATION.platt.b})" if CALIBRATION.platt.enabled else ""
         return {
             "classification": classification,
             "confidence":     round(sensitive_score, 4),
             "reason": (
                 f"ensemble=({ensemble_note}) T={_TEMPERATURE}, "
                 f"heuristic={heuristic_boost:.3f}, intent={intent_mod:+.3f}, "
-                f"combined={sensitive_score:.3f}"
+                f"combined={sensitive_score:.3f}{platt_note}"
             ),
             "latency_ms": round(latency_ms, 2),
         }

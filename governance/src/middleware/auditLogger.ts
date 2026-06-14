@@ -46,13 +46,19 @@ const ACTION_MAP: Record<string, Record<string, string>> = {
 
 function getSemanticAction(method: string, path: string): string {
   const methodActions = ACTION_MAP[method.toUpperCase()];
-  if (!methodActions) return `${method.toUpperCase()}_UPDATED`;
+  if (!methodActions) return 'USER_UPDATED';
   
   for (const [pattern, action] of Object.entries(methodActions)) {
     if (path.includes(pattern)) return action;
   }
   
-  return `${method.toUpperCase()}_UPDATED`;
+  const methodFallbacks: Record<string, string> = {
+    POST: 'USER_CREATED',
+    PUT: 'USER_UPDATED',
+    PATCH: 'USER_UPDATED',
+    DELETE: 'USER_DELETED',
+  };
+  return methodFallbacks[method.toUpperCase()] || 'USER_UPDATED';
 }
 
 export function auditMiddleware(

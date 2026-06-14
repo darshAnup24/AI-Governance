@@ -59,6 +59,7 @@ from detection.app.ml_classifier import MLClassifier
 from detection.app.onnx_classifier import classify_sensitivity, ONNX_ENABLED
 from detection.app.feedback_api import FeedbackStore
 from detection.app.rl_threshold_tuner import RLThresholdTuner
+from detection.app.active_learning import ActiveLearningManager, REVIEW_BATCH_SIZE, RETRAIN_QUEUE_THRESHOLD
 from detection.app.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from detection.app.pipeline import DetectionPipeline
 
@@ -90,6 +91,7 @@ regulatory_detector = RegulatoryDetector()
 prompt_injection_detector = PromptInjectionDetector()
 ml_classifier = MLClassifier()
 feedback_store = FeedbackStore()
+active_learning = ActiveLearningManager()
 pipeline: DetectionPipeline | None = None
 
 # ─── Prompt Whitelist ─────────────────────────────────────
@@ -431,6 +433,7 @@ class WhitelistRequest(BaseModel):
 
 class FeedbackRequest(BaseModel):
     detection_id: str
+    text: str = ""
     model_prediction: str
     model_confidence: float
     model_threshold: float
@@ -463,6 +466,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
     try:
         redis_client = Redis.from_url(redis_url, decode_responses=True)
+        active_learning.update_redis(redis_client)
     except Exception as e:
         log.warning("detection.redis_init_failed", error=str(e))
 
@@ -583,6 +587,22 @@ async def detect(request: DetectRequest) -> DetectResponse:
         user_id=request.user_id,
         org_id=request.org_id,
     )
+
+    # Active learning: flag uncertain predictions for review
+    try:
+        raw_scores = ml_classifier.predict_raw(request.text)
+        ensemble_scores = raw_scores.get("scores", {})
+        if ensemble_scores:
+            active_learning.on_detect(
+                detection_id=response.detection_id,
+                text=request.text,
+                scores=ensemble_scores,
+                risk_score=response.risk_score,
+                action=response.action.value if hasattr(response.action, "value") else str(response.action),
+            )
+    except Exception as e:
+        log.debug("active_learning.detect_hook_failed", error=str(e))
+
     return DetectResponse(
         detection_id=response.detection_id,
         risk_score=response.risk_score,
@@ -621,7 +641,7 @@ async def submit_feedback(feedback: FeedbackRequest) -> FeedbackResponse:
     try:
         result = feedback_store.add_feedback(
             detection_id=feedback.detection_id,
-            text="",
+            text=feedback.text,
             model_prediction=feedback.model_prediction,
             model_confidence=feedback.model_confidence,
             model_threshold=feedback.model_threshold,
@@ -629,10 +649,29 @@ async def submit_feedback(feedback: FeedbackRequest) -> FeedbackResponse:
             user_confidence=feedback.user_confidence,
             notes=feedback.notes,
         )
+
+        # Active learning: record correction for retraining queue + metrics
+        try:
+            queue_size = active_learning.on_feedback_corrected(
+                sample_id=feedback.detection_id,
+                text=feedback.text,
+                model_prediction=feedback.model_prediction,
+                model_score=feedback.model_confidence,
+                true_label=feedback.user_correction,
+            )
+            log.info(
+                "feedback.active_learning_recorded",
+                detection_id=feedback.detection_id[:16],
+                correction=f"{feedback.model_prediction}->{feedback.user_correction}",
+                retrain_queue_size=queue_size,
+            )
+        except Exception as e:
+            log.debug("feedback.active_learning_hook_failed", error=str(e))
+
         return FeedbackResponse(
             status="success",
             feedback_id=result["id"],
-            message=f"Feedback recorded: {feedback.model_prediction} \u2192 {feedback.user_correction}. This helps improve our detection accuracy!",
+            message=f"Feedback recorded: {feedback.model_prediction} -> {feedback.user_correction}. This helps improve our detection accuracy!",
         )
     except Exception as e:
         log.error("feedback.submission_failed", error=str(e))
@@ -678,6 +717,106 @@ async def retrain_thresholds(apply: bool = True) -> dict[str, Any]:
         return {"status": "ok", "feedback_processed": result["feedback_count"], "applied": result["applied"], "adjustments": result["adjustments"], "new_thresholds": result["new_thresholds"]}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+# ─── Active Learning Endpoints ───────────────────────────────────────────────
+
+class ReviewBatchResponse(BaseModel):
+    samples: list[dict[str, Any]]
+    count: int
+    queue_remaining: int
+
+
+class ReviewCorrectionRequest(BaseModel):
+    sample_id: str
+    text: str = ""
+    predicted_category: str
+    predicted_score: float = 0.0
+    corrected_label: str
+    reviewer_notes: str = ""
+
+
+@app.get("/feedback/review", response_model=ReviewBatchResponse)
+async def get_review_batch(batch_size: int = REVIEW_BATCH_SIZE) -> ReviewBatchResponse:
+    """Return a batch of 10 uncertain samples with predicted labels for human review."""
+    batch = active_learning.review_queue.get_batch(batch_size)
+    remaining = active_learning.review_queue.queue_size()
+    return ReviewBatchResponse(
+        samples=batch,
+        count=len(batch),
+        queue_remaining=remaining,
+    )
+
+
+@app.get("/feedback/review/peek")
+async def peek_review_batch(batch_size: int = REVIEW_BATCH_SIZE) -> dict[str, Any]:
+    """Peek at review queue without removing items (for dashboard)."""
+    batch = active_learning.review_queue.peek_batch(batch_size)
+    return {
+        "samples": batch,
+        "count": len(batch),
+        "queue_remaining": active_learning.review_queue.queue_size(),
+    }
+
+
+@app.post("/feedback/review/correct")
+async def submit_review_correction(correction: ReviewCorrectionRequest) -> FeedbackResponse:
+    """Submit a human correction for a reviewed uncertain sample."""
+    try:
+        queue_size = active_learning.on_feedback_corrected(
+            sample_id=correction.sample_id,
+            text=correction.text,
+            model_prediction=correction.predicted_category,
+            model_score=correction.predicted_score,
+            true_label=correction.corrected_label,
+        )
+        return FeedbackResponse(
+            status="success",
+            feedback_id=correction.sample_id[:16],
+            message=(
+                f"Correction recorded: {correction.predicted_category} -> {correction.corrected_label}. "
+                f"Retrain queue: {queue_size}/{RETRAIN_QUEUE_THRESHOLD}"
+            ),
+        )
+    except Exception as e:
+        log.error("feedback.review_correction_failed", error=str(e))
+        return FeedbackResponse(status="error", feedback_id="", message=str(e))
+
+
+@app.get("/active-learning/metrics")
+async def get_active_learning_metrics() -> dict[str, Any]:
+    """Get FPR, FNR, correction rate over time, and retrain queue status."""
+    snap = active_learning.get_metrics_snapshot()
+    history = active_learning.metrics.get_history(limit=60)
+    return {
+        "current": {
+            "fpr": snap.fpr,
+            "fnr": snap.fnr,
+            "correction_rate": snap.correction_rate,
+            "total_predictions": snap.total_predictions,
+            "uncertain_count": snap.uncertain_count,
+            "reviewed_count": snap.reviewed_count,
+            "correction_count": snap.correction_count,
+            "false_positives": snap.false_positives,
+            "false_negatives": snap.false_negatives,
+            "true_positives": snap.true_positives,
+            "true_negatives": snap.true_negatives,
+            "retrain_queue_size": snap.retrain_queue_size,
+            "retrain_threshold": RETRAIN_QUEUE_THRESHOLD,
+        },
+        "history": history,
+    }
+
+
+@app.get("/active-learning/retrain-queue-size")
+async def get_retrain_queue_size() -> dict[str, Any]:
+    """Check how many labeled samples are in the retrain queue."""
+    size = active_learning.retrain_manager.get_queue_size()
+    return {
+        "queue_size": size,
+        "threshold": RETRAIN_QUEUE_THRESHOLD,
+        "ready": size >= RETRAIN_QUEUE_THRESHOLD,
+    }
 
 
 # ─── Global Exception Handler ─────────────────────────────

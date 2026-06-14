@@ -187,6 +187,41 @@ response = client.chat.completions.create(
 )
 ```
 
+### Python SDK (drop-in OpenAI client)
+
+The [`sdk/`](sdk/) package is a typed, OpenAI-compatible client that parses 403 errors into structured `AirlockRejectionError` with `.code`, `.category`, `.span`, `.remediation`, and `.policy`.
+
+```python
+from airlock import AirlockClient, AirlockRejectionError
+
+with AirlockClient(
+    api_key="sk-airlock-…",
+    base_url="http://localhost:8000",
+    verbose_errors=True,
+) as client:
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": "Hello"}],
+        )
+    except AirlockRejectionError as e:
+        print(e.pretty_print())
+```
+
+```bash
+# install
+pip install -e sdk/
+
+# run the judge demo (requires docker compose up)
+python3 sdk/judge_demo.py
+```
+
+The judge demo shows two scenarios live:
+1. **ALLOWED** — clean prompt forwarded to Groq → response returned
+2. **BLOCKED** — PII detected → policy matches → 403 with full diagnostics
+
+See [`sdk/README.md`](sdk/README.md) for the full reference.
+
 ### Key API Endpoints
 
 | Endpoint | Method | Description |
@@ -197,7 +232,7 @@ response = client.chat.completions.create(
 | `/api/v1/shadow-ai/events` | POST | Shadow AI detection ingestion |
 | `/api/v1/shadow-ai/detections` | GET | List shadow AI alerts |
 | `/api/v1/audit-events` | GET | Audit event query |
-| `/api/v1/inspect` | POST | Ad-hoc detection (demo only) |
+| `/api/v1/inspect` | POST | Ad-hoc detection + policy evaluation (no upstream forward) |
 
 ---
 
@@ -349,6 +384,27 @@ AI-Governance/
 - `make setup` is the supported local bootstrap path.
 - Docker mounts, health checks, seed flows, and demo compatibility routes were fixed so the full stack starts cleanly.
 
+### SDK + Judge Demo
+- A Python SDK (`sdk/airlock/`) provides a drop-in OpenAI-compatible client with a typed exception hierarchy (`AirlockRejectionError`, `AirlockAuthenticationError`, etc.) that parses RFC 7807 error responses into structured objects (`.code`, `.category`, `.span`, `.remediation`, `.policy`).
+- `sdk/judge_demo.py` demonstrates the full end-to-end flow: clean prompt → Groq response, and PII prompt → 403 blocked with diagnostics.
+- `sdk/demo_mock_server.py` / `sdk/demo_judges.py` provide an offline mock for testing without a live stack.
+- Install with `pip install -e sdk/`.
+
+### Policy Evaluation in Inspect Endpoint
+- `POST /api/v1/inspect` now evaluates governance policies alongside detection (was returning only detection action).
+- When a policy matches, the final action is overridden to the policy's decision (BLOCK/WARN/etc.).
+
+### Ollama/Groq Provider Fixes
+- `OLLAMA_URL` config value no longer has a trailing `/v1` (avoids double `/v1` path in upstream URL).
+- `get_headers()` for the OLLAMA provider now correctly references the `settings` parameter and falls back to `os.environ` for `GROQ_API_KEY`.
+
+### Dev Org ID Alignment
+- `dev_org_id` in `proxy/app/config.py` and `docker-compose.yml` changed from `"org-001"` (no policies) to `"865e5d01-ec17-4a7a-b5b5-122fde3febe5"` (matches the seeded org with demo policies).
+- This enables policy enforcement to work out-of-the-box for dev-mode API calls.
+
+### Governance Audit Logger Fix
+- `auditLogger.ts` fallback returned invalid `AuditAction` values (`DELETE_UPDATED`) for unmapped routes — now returns valid enum values (`USER_DELETED`/`USER_UPDATED`/`USER_CREATED`).
+
 ---
 
 ## 📝 Tech Stack
@@ -364,7 +420,7 @@ AI-Governance/
 | **Infrastructure** | Docker, Docker Compose (dev), Nginx (reverse proxy) |
 | **LLM Providers** | OpenAI, Anthropic, Azure OpenAI, Ollama (local) |
 | **Error Format** | RFC7807 + ShieldAI structured diagnostics |
-| **SDK** | Python SDK (`shieldai-sdk`) with OpenAI-compatible API |
+| **SDK** | Python SDK (`airlock-sdk`) with OpenAI-compatible API + typed error hierarchy |
 
 ---
 
@@ -410,7 +466,7 @@ When ShieldAI blocks a request, it returns a structured RFC7807 error with full 
 - **Safe mode** — production-safe with redacted spans, no breakdown
 - **Verbose mode** — full diagnostics for development debugging
 
-See [docs/error-system.md](docs/error-system.md) for full documentation. The Python SDK `shieldai-sdk` is in [`sdk/`](sdk/).
+See [docs/error-system.md](docs/error-system.md) for full documentation. The Python SDK `airlock-sdk` is in [`sdk/`](sdk/).
 
 ## 📄 License
 

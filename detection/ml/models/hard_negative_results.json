@@ -1,0 +1,17 @@
+{
+  "f1": 0.9909,
+  "precision": 0.982,
+  "recall": 1.0,
+  "fpr": 0.0176,
+  "fnr": 0.0,
+  "fp": 7,
+  "tn": 390,
+  "fn": 0,
+  "tp": 381,
+  "train_size": 4406,
+  "test_size": 778,
+  "total_training_samples": 5184,
+  "safe_samples": 2644,
+  "sensitive_samples": 2540,
+  "training_time_s": 0.1
+}
